@@ -84,6 +84,25 @@ Vec2 scaledToSpeed(Vec2 velocity, float speed) {
     return Vec2{velocity.x / length * speed, velocity.y / length * speed};
 }
 
+// The smallest share of the ball's speed that must stay vertical.
+constexpr float kMinVerticalShare = 0.30f;
+
+// Stops the ball flattening out into an almost horizontal crawl.
+//
+// The paddle only ever adds sideways speed, and the total is then rescaled to
+// a fixed value — so the vertical part shrinks a little with every off-centre
+// hit. Land on the same side repeatedly and it compounds: 0.86 of the speed
+// vertical, then 0.61, 0.39, 0.25, 0.16... until the ball is skimming between
+// the side walls taking an age to come down. Forcing a minimum vertical share
+// and rescaling keeps the rally moving without taking the steering away.
+Vec2 keepPlayable(Vec2 velocity, float speed) {
+    const float minimumVertical = speed * kMinVerticalShare;
+    if (std::fabs(velocity.y) >= minimumVertical) return velocity;
+
+    velocity.y = velocity.y < 0.0f ? -minimumVertical : minimumVertical;
+    return scaledToSpeed(velocity, speed);
+}
+
 Entity createBox(World& world, float x, float y, float width, float height,
                  unsigned char r, unsigned char g, unsigned char b) {
     Entity entity = world.createEntity();
@@ -305,8 +324,9 @@ void moveBall(World& world, Entity ballEntity, Session& session, float dt) {
             const float center = paddle->x + kPaddleWidth / 2.0f;
             const float offset = (transform->x - center) / (kPaddleWidth / 2.0f);
             ball->velocity.x += offset * kPaddleSteer;
-            ball->velocity = scaledToSpeed(ball->velocity,
-                                           ballSpeedForLevel(session.level));
+            const float speed = ballSpeedForLevel(session.level);
+            ball->velocity = keepPlayable(scaledToSpeed(ball->velocity, speed),
+                                          speed);
         }
     }
 }

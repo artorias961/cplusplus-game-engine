@@ -196,6 +196,42 @@ void testFastBallDoesNotTunnel() {
           "a ball moving far further than a brick is thick still hits it");
 }
 
+// Repeatedly clipping the same side of the paddle used to flatten the ball's
+// path until it was crawling almost horizontally between the side walls. The
+// paddle adds only sideways speed and the total is rescaled, so the vertical
+// share shrinks a little with every off-centre hit and compounds.
+void testBallNeverFlattensOut() {
+    Game game;
+    game.startPlaying();
+
+    Ball& ball = game.ballData();
+    ball.stuckToPaddle = false;
+
+    Transform& paddle = *game.world.getComponent<Transform>(
+        breakout::findPaddle(game.world));
+
+    // Twenty hits on the far right edge of the paddle: the worst case, and far
+    // more than it used to take to flatten the ball out.
+    for (int hit = 0; hit < 20; ++hit) {
+        Transform& at = game.ballAt();
+        at.x = paddle.x + breakout::kPaddleWidth - 4.0f;
+        at.y = breakout::kPaddleY - breakout::kBallRadius - 1.0f;
+        ball.velocity = Vec2{ball.velocity.x, std::fabs(ball.velocity.y)};
+        if (std::fabs(ball.velocity.y) < 1.0f) ball.velocity.y = 200.0f;
+
+        game.driver.step(2);
+
+        const float speed = std::hypot(ball.velocity.x, ball.velocity.y);
+        const float verticalShare = std::fabs(ball.velocity.y) / speed;
+        if (verticalShare < 0.25f) {
+            check(false, "the ball keeps a usable vertical angle after "
+                         "repeated edge hits");
+            return;
+        }
+    }
+    check(true, "the ball keeps a usable vertical angle after repeated edge hits");
+}
+
 void testLosingALife() {
     Game game;
     game.startPlaying();
@@ -306,6 +342,7 @@ int main() {
     testBallRidesPaddleUntilLaunched();
     testBallBreaksBricksAndScores();
     testFastBallDoesNotTunnel();
+    testBallNeverFlattensOut();
     testLosingALife();
     testGameOverAndRestart();
     testPauseFreezesPlay();

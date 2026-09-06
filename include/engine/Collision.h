@@ -276,8 +276,17 @@ inline Contact circleAabbContact(const Transform& circleTransform,
 // Picks the right contact test for whatever shapes the two entities carry.
 // The normal always points from `a` toward `b`.
 inline Contact contactBetween(World& world, Entity a, Entity b) {
-    const Transform& ta = *world.getComponent<Transform>(a);
-    const Transform& tb = *world.getComponent<Transform>(b);
+    // Checked, not assumed. CollisionSystem filters these out before it calls
+    // this, but game code calls it directly too — Breakout tests its ball
+    // against every entity that has a Collider — and a collider without a
+    // Transform is easy to create by accident. Dereferencing blindly here
+    // turns that mistake into a crash instead of a miss.
+    Transform* transformA = world.getComponent<Transform>(a);
+    Transform* transformB = world.getComponent<Transform>(b);
+    if (!transformA || !transformB) return Contact{};
+
+    const Transform& ta = *transformA;
+    const Transform& tb = *transformB;
 
     Collider* boxA = world.getComponent<Collider>(a);
     Collider* boxB = world.getComponent<Collider>(b);
@@ -303,8 +312,14 @@ inline Contact contactBetween(World& world, Entity a, Entity b) {
 // with both a Collider and a CircleCollider is treated as a box; give an
 // entity one shape or the other.
 inline bool collides(World& world, Entity a, Entity b) {
-    const Transform& ta = *world.getComponent<Transform>(a);
-    const Transform& tb = *world.getComponent<Transform>(b);
+    // Same guard as contactBetween: no Transform means no position, so there
+    // is nothing to overlap with.
+    Transform* transformA = world.getComponent<Transform>(a);
+    Transform* transformB = world.getComponent<Transform>(b);
+    if (!transformA || !transformB) return false;
+
+    const Transform& ta = *transformA;
+    const Transform& tb = *transformB;
 
     Collider* boxA = world.getComponent<Collider>(a);
     Collider* boxB = world.getComponent<Collider>(b);

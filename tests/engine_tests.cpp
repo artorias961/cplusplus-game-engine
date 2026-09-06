@@ -302,6 +302,33 @@ void testCollisionSystemDispatch() {
           "an entity with no collider never collides");
 }
 
+// A collider with no Transform has no position, so it cannot be anywhere and
+// cannot hit anything. CollisionSystem filters those out before testing, but
+// contactBetween is public and games call it directly — Breakout tests its
+// ball against every entity carrying a Collider — so it has to survive the
+// case rather than dereference a null pointer.
+void testContactWithoutTransform() {
+    World world;
+
+    Entity solid = world.createEntity();
+    world.addComponent(solid, Transform{0.0f, 0.0f});
+    world.addComponent(solid, Collider{20, 20});
+
+    Entity placeless = world.createEntity();
+    world.addComponent(placeless, Collider{20, 20});  // no Transform
+
+    check(!contactBetween(world, solid, placeless).overlapping,
+          "an entity with no Transform reports no contact");
+    check(!contactBetween(world, placeless, solid).overlapping,
+          "and the same in the other argument order");
+    check(!collides(world, solid, placeless),
+          "collides() agrees rather than crashing");
+
+    // It must also stay out of the system's results entirely.
+    check(CollisionSystem(world).empty(),
+          "CollisionSystem ignores a collider with nowhere to be");
+}
+
 // --- Timing ----------------------------------------------------------------
 
 void testTickTimer() {
@@ -538,6 +565,7 @@ int main() {
     testContactDispatchAndReflect();
     testCollisionSystemReportsContacts();
     testCollisionSystemDispatch();
+    testContactWithoutTransform();
     testTickTimer();
     testWorld();
     testDeferredDestruction();

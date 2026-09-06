@@ -43,6 +43,12 @@ AudioDevice* audioDevice = nullptr;
 constexpr int kShipIconTile = 0;
 constexpr float kDebrisLife = 0.7f;
 
+// The thrust flame. It used to be found by elimination — "the Polygon that
+// isn't a rock, bullet, ship, debris or ghost" — which was correct only for
+// as long as nothing else untagged ever had a Polygon. A tag costs nothing
+// and cannot be wrong.
+struct Flame {};
+
 // --- Sound -----------------------------------------------------------------
 //
 // Every sound in the game is arithmetic: a square wave for the gun, filtered
@@ -329,6 +335,7 @@ void spawnShip(World& world, Session& session) {
     Entity flame = world.createEntity();
     world.addComponent(flame, Transform{});
     world.addComponent(flame, flamePolygon());
+    world.addComponent(flame, Flame{});
 
     session.spawnProtection = kSpawnProtection;
 }
@@ -380,15 +387,8 @@ void spawnWave(World& world, Session& session) {
 }
 
 Entity findFlame(World& world) {
-    // The flame is the one entity with a Polygon but no collider and no tag.
     for (Entity entity : world.entities()) {
-        if (!world.hasComponent<Polygon>(entity)) continue;
-        if (world.hasComponent<Rock>(entity)) continue;
-        if (world.hasComponent<Bullet>(entity)) continue;
-        if (world.hasComponent<Ship>(entity)) continue;
-        if (world.hasComponent<Debris>(entity)) continue;
-        if (world.hasComponent<Ghost>(entity)) continue;
-        return entity;
+        if (world.hasComponent<Flame>(entity)) return entity;
     }
     return kInvalidEntity;
 }
@@ -583,7 +583,7 @@ public:
         if (countRocks(world) == 0) spawnWave(world, *session);
 
         session->spawnProtection -= dt;
-        controlShip(world, *session, input, dt);
+        controlShip(world, input, dt);
 
         // MovementSystem has already moved everything, so wrapping happens
         // here on the new positions, before anything is drawn.
@@ -618,8 +618,7 @@ private:
         }
     }
 
-    void controlShip(World& world, Session& session, InputManager& input,
-                     float dt) {
+    void controlShip(World& world, InputManager& input, float dt) {
         const Entity ship = findShip(world);
         if (ship == kInvalidEntity) return;
 
@@ -667,7 +666,6 @@ private:
             }
         }
 
-        session.spawnProtection = session.spawnProtection;  // (unchanged here)
         fireCooldown_ -= dt;
         if (input.isKeyDown(SDL_SCANCODE_SPACE) && fireCooldown_ <= 0.0f) {
             fireBullet(world, ship);
