@@ -110,6 +110,163 @@ void testCircleVsBox() {
           "circle close to a corner does overlap");
 }
 
+// --- Contacts: which way out, and how far ----------------------------------
+
+void testAabbContact() {
+    const Collider box{10, 10};
+
+    // B sits mostly to the right of A and overlaps by 2 on x, 10 on y. The
+    // shorter axis wins, so the way out is sideways.
+    Contact side = aabbContact(Transform{0.0f, 0.0f}, box,
+                               Transform{8.0f, 0.0f}, box);
+    check(side.overlapping, "overlapping boxes report a contact");
+    check(nearly(side.normal.x, 1.0f) && nearly(side.normal.y, 0.0f),
+          "the normal points from A toward B, along x");
+    check(nearly(side.depth, 2.0f), "depth is the overlap on the shorter axis");
+
+    // Mirrored: B to the LEFT of A flips the normal.
+    Contact left = aabbContact(Transform{0.0f, 0.0f}, box,
+                               Transform{-8.0f, 0.0f}, box);
+    check(nearly(left.normal.x, -1.0f), "the normal flips when B is left of A");
+
+    // Overlapping less on y than x: the way out is vertical instead.
+    Contact vertical = aabbContact(Transform{0.0f, 0.0f}, box,
+                                   Transform{0.0f, 8.0f}, box);
+    check(nearly(vertical.normal.y, 1.0f) && nearly(vertical.normal.x, 0.0f),
+          "the shortest axis decides the direction, not the order of arguments");
+    check(nearly(vertical.depth, 2.0f), "vertical depth is the y overlap");
+
+    check(!aabbContact(Transform{0.0f, 0.0f}, box, Transform{10.0f, 0.0f}, box)
+               .overlapping,
+          "touching exactly is not a contact, matching aabbOverlap");
+    check(!aabbContact(Transform{0.0f, 0.0f}, box, Transform{99.0f, 0.0f}, box)
+               .overlapping,
+          "distant boxes report no contact");
+}
+
+void testCircleContact() {
+    const CircleCollider ten{10.0f};
+
+    Contact contact = circleContact(Transform{0.0f, 0.0f}, ten,
+                                    Transform{15.0f, 0.0f}, ten);
+    check(contact.overlapping, "overlapping circles report a contact");
+    check(nearly(contact.normal.x, 1.0f), "the normal runs A toward B");
+    check(nearly(contact.depth, 5.0f), "depth is radii minus centre distance");
+
+    // A 3-4-5 triangle scaled by 3: centres 15 apart, so 5 of overlap, and
+    // the normal is the unit vector along it.
+    Contact diagonal = circleContact(Transform{0.0f, 0.0f}, ten,
+                                     Transform{9.0f, 12.0f}, ten);
+    check(diagonal.overlapping, "diagonal overlap is detected");
+    check(nearly(diagonal.normal.x, 0.6f) && nearly(diagonal.normal.y, 0.8f),
+          "the diagonal normal is a unit vector");
+    check(nearly(diagonal.depth, 5.0f), "diagonal depth uses real distance");
+
+    // Concentric circles have no shortest way out; it must still not divide
+    // by zero or hand back a NaN normal.
+    Contact same = circleContact(Transform{5.0f, 5.0f}, ten,
+                                 Transform{5.0f, 5.0f}, ten);
+    check(same.overlapping, "concentric circles overlap");
+    check(nearly(same.normal.x * same.normal.x + same.normal.y * same.normal.y,
+                 1.0f),
+          "concentric circles still produce a unit normal");
+}
+
+void testCircleAabbContact() {
+    const CircleCollider circle{6.0f};
+    const Collider box{20, 20};  // spans (100,100) to (120,120)
+    const Transform boxAt{100.0f, 100.0f};
+
+    // Circle overlapping the left edge: it should be pushed further left, so
+    // the normal (circle toward box) points right.
+    Contact leftEdge = circleAabbContact(Transform{97.0f, 110.0f}, circle,
+                                         boxAt, box);
+    check(leftEdge.overlapping, "circle overlapping the left edge contacts");
+    check(nearly(leftEdge.normal.x, 1.0f) && nearly(leftEdge.normal.y, 0.0f),
+          "the normal points from the circle into the box");
+    check(nearly(leftEdge.depth, 3.0f), "depth is radius minus the gap");
+
+    // Above the box: the way out is upward.
+    Contact topEdge = circleAabbContact(Transform{110.0f, 96.0f}, circle, boxAt,
+                                        box);
+    check(nearly(topEdge.normal.y, 1.0f) && nearly(topEdge.normal.x, 0.0f),
+          "a circle above the box is pushed up, not sideways");
+
+    // Centre buried inside the box, nearest the top: it must leave through
+    // the top rather than the far side.
+    Contact inside = circleAabbContact(Transform{110.0f, 103.0f}, circle, boxAt,
+                                       box);
+    check(inside.overlapping, "a circle inside the box contacts");
+    check(nearly(inside.normal.y, 1.0f),
+          "a buried circle leaves through its nearest edge");
+    check(inside.depth > 6.0f, "a buried circle's depth clears the surface");
+
+    check(!circleAabbContact(Transform{50.0f, 50.0f}, circle, boxAt, box)
+               .overlapping,
+          "a distant circle reports no contact");
+}
+
+void testContactDispatchAndReflect() {
+    World world;
+
+    Entity box = world.createEntity();
+    world.addComponent(box, Transform{0.0f, 0.0f});
+    world.addComponent(box, Collider{20, 20});
+
+    Entity ball = world.createEntity();
+    world.addComponent(ball, Transform{10.0f, -4.0f});
+    world.addComponent(ball, CircleCollider{6.0f});
+
+    // Box first, circle second: the normal must still run from a to b, which
+    // means the mixed case has to be flipped internally.
+    Contact boxFirst = contactBetween(world, box, ball);
+    Contact ballFirst = contactBetween(world, ball, box);
+    check(boxFirst.overlapping && ballFirst.overlapping,
+          "the pair contacts in both argument orders");
+    check(nearly(boxFirst.normal.y, -1.0f),
+          "box-then-circle points from the box toward the circle above it");
+    check(nearly(ballFirst.normal.y, 1.0f),
+          "circle-then-box points the opposite way");
+    check(nearly(boxFirst.depth, ballFirst.depth),
+          "depth does not depend on argument order");
+
+    // Reflection: a ball falling straight down onto a floor bounces straight
+    // up, and one arriving at an angle keeps its sideways speed.
+    Vec2 straight = reflect(Vec2{0.0f, 100.0f}, Vec2{0.0f, -1.0f});
+    check(nearly(straight.x, 0.0f) && nearly(straight.y, -100.0f),
+          "a head-on bounce reverses exactly");
+
+    Vec2 angled = reflect(Vec2{60.0f, 80.0f}, Vec2{0.0f, -1.0f});
+    check(nearly(angled.x, 60.0f) && nearly(angled.y, -80.0f),
+          "a glancing bounce keeps its tangential speed");
+
+    Vec2 sideways = reflect(Vec2{-50.0f, 20.0f}, Vec2{1.0f, 0.0f});
+    check(nearly(sideways.x, 50.0f) && nearly(sideways.y, 20.0f),
+          "bouncing off a wall flips only the perpendicular part");
+}
+
+// CollisionSystem must report the same geometry the primitives do.
+void testCollisionSystemReportsContacts() {
+    World world;
+
+    Entity a = world.createEntity();
+    world.addComponent(a, Transform{0.0f, 0.0f});
+    world.addComponent(a, Collider{10, 10});
+
+    Entity b = world.createEntity();
+    world.addComponent(b, Transform{8.0f, 0.0f});
+    world.addComponent(b, Collider{10, 10});
+
+    auto collisions = CollisionSystem(world);
+    check(collisions.size() == 1, "one pair is reported");
+    if (collisions.size() == 1) {
+        check(nearly(collisions[0].depth, 2.0f),
+              "the pair carries the penetration depth");
+        check(nearly(collisions[0].normal.x, 1.0f),
+              "the pair carries the contact normal");
+    }
+}
+
 // The dispatch: same system, three shape combinations.
 void testCollisionSystemDispatch() {
     World world;
@@ -375,6 +532,11 @@ int main() {
     testAabb();
     testCircles();
     testCircleVsBox();
+    testAabbContact();
+    testCircleContact();
+    testCircleAabbContact();
+    testContactDispatchAndReflect();
+    testCollisionSystemReportsContacts();
     testCollisionSystemDispatch();
     testTickTimer();
     testWorld();

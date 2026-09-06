@@ -20,7 +20,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Adding a second game is now three lines — another add_executable that links
 # engine — rather than a restructure.
 file(GLOB ENGINE_SOURCES "${CMAKE_SOURCE_DIR}/src/engine/*.cpp")
-file(GLOB GAME_SOURCES   "${CMAKE_SOURCE_DIR}/src/game/*.cpp")
 
 add_library(engine STATIC ${ENGINE_SOURCES})
 
@@ -28,18 +27,52 @@ add_library(engine STATIC ${ENGINE_SOURCES})
 # the games and the tests inherit the include path automatically.
 target_include_directories(engine PUBLIC ${CMAKE_SOURCE_DIR}/include)
 
-add_executable(asteroids ${GAME_SOURCES})
-target_link_libraries(asteroids PRIVATE engine)
+# --- The games --------------------------------------------------------------
+#
+# Both are shaped the same way: the rules in a library, and a three-line
+# main.cpp that opens a window. That split exists for one reason — a game whose
+# logic lives inside main.cpp cannot be tested, because reaching any of it
+# means opening a window. With the rules in a library, the test binaries link
+# the same code the player runs and drive it headlessly.
+add_library(asteroids_lib STATIC
+    "${CMAKE_SOURCE_DIR}/src/game/asteroids/Asteroids.cpp")
+target_include_directories(asteroids_lib PUBLIC
+    "${CMAKE_SOURCE_DIR}/src/game/asteroids")
+target_link_libraries(asteroids_lib PUBLIC engine)
 
-add_executable(engine_tests ${CMAKE_SOURCE_DIR}/tests/engine_tests.cpp)
+add_executable(asteroids "${CMAKE_SOURCE_DIR}/src/game/asteroids/main.cpp")
+target_link_libraries(asteroids PRIVATE asteroids_lib)
+
+add_library(breakout_lib STATIC
+    "${CMAKE_SOURCE_DIR}/src/game/breakout/Breakout.cpp")
+target_include_directories(breakout_lib PUBLIC
+    "${CMAKE_SOURCE_DIR}/src/game/breakout")
+target_link_libraries(breakout_lib PUBLIC engine)
+
+add_executable(breakout "${CMAKE_SOURCE_DIR}/src/game/breakout/main.cpp")
+target_link_libraries(breakout PRIVATE breakout_lib)
+
+# --- Tests ------------------------------------------------------------------
+add_executable(engine_tests "${CMAKE_SOURCE_DIR}/tests/engine_tests.cpp")
 target_link_libraries(engine_tests PRIVATE engine)
 
-# `ctest` in the build directory runs it; so does running the binary directly,
-# which prints what passed.
+add_executable(breakout_tests "${CMAKE_SOURCE_DIR}/tests/breakout_tests.cpp")
+target_include_directories(breakout_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")
+target_link_libraries(breakout_tests PRIVATE breakout_lib)
+
+add_executable(asteroids_tests "${CMAKE_SOURCE_DIR}/tests/asteroids_tests.cpp")
+target_include_directories(asteroids_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")
+target_link_libraries(asteroids_tests PRIVATE asteroids_lib)
+
+# `ctest` in the build directory runs all three; so does running any of the
+# binaries directly, which prints what passed.
 enable_testing()
 add_test(NAME engine_tests COMMAND engine_tests)
+add_test(NAME breakout_tests COMMAND breakout_tests)
+add_test(NAME asteroids_tests COMMAND asteroids_tests)
 
-foreach(target engine asteroids engine_tests)
+foreach(target engine asteroids_lib asteroids breakout_lib breakout
+                engine_tests breakout_tests asteroids_tests)
     if (MSVC)
         target_compile_options(${target} PRIVATE /W4)
     else()
@@ -89,10 +122,12 @@ if (SDL2_FOUND)
 
     # SDL2's "main" shim (SDL2main) redefines main() so SDL can do its own
     # startup on Windows before handing control to your code. It belongs on
-    # the GAME only: the test binary has an ordinary main() and must not have
-    # it rewritten out from under it.
+    # the GAMES only: a test binary has an ordinary main() and must not have
+    # it rewritten out from under it. (The test sources also define
+    # SDL_MAIN_HANDLED, which stops SDL.h doing the same thing by macro.)
     if (TARGET SDL2::SDL2main)
         target_link_libraries(asteroids PRIVATE SDL2::SDL2main)
+        target_link_libraries(breakout PRIVATE SDL2::SDL2main)
     endif()
 else()
     find_package(PkgConfig REQUIRED)

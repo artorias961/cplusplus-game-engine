@@ -56,6 +56,15 @@ public:
     // Called once per frame, for the top scene only.
     virtual void update(World& world, InputManager& input, float dt,
                         SceneStack& scenes) = 0;
+
+    // Should the engine's built-in systems run while this scene is on top?
+    //
+    // Only updates stop at a scene boundary; movement does not. Without this,
+    // "paused" freezes the game's own logic while MovementSystem carries on
+    // sliding every entity with a Velocity across the screen — which is
+    // exactly what a pause is supposed to prevent. An overlay that means
+    // "the world is holding still" returns false.
+    virtual bool simulatesWorld() const { return true; }
 };
 
 using ScenePtr = std::unique_ptr<Scene>;
@@ -126,6 +135,12 @@ public:
     // that as "quit", which gives game code a natural way to end the program
     // without reaching for the Engine itself: pop the last scene.
     bool empty() const { return scenes_.empty(); }
+
+    // Whether the top scene wants the world to keep moving. The engine asks
+    // this before running its built-in systems each frame.
+    bool simulating() const {
+        return scenes_.empty() ? true : scenes_.back()->simulatesWorld();
+    }
 
 private:
     enum class Kind { Push, Pop, Replace };

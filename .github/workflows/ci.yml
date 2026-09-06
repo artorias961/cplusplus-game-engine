@@ -1,0 +1,55 @@
+# Builds the engine, both games and all three test suites, then runs the tests.
+#
+# Two jobs, on Linux and macOS, and that is deliberate: development happens on
+# Windows with vcpkg, so those are the platforms whose build path — CMake
+# falling back to pkg-config — was documented but never actually exercised.
+# This is what stops the README's cross-platform claim from being a guess.
+#
+# The tests need no display: none of them opens a window or initialises SDL's
+# video subsystem, which is exactly what makes them runnable on a CI box.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: Linux (pkg-config)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SDL2
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev libsdl2-image-dev
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+  macos:
+    name: macOS (Homebrew)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SDL2
+        run: brew install sdl2 sdl2_image pkg-config
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure

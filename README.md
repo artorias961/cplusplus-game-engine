@@ -1,21 +1,25 @@
 # Tiny Engine
 
 A minimal 2D game engine in C++17 + SDL2, built to be read end to end in one
-sitting. It's the smallest version of the architecture real engines use: a
-game loop, an Entity-Component-System, a layered renderer with textures,
-rotation, vector shapes and bitmap text, input handling, box and circle
-collision, fixed-tick timing and a scene stack — each in its own file with
-heavy comments explaining *why*, not just *what*.
+sitting, one file at a time. It's the smallest version of the architecture
+real engines use: a game loop, an Entity-Component-System, a layered renderer
+with a camera, textures, rotation, vector shapes and bitmap text, input
+handling, box and circle collision with contact normals, procedural audio,
+fixed-tick timing and a scene stack — each in its own file with heavy comments
+explaining *why*, not just *what*.
 
-Two games are built on it: **Asteroids**, in `src/game/`, and **Snake**, kept
-as a standalone snapshot in `archive/version_1/`. That's on purpose — an
-engine with only one game is a hypothesis, not an engine.
+Three games are built on it: **Asteroids** and **Breakout** in `src/game/`, and
+**Snake**, kept as a frozen snapshot in `archive/version_1/`. That's on purpose
+— an engine with only one game is a hypothesis, not an engine, and each of the
+three needed something the previous one didn't: Snake wanted fixed ticks and
+box collision, Asteroids wanted rotation and circles, Breakout wanted contact
+normals and sub-frame movement.
 
 It is **not** trying to be fast, complete, or production-ready. Storage uses
 `std::unordered_map` instead of packed arrays, there's no batching, no scene
-graph, no audio, and the asset handling is one cache that loads PNGs. Once
-this makes sense, those are the natural next things to add — see "Where to go
-from here" below.
+graph, collision compares every pair, and the asset handling is one cache that
+loads PNGs. Once this makes sense, those are the natural next things to add —
+see "Where to go from here" below.
 
 ## What's in the box
 
@@ -24,33 +28,49 @@ engine_project/
 ├── CMakeLists.txt
 ├── include/engine/
 │   ├── ECS.h           Entity type + component storage + World
-│   ├── Components.h    Transform, Velocity, Sprite, Polygon, colliders, ...
-│   ├── Systems.h       Movement, Lifetime, Collision (boxes and circles)
+│   ├── Components.h    Transform, Velocity, Sprite, Polygon, Camera, ...
+│   ├── Systems.h       Movement and Lifetime (and includes Collision.h)
+│   ├── Collision.h     Overlap tests + contact normals, boxes and circles
 │   ├── Timing.h        TickTimer (variable frames -> fixed-length ticks)
 │   ├── Scene.h         Scene + SceneStack (menu / playing / paused / ...)
 │   ├── Font.h          A 5x7 bitmap font, built into the binary
+│   ├── Audio.h         Sound synthesised in code; no files, no SDL_mixer
 │   ├── Resources.h     TextureCache (load each image once, own it)
 │   ├── Input.h         InputManager (keys held, and keys just pressed)
 │   └── Engine.h        Window/renderer/game-loop owner
 ├── src/engine/
 │   └── Engine.cpp      SDL setup, the loop, and the built-in render system
 ├── src/game/
-│   └── main.cpp        The game: Asteroids, built on all of the above
+│   ├── asteroids/      Asteroids.h/.cpp + a 3-line main.cpp
+│   └── breakout/       Breakout.h/.cpp + a 3-line main.cpp
 ├── tests/
-│   └── engine_tests.cpp  Asserts about the engine's pure logic
+│   ├── Harness.h             Drives scenes headlessly, no window needed
+│   ├── engine_tests.cpp      Asserts about the engine's pure logic
+│   ├── asteroids_tests.cpp   Asserts about Asteroids' rules
+│   └── breakout_tests.cpp    Asserts about Breakout's rules
+├── .github/workflows/
+│   └── ci.yml          Builds and tests on Linux and macOS
 ├── assets/
 │   └── asteroids.png   Ship icon + rock, for the HUD and title screen
 └── archive/
     └── version_1/      Snake: the first game, kept as a standalone project
 ```
 
-The build produces three targets, and the split is the point:
+The build produces these targets, and the split is the point:
 
 | Target | What it is |
 | --- | --- |
 | `engine` | A static library. Knows nothing about any particular game. |
-| `asteroids` | The game. Links `engine`. |
+| `asteroids_lib` / `breakout_lib` | Each game's rules, as a library. Link `engine`. |
+| `asteroids` / `breakout` | Each game's window and entry point. |
 | `engine_tests` | Asserts about the engine. Links `engine`. |
+| `asteroids_tests` / `breakout_tests` | Asserts about each game's rules. |
+
+Both games are shaped the same way — rules in a library, behind a three-line
+`main.cpp`. That split exists for one reason: a game whose logic lives inside
+`main.cpp` cannot be tested, because reaching any of it means opening a window.
+With the rules in a library, the test binaries link the same code the player
+runs and drive it headlessly.
 
 Everything used to compile into a single executable, which made "game code
 depends on engine code, never the reverse" a rule you had to enforce by
@@ -74,9 +94,10 @@ that's what makes it a snapshot rather than a second copy to maintain. The
 trade-off is that Snake no longer builds against the current engine, so it
 can't catch regressions in it; that job now belongs to `engine_tests`.
 
-The dependency direction only ever goes one way: `main.cpp` depends on
-`engine/`, never the reverse. The engine has no idea what a "player" or an
-"arrow key binding" is — that's game code, supplied as a callback.
+The dependency direction only ever goes one way: game code depends on
+`engine/`, never the reverse. The engine has no idea what a "player", a "rock"
+or an "arrow key binding" is — those live in the games, which the engine only
+ever sees as scenes it updates and components it draws.
 
 ## How it fits together
 
@@ -94,7 +115,7 @@ iteration does five things, in this order, forever, until the window closes:
 4. **Deletions** — destroy every entity queued with `destroyLater()` during
    the update. This happens here, and only here, because it's the one point
    in the frame where nothing is iterating a component pool.
-5. **Render** — sprites first (sorted by layer), then polygons, then text.
+5. **Render** — sprites, polygons and text, in one list sorted by layer.
 6. **Frame limiting** — if the frame finished early, sleep the rest so the
    loop doesn't spin at 100% CPU.
 
@@ -113,7 +134,7 @@ controllable vehicle when the player enters it isn't cleanly a `Crate` or a
 `Vehicle` — it's an entity that gains a `PlayerControlled` component. ECS
 makes "mix and match behavior" the default instead of the exception.
 
-**Collision** (`CollisionSystem` in `Systems.h`) answers one question: which
+**Collision** (`Collision.h`) answers one question: which
 pairs of entities overlap? Entities carry one of two shapes, and the system
 picks the right test for each pair.
 
@@ -141,6 +162,23 @@ is generic, but *response* — losing a life, eating food, bouncing — depends
 on what the entities mean, so game code decides when to ask and what the
 answer implies.
 
+**Contacts** are what turn detection into response. Alongside the yes/no
+tests, each shape pair has a `*Contact` version returning a `Contact`: a unit
+`normal` pointing from A toward B along the shortest way out, and the `depth`
+they overlap by. Move B by `normal * depth` and they are exactly touching.
+
+Snake and Asteroids never needed this — a snake dies, a rock explodes, and
+neither cares which side was struck. A ball does: hitting the top of a brick
+must flip its vertical speed while hitting the left face flips its horizontal
+one, and only the normal distinguishes those. `reflect(velocity, normal)`
+does the mirror maths, and Breakout is what pulled all of it into existence.
+
+For boxes the way out is along whichever axis overlaps *least*, which is what
+stops a ball that entered from the side being ejected through the top. For a
+circle buried entirely inside a box there is no nearest surface point at all,
+so it leaves through the nearest edge instead — the case a fast mover hits
+when it ends a frame deep inside a wall.
+
 **Ticks** (`TickTimer` in `Timing.h`) are the counterpart to `dt`. Multiplying
 by `dt` gives smooth motion, which is wrong for anything that happens in
 discrete steps: a grid game can't move 0.42 of a cell this frame. `TickTimer`
@@ -162,6 +200,14 @@ updating but keeps all its entities, so the frozen board still draws behind
 the overlay. Pop it and play resumes untouched. `replace` is the other case —
 title screen to gameplay, where the old scene should not come back.
 
+A scene also says whether the world should keep moving beneath it
+(`simulatesWorld`). Without that, "paused" stops only the game's own logic
+while `MovementSystem` carries on sliding every entity with a `Velocity`
+across the screen — the exact thing a pause is meant to prevent. That bug was
+real and sat in Asteroids unnoticed, because Snake and Breakout don't use the
+engine's `Velocity` for anything that matters; the headless test for "nothing
+moves while paused" is what caught it.
+
 Transitions are queued rather than applied immediately, for the same reason
 `World::destroyLater` exists: a scene asking to be popped is running inside
 its own `update()`, and deleting it there would destroy the object out from
@@ -169,18 +215,29 @@ under the call that's executing. The engine applies queued transitions after
 the update returns.
 
 **Rendering** (`Engine::render`) is deliberately the *only* place that calls
-SDL drawing functions. It draws every `(Transform, Sprite)` pair, then every
-`(Transform, Text)` pair. A `Sprite` is drawn one of two ways depending on
-whether it carries a texture: as a flat colored rectangle, or as an image (or
-one tile of a sheet, if it has a source rect). Both paths honour alpha, so a
-translucent panel can dim what's beneath it.
+SDL drawing functions. A `Sprite` is drawn one of two ways depending on whether
+it carries a texture: as a flat colored rectangle, or as an image (or one tile
+of a sheet, if it has a source rect). Both paths honour alpha, so a translucent
+panel can dim what's beneath it.
 
-Draw order is `(layer, entity id)`. That matters because component pools
-iterate arbitrarily, which is invisible until two sprites overlap and the map
-starts deciding which one wins; sorting by an explicit `layer` puts the game
-in charge, and the ID tiebreak keeps the order stable between frames so
-nothing flickers. Text always draws after every sprite — which is why the
-score stays bright over a dimmed board.
+Sprites, polygons and text all go into **one** list, sorted by
+`(layer, entity id)`. Component pools iterate arbitrarily, which is invisible
+until two things overlap and the map starts deciding which one wins; an
+explicit `layer` puts the game in charge, and the ID tiebreak keeps the order
+stable between frames so nothing flickers. Sorting all three kinds together is
+what lets a dimming panel sit above the board and below the menu text — three
+separate passes could never express that.
+
+**The camera** is a component, not a field on the Engine. The renderer uses the
+first `Camera` it finds and shifts everything drawn in world space by the
+negative of it; with no camera at all the view sits at the origin, which is why
+games written before it existed still draw exactly as they did. It's a
+component because a scene never sees the Engine but always has a `World&` — and
+because a test can then move the view with no window in existence. Anything
+that should ignore it (a score, a menu, a full-screen panel) sets
+`screenSpace`. Asteroids uses it for screen shake: the whole view jitters for a
+fraction of a second when a rock breaks, which costs about ten lines and does
+more for the feel of an impact than any amount of artwork.
 
 **Rotation and vector shapes.** `Transform` carries a `rotation` in radians,
 and `AngularVelocity` is to it exactly what `Velocity` is to position — both
@@ -225,6 +282,20 @@ zero assets" property and adds no dependency, at the cost of one size (whole
 number scaling only), uppercase only, and no kerning. Swap in SDL2_ttf the day
 you want a real typeface.
 
+**Audio** (`Audio.h`) is computed, not loaded. SDL2 already opens a sound
+device and asks for samples; SDL_mixer exists for decoding music files and
+managing channels, none of which arcade blips need. So a tone here is
+arithmetic — a square wave for a gun, a sine for a rumble, plain randomness
+for an explosion — mixed by adding the live voices together, which is
+literally what mixing is. Same trade as the bitmap font: no dependency, no
+assets, and the mechanism is visible.
+
+Two details matter more than they look. Every voice fades in and out over a
+few milliseconds, because a tone that stops instantly leaves the speaker cone
+somewhere other than rest and the jump is heard as a click. And the mixing
+callback runs on SDL's own audio thread, so the voice list is behind a mutex —
+a real engine avoids locking there, but at eight voices it isn't measurable.
+
 **Input** (`Input.h`) turns SDL's raw event stream (a key went down, a key
 went up) into two questions game code can ask every frame.
 `isKeyDown(SDL_SCANCODE_RIGHT)` is for continuous actions like steering.
@@ -255,6 +326,17 @@ uses circles instead of boxes, and creates and destroys entities every second.
 An engine with one game is a hypothesis; the second game is the test — and
 everything the engine gained here (rotation, circles, polygons, lifetimes)
 was pulled out by a real requirement rather than guessed at in advance.
+
+**Breakout** (`src/game/breakout/`) is the third game, and the first that
+needed collision *response*. Its ball is also the only thing in the project
+that opts out of `MovementSystem`: it keeps its own velocity and integrates
+itself in steps of at most a few pixels, testing for collisions after each
+one. That's the fix for tunnelling — at 400 px/s a ball crosses nearly seven
+pixels per frame at 60fps and thirteen at 30, so a single jump per frame can
+start above a brick and end below it, overlapping nothing at either end, and
+pass straight through. Every engine meets this; sub-frame steps are the
+standard first answer, and they make the behaviour frame-rate independent
+besides.
 
 Notice what game code still never does: touch SDL, or write a render loop. It
 only describes *what exists* and *what should happen when*.
@@ -366,9 +448,10 @@ which would silently mismatch):
 cd engine_project
 cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -A x64
 
-# 4. Build, and run
+# 4. Build, and run whichever game you want
 cmake --build build --config Release
 .\build\Release\asteroids.exe
+.\build\Release\breakout.exe
 ```
 
 Every time you change a source file after that, only step 4 is needed.
@@ -387,38 +470,68 @@ the whole `Release` folder.
 
 ### Running the tests
 
-The same build produces a test binary. It needs no window and no GPU, and
-finishes in milliseconds:
+The same build produces two test binaries. Neither needs a window or a GPU,
+and both finish in milliseconds:
 
 ```powershell
 ctest --test-dir build -C Release
 ```
 
-Or run it directly — `.\build\Release\engine_tests.exe` — which prints how
-many checks passed. It covers the collision maths (including the strict
-edge-touching rule a grid game depends on), `TickTimer`'s accumulation and
-its zero-interval guard, entity creation and deferred destruction, the
+Either can also be run directly, which prints how many checks passed.
+
+**`engine_tests`** covers the engine's arithmetic: the overlap tests
+(including the strict edge-touching rule a grid game depends on, and the
+circle-past-a-corner case a naive "grow the box by the radius" test gets
+wrong), contact normals and depths for all three shape pairs, reflection,
+`TickTimer`'s accumulation and zero-interval guard, deferred destruction, the
 movement and lifetime systems, the exact ordering of scene-stack transitions,
-and the integrity of every glyph in the font table. Anything needing a window
-is deliberately absent: rendering is verified by looking at it.
+and every glyph in the font table.
+
+**`asteroids_tests`** and **`breakout_tests`** cover the games' *rules*, using
+`tests/Harness.h` to run scenes with no window: starting a round, firing,
+thrust and drag, breaking bricks, losing a life, refusing to respawn a ship
+into a rock, running out of lives and restarting cleanly, pause genuinely
+freezing play, and clearing a field to advance. These are the paths unit tests
+can't reach, because they only exist in the interaction between scenes, input
+and the world — and they are why the pause bug above was found at all.
+
+The harness runs the same systems in the same order as `Engine::run`, calling
+the shared `RunBuiltinSystems` rather than repeating the list, so the two can't
+drift apart. It feeds real `SDL_Event`s into a real `InputManager`, so
+`wasKeyPressed` edge detection behaves exactly as in the game. Only rendering
+is missing, and rendering changes no state — it's verified by looking at it.
 
 ### Controls
 
-A title screen opens: `SPACE` starts a game, `Q` quits.
+Both games open on a title screen where `SPACE` starts and `Q` quits. In both,
+`P` pauses, `R` plays again from the game-over screen, and `Escape` quits from
+anywhere.
+
+**Asteroids** (`.\build\Release\asteroids.exe`)
 
 | Key | Action |
 | --- | --- |
 | Left / Right | Turn the ship |
 | Up | Thrust (you keep drifting after you let go) |
 | Space | Fire |
-| P | Pause and resume |
-| R | Play again, on the game-over screen |
-| Escape | Quit from anywhere |
 
 Shoot the rocks: large breaks into two medium, medium into two small, small
 into nothing, scoring 20 / 50 / 100. Clear the field and the next wave arrives
 one rock larger. Colliding with a rock costs one of three lives; a fresh ship
-flashes while it's briefly invulnerable.
+flashes while briefly invulnerable, and waits for a clear space before
+returning.
+
+**Breakout** (`.\build\Release\breakout.exe`)
+
+| Key | Action |
+| --- | --- |
+| Left / Right | Move the paddle |
+| Space | Launch the ball |
+
+The ball rides the paddle until you launch it, so you choose where each rally
+starts. Where it lands across the paddle's face angles the bounce — that's the
+whole skill of it. Clear the field and the next level refills it with a faster
+ball. Missing the ball costs one of three lives.
 
 ### When it doesn't work
 
@@ -437,25 +550,15 @@ flashes while it's briefly invulnerable.
 Once this structure feels obvious, these are the natural next steps, roughly
 in order of how much they'll teach you:
 
-- **Audio**: `SDL_mixer`, and a thump when a rock breaks. It's the cheapest
-  change on this list and the one that most changes how the game feels.
 - **Sprite-sheet animation**: `Sprite` already has a source rect, so an
   animated sprite needs only an `Animation` component (a list of frames and a
   frame duration) and a system that advances `srcX` over time — the same
   shape as `MovementSystem`, operating on a different field.
-- **Collision response**: `CollisionSystem` reports *that* two things
-  overlap, never how deeply or from which side. Neither game so far has needed
-  more — Snake dies, Asteroids explodes — but anything that bounces or gets
-  pushed does. Returning a contact normal and penetration depth is the next
-  real step, and a game where things ricochet is what should drive its design.
-- **Text in the draw order**: text is currently drawn after every sprite, full
-  stop, so a translucent panel can dim the board but never the score on top of
-  it. Giving `Text` a layer and sorting sprites and text together would fix
-  that, at the cost of a slightly busier render loop.
-- **A collision broad phase**: `CollisionSystem` currently compares every
-  collidable pair, which is O(n²). Bucket entities into a coarse spatial grid
-  first and only compare within a bucket — the standard first optimization,
-  and one that doesn't change the system's public shape at all.
+- **A collision broad phase**: `CollisionSystem` still compares every
+  collidable pair. Breakout sidesteps it — only the ball moves, so it tests
+  the ball against each collider instead, which is O(n) rather than O(n²) —
+  but a game where many things move would need the real fix: bucket entities
+  into a coarse spatial grid and only compare within a bucket.
 - **Fixed-timestep physics**: `TickTimer` already does this for game logic;
   `MovementSystem` still runs on the raw frame `dt` (a "variable timestep").
   Look up "fixed timestep game loop" to see how engines run physics on the
@@ -471,11 +574,13 @@ in order of how much they'll teach you:
   number" for safety.
 - **A scene/level format**: load entity layouts from a JSON or text file
   instead of hardcoding them in `main.cpp`.
-- **A second live game**: the engine currently has exactly one consumer, since
-  Snake is a frozen snapshot rather than a target in this build. Now that
-  adding a game is three lines of CMake, a second one — Breakout is the
-  obvious candidate, since bouncing is what would force collision response
-  into existence — would keep the engine honest in a way tests alone can't.
+- **A third live game**: two is enough to catch an engine that fits one game
+  only, but every new *shape* of game finds something. A platformer would be
+  the next real stretch — it needs gravity, one-way platforms, a tilemap, and
+  above all a **camera**, which is the largest thing this engine still lacks.
+  Nothing built so far has revealed it, because Snake, Asteroids and Breakout
+  all fit on a single screen, so world coordinates and screen coordinates have
+  never had to differ.
 
 None of these require rewriting what's here — they slot into the same
 World/Component/System pattern.

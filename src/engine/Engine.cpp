@@ -63,11 +63,19 @@ Engine::Engine(const std::string& title, int width, int height) {
     }
 
     textures_ = std::make_unique<TextureCache>(renderer_);
+
+    // Audio is opened as a separate SDL subsystem, and its constructor says so
+    // and carries on if the machine has no working sound device — silence is a
+    // far better failure than refusing to start.
+    audio_ = std::make_unique<AudioDevice>();
 }
 
 Engine::~Engine() {
-    // Order matters: every texture belongs to the renderer, so the cache has
-    // to release them before the renderer is destroyed underneath it.
+    // Order matters. The audio device runs a callback on its own thread, so it
+    // is closed first — otherwise that thread can still be mixing while the
+    // rest of this is torn down. Then the texture cache, because every texture
+    // belongs to the renderer and must be released before it.
+    audio_.reset();
     textures_.reset();
 
     if (renderer_) SDL_DestroyRenderer(renderer_);
@@ -100,38 +108,85 @@ void Engine::render(World& world) {
     SDL_SetRenderDrawColor(renderer_, 24, 24, 32, 255);
     SDL_RenderClear(renderer_);
 
-    // The built-in render system: draw every entity that has both a
-    // Transform (where) and a Sprite (what it looks like). This is the only
-    // place in the engine that touches SDL's drawing calls directly —
-    // everything else works through components.
-    //
-    // Component pools iterate in an arbitrary order, which is fine until two
-    // sprites overlap and it starts deciding which one wins. So the entities
-    // are gathered and sorted by (layer, id) first: layer is the game's
-    // choice, and the ID tiebreak keeps the order identical from one frame to
-    // the next. The vector is rebuilt each frame, which is a small cost this
-    // engine can afford; a bigger one would keep it and only re-sort when a
-    // sprite is added, removed, or changes layer.
-    std::vector<std::pair<int, Entity>> drawOrder;
-    for (auto& [entity, sprite] : world.view<Sprite>()) {
-        // A Sprite with no Transform has nowhere to draw.
-        if (!world.hasComponent<Transform>(entity)) continue;
-        drawOrder.emplace_back(sprite.layer, entity);
+    // Where the view is. The first Camera in the world wins; with none, the
+    // view sits at the origin and world space and screen space coincide.
+    float cameraX = 0.0f;
+    float cameraY = 0.0f;
+    for (auto& entry : world.view<Camera>()) {
+        cameraX = entry.second.x;
+        cameraY = entry.second.y;
+        break;
     }
-    std::sort(drawOrder.begin(), drawOrder.end());
 
-    for (const auto& [layer, entity] : drawOrder) {
-        (void)layer;
-        const Sprite& sprite = *world.getComponent<Sprite>(entity);
-        const Transform& transform = *world.getComponent<Transform>(entity);
+    // The built-in render system. This is the only place in the engine that
+    // touches SDL's drawing calls directly — everything else works through
+    // components.
+    //
+    // Sprites, polygons and text all go into ONE list, sorted by (layer, id).
+    // Component pools iterate in an arbitrary order, which is invisible until
+    // two things overlap and the map starts deciding which one wins; the layer
+    // is the game's say in that, and the ID tiebreak keeps the order identical
+    // from frame to frame so nothing flickers. Sorting the three kinds
+    // together is what lets a dimming panel sit above the board and below the
+    // menu text, which three separate passes could never express.
+    //
+    // The list is rebuilt each frame — a small cost this engine can afford. A
+    // bigger one would keep it and re-sort only when something is added,
+    // removed, or changes layer.
+    drawList_.clear();
+    for (auto& [entity, sprite] : world.view<Sprite>()) {
+        if (!world.hasComponent<Transform>(entity)) continue;  // nowhere to draw
+        drawList_.push_back(DrawItem{sprite.layer, entity, DrawKind::SpriteKind});
+    }
+    for (auto& [entity, polygon] : world.view<Polygon>()) {
+        if (!world.hasComponent<Transform>(entity)) continue;
+        drawList_.push_back(DrawItem{polygon.layer, entity, DrawKind::PolygonKind});
+    }
+    for (auto& [entity, text] : world.view<Text>()) {
+        if (!world.hasComponent<Transform>(entity)) continue;
+        drawList_.push_back(DrawItem{text.layer, entity, DrawKind::TextKind});
+    }
 
-        SDL_Rect rect{
-            static_cast<int>(transform.x),
-            static_cast<int>(transform.y),
-            sprite.width,
-            sprite.height,
-        };
+    std::sort(drawList_.begin(), drawList_.end(),
+              [](const DrawItem& a, const DrawItem& b) {
+                  if (a.layer != b.layer) return a.layer < b.layer;
+                  if (a.entity != b.entity) return a.entity < b.entity;
+                  return a.kind < b.kind;
+              });
 
+    for (const DrawItem& item : drawList_) {
+        switch (item.kind) {
+            case DrawKind::SpriteKind:
+                drawSprite(world, item.entity, cameraX, cameraY);
+                break;
+            case DrawKind::PolygonKind:
+                drawPolygon(world, item.entity, cameraX, cameraY);
+                break;
+            case DrawKind::TextKind:
+                drawTextComponent(world, item.entity, cameraX, cameraY);
+                break;
+        }
+    }
+
+    SDL_RenderPresent(renderer_);
+}
+
+void Engine::drawSprite(World& world, Entity entity, float cameraX,
+                        float cameraY) {
+    const Sprite& sprite = *world.getComponent<Sprite>(entity);
+    const Transform& transform = *world.getComponent<Transform>(entity);
+
+    const float offsetX = sprite.screenSpace ? 0.0f : cameraX;
+    const float offsetY = sprite.screenSpace ? 0.0f : cameraY;
+
+    SDL_Rect rect{
+        static_cast<int>(transform.x - offsetX),
+        static_cast<int>(transform.y - offsetY),
+        sprite.width,
+        sprite.height,
+    };
+
+    {
         if (sprite.texture) {
             // r/g/b/a act as a tint multiplied into the artwork; all 255s
             // (the default) leave it exactly as painted.
@@ -162,63 +217,58 @@ void Engine::render(World& world) {
             SDL_RenderFillRect(renderer_, &rect);
         }
     }
+}
 
-    // Polygons: the vector-graphics path. Each point is rotated around the
-    // entity's Transform and then moved into place, which is the whole of 2D
-    // rotation in four lines:
-    //
-    //     x' = x cos(a) - y sin(a)
-    //     y' = x sin(a) + y cos(a)
-    //
-    // cos and sin are computed once per entity rather than once per point,
-    // because they only depend on the angle.
-    std::vector<std::pair<int, Entity>> polygonOrder;
-    for (auto& [entity, polygon] : world.view<Polygon>()) {
-        if (!world.hasComponent<Transform>(entity)) continue;
-        polygonOrder.emplace_back(polygon.layer, entity);
+// The vector-graphics path. Each point is rotated around the entity's
+// Transform and then moved into place, which is the whole of 2D rotation in
+// two lines:
+//
+//     x' = x cos(a) - y sin(a)
+//     y' = x sin(a) + y cos(a)
+//
+// cos and sin are computed once per entity rather than once per point, because
+// they only depend on the angle.
+void Engine::drawPolygon(World& world, Entity entity, float cameraX,
+                         float cameraY) {
+    const Polygon& polygon = *world.getComponent<Polygon>(entity);
+    const Transform& transform = *world.getComponent<Transform>(entity);
+    if (polygon.points.size() < 2) return;
+
+    const float offsetX = polygon.screenSpace ? 0.0f : cameraX;
+    const float offsetY = polygon.screenSpace ? 0.0f : cameraY;
+
+    const float cosA = std::cos(transform.rotation);
+    const float sinA = std::sin(transform.rotation);
+
+    polygonPoints_.clear();
+    polygonPoints_.reserve(polygon.points.size() + 1);
+    for (const Vec2& point : polygon.points) {
+        polygonPoints_.push_back(SDL_FPoint{
+            transform.x - offsetX + point.x * cosA - point.y * sinA,
+            transform.y - offsetY + point.x * sinA + point.y * cosA,
+        });
     }
-    std::sort(polygonOrder.begin(), polygonOrder.end());
+    // A closed shape just repeats its first point, so the last segment joins
+    // back around.
+    if (polygon.closed) polygonPoints_.push_back(polygonPoints_.front());
 
-    std::vector<SDL_FPoint> screenPoints;
-    for (const auto& [layer, entity] : polygonOrder) {
-        (void)layer;
-        const Polygon& polygon = *world.getComponent<Polygon>(entity);
-        const Transform& transform = *world.getComponent<Transform>(entity);
-        if (polygon.points.size() < 2) continue;
+    SDL_SetRenderDrawColor(renderer_, polygon.r, polygon.g, polygon.b,
+                           polygon.a);
+    SDL_RenderDrawLinesF(renderer_, polygonPoints_.data(),
+                         static_cast<int>(polygonPoints_.size()));
+}
 
-        const float cosA = std::cos(transform.rotation);
-        const float sinA = std::sin(transform.rotation);
+void Engine::drawTextComponent(World& world, Entity entity, float cameraX,
+                               float cameraY) {
+    const Text& text = *world.getComponent<Text>(entity);
+    const Transform& transform = *world.getComponent<Transform>(entity);
 
-        screenPoints.clear();
-        screenPoints.reserve(polygon.points.size() + 1);
-        for (const Vec2& point : polygon.points) {
-            screenPoints.push_back(SDL_FPoint{
-                transform.x + point.x * cosA - point.y * sinA,
-                transform.y + point.x * sinA + point.y * cosA,
-            });
-        }
-        // A closed shape just repeats its first point, so the last segment
-        // joins back around.
-        if (polygon.closed) screenPoints.push_back(screenPoints.front());
+    const float offsetX = text.screenSpace ? 0.0f : cameraX;
+    const float offsetY = text.screenSpace ? 0.0f : cameraY;
 
-        SDL_SetRenderDrawColor(renderer_, polygon.r, polygon.g, polygon.b,
-                               polygon.a);
-        SDL_RenderDrawLinesF(renderer_, screenPoints.data(),
-                             static_cast<int>(screenPoints.size()));
-    }
-
-    // Text is drawn after every sprite, so a heads-up display or a "PAUSED"
-    // overlay always lands on top of the game rather than under it.
-    for (auto& [entity, text] : world.view<Text>()) {
-        Transform* transform = world.getComponent<Transform>(entity);
-        if (!transform) continue;
-
-        drawText(text.value, static_cast<int>(transform->x),
-                 static_cast<int>(transform->y), text.scale,
-                 SDL_Color{text.r, text.g, text.b, text.a});
-    }
-
-    SDL_RenderPresent(renderer_);
+    drawText(text.value, static_cast<int>(transform.x - offsetX),
+             static_cast<int>(transform.y - offsetY), text.scale,
+             SDL_Color{text.r, text.g, text.b, text.a});
 }
 
 // Draws a string one font pixel at a time, each as a filled rectangle — the
@@ -266,8 +316,11 @@ void Engine::run(World& world, const UpdateFn& onUpdate) {
         processEvents();
 
         // --- 3. Update: run built-in systems, then the game's own logic.
-        MovementSystem(world, dt);
-        LifetimeSystem(world, dt);
+        // A paused scene can switch the systems off for the frame, so the
+        // world genuinely stops instead of drifting on beneath the overlay.
+        if (!shouldSimulate_ || shouldSimulate_()) {
+            RunBuiltinSystems(world, dt);
+        }
         if (onUpdate) onUpdate(world, input_, dt);
 
         // --- 4. Deletions: entities queued with destroyLater() during the
@@ -298,6 +351,10 @@ void Engine::run(World& world, SceneStack& scenes) {
     // Whatever the game pushed before calling run() is still only queued.
     // Apply it now, so the first frame has a scene to update.
     scenes.applyPending(world);
+
+    // Consulted each frame, before the systems run, so a pause takes effect
+    // immediately rather than a frame late.
+    shouldSimulate_ = [&scenes]() { return scenes.simulating(); };
 
     run(world, [&scenes, this](World& w, InputManager& input, float dt) {
         scenes.update(w, input, dt);

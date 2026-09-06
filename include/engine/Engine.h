@@ -19,7 +19,9 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
+#include "engine/Audio.h"
 #include "engine/Components.h"
 #include "engine/ECS.h"
 #include "engine/Input.h"
@@ -63,9 +65,26 @@ public:
     // images: gameEngine.textures().load("assets/tiles.png").
     TextureCache& textures() { return *textures_; }
 
+    // The sound device, owned here for the same reason: it belongs to the
+    // platform layer, and it must be closed before SDL shuts down.
+    AudioDevice& audio() { return *audio_; }
+
 private:
+    // Sprites, polygons and text share one sorted draw list, so a layer means
+    // the same thing to all three.
+    enum class DrawKind { SpriteKind, PolygonKind, TextKind };
+    struct DrawItem {
+        int layer = 0;
+        Entity entity = kInvalidEntity;
+        DrawKind kind = DrawKind::SpriteKind;
+    };
+
     void processEvents();
     void render(World& world);
+    void drawSprite(World& world, Entity entity, float cameraX, float cameraY);
+    void drawPolygon(World& world, Entity entity, float cameraX, float cameraY);
+    void drawTextComponent(World& world, Entity entity, float cameraX,
+                           float cameraY);
     void drawText(const std::string& text, int x, int y, int scale,
                   SDL_Color color);
 
@@ -74,8 +93,16 @@ private:
     // Held by pointer because it needs the renderer, which doesn't exist
     // until partway through the constructor body.
     std::unique_ptr<TextureCache> textures_;
+    std::unique_ptr<AudioDevice> audio_;
     InputManager input_;
     bool running_ = true;
+    // Set by the scene-driven run(); null means "always simulate".
+    std::function<bool()> shouldSimulate_;
+
+    // Kept between frames so the per-frame draw list and the point buffer
+    // reuse their capacity instead of reallocating sixty times a second.
+    std::vector<DrawItem> drawList_;
+    std::vector<SDL_FPoint> polygonPoints_;
 };
 
 }  // namespace engine

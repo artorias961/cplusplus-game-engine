@@ -25,6 +25,23 @@ struct Vec2 {
     float y = 0.0f;
 };
 
+// The view onto the world: everything drawn in world space is shifted by the
+// negative of this, so moving the camera right slides the world left.
+//
+// It is a component on an entity rather than a field on the Engine for two
+// reasons: game code reaches it through the World it already has (a scene
+// never sees the Engine), and a test can move the view without a window
+// existing. The renderer uses the first Camera it finds; if there is none the
+// view sits at the origin, which is why the games written before this existed
+// still draw exactly as they did.
+//
+// Anything that should ignore the camera — a score, a menu, a full-screen
+// dimming panel — sets `screenSpace` on its Sprite, Polygon or Text instead.
+struct Camera {
+    float x = 0.0f;
+    float y = 0.0f;
+};
+
 // Where an entity is in the world, in pixels, and which way it faces.
 //
 // `rotation` is in RADIANS, measured from "pointing right" and increasing
@@ -84,6 +101,7 @@ struct Sprite {
     int srcH = 0;
 
     int layer = 0;
+    bool screenSpace = false;  // ignore the Camera; draw at fixed coordinates
 };
 
 // An outline drawn as connected line segments — the "vector graphics" look of
@@ -105,6 +123,7 @@ struct Polygon {
     unsigned char b = 255;
     unsigned char a = 255;
     int layer = 0;
+    bool screenSpace = false;
 };
 
 // The rectangle an entity collides with, in pixels, anchored at its
@@ -163,6 +182,14 @@ struct Text {
     unsigned char g = 255;
     unsigned char b = 255;
     unsigned char a = 255;
+
+    // Text used to be drawn after every sprite, unconditionally, so a
+    // translucent panel could dim the board but never the score sitting on
+    // top of it. Now it takes part in the same layer ordering as everything
+    // else, and a heads-up display decides for itself whether an overlay
+    // covers it.
+    int layer = 0;
+    bool screenSpace = false;
 };
 
 // Marks the one entity the player directly controls. An empty "tag"

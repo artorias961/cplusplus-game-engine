@@ -6,14 +6,15 @@
 // a particular set of components and does something with them. Systems own
 // no state of their own; all state lives in the World's components. That's
 // what makes them easy to reorder, disable, or test in isolation.
+//
+// Collision used to live here too, and grew until it was five times the size
+// of everything else combined. It now has its own header, which this one
+// includes so that code written against Systems.h still compiles.
 // ---------------------------------------------------------------------------
 
-#include <algorithm>
-#include <cstddef>
-#include <vector>
-
-#include "engine/ECS.h"
+#include "engine/Collision.h"
 #include "engine/Components.h"
+#include "engine/ECS.h"
 
 namespace engine {
 
@@ -46,140 +47,12 @@ inline void LifetimeSystem(World& world, float dt) {
     }
 }
 
-// --- Collision -------------------------------------------------------------
-//
-// Two entities collide when their Collider rectangles overlap. Because those
-// rectangles are always axis-aligned (this engine never rotates anything),
-// the test is four comparisons — the AABB ("axis-aligned bounding box")
-// test, the cheapest useful collision check there is and the one nearly
-// every 2D engine reaches for first.
-//
-// Notice what is deliberately missing: any notion of what a collision
-// *means*. Losing a life, bouncing off a wall, picking up a coin — that is
-// game logic, and it stays in game code. The engine's job ends at "these two
-// rectangles overlap"; deciding what to do about it is somebody else's.
-
-// One overlapping pair. Each pair is reported once: you get {a, b}, never
-// also the mirrored {b, a}.
-struct CollisionPair {
-    Entity a = kInvalidEntity;
-    Entity b = kInvalidEntity;
-};
-
-// The AABB test itself, on raw components rather than entities, so it is
-// usable for "would this box fit here?" questions about positions that no
-// entity occupies yet.
-//
-// The comparisons are strict (`<`, not `<=`), so two rectangles that merely
-// touch edge-to-edge do NOT count as overlapping. That matters for
-// grid-aligned games, where neighboring cells share an edge by design.
-inline bool aabbOverlap(const Transform& ta, const Collider& ca,
-                        const Transform& tb, const Collider& cb) {
-    const float aRight  = ta.x + static_cast<float>(ca.width);
-    const float aBottom = ta.y + static_cast<float>(ca.height);
-    const float bRight  = tb.x + static_cast<float>(cb.width);
-    const float bBottom = tb.y + static_cast<float>(cb.height);
-
-    // Overlapping on one axis means "A starts before B ends, and B starts
-    // before A ends". Both axes have to overlap for the boxes to intersect;
-    // if either one doesn't, there's a gap and we're done.
-    return ta.x < bRight && tb.x < aRight &&
-           ta.y < bBottom && tb.y < aBottom;
-}
-
-// Circle against circle: the cheapest test of all. Two circles overlap when
-// the distance between their centers is less than the sum of their radii, and
-// comparing squared distances avoids a square root entirely.
-//
-// Both circles are centered on their Transform (see CircleCollider).
-inline bool circleOverlap(const Transform& ta, const CircleCollider& ca,
-                          const Transform& tb, const CircleCollider& cb) {
-    const float dx = tb.x - ta.x;
-    const float dy = tb.y - ta.y;
-    const float radii = ca.radius + cb.radius;
-    return (dx * dx + dy * dy) < (radii * radii);
-}
-
-// Circle against box, for entities that mix the two conventions.
-//
-// The trick: find the point on the rectangle closest to the circle's center
-// by clamping that center into the rectangle's range on each axis. If that
-// closest point is nearer than the radius, they overlap. Remember the box
-// hangs down-right from its Transform while the circle is centered on its own.
-inline bool circleAabbOverlap(const Transform& circleTransform,
-                              const CircleCollider& circle,
-                              const Transform& boxTransform,
-                              const Collider& box) {
-    const float left = boxTransform.x;
-    const float top = boxTransform.y;
-    const float right = left + static_cast<float>(box.width);
-    const float bottom = top + static_cast<float>(box.height);
-
-    const float closestX = std::max(left, std::min(circleTransform.x, right));
-    const float closestY = std::max(top, std::min(circleTransform.y, bottom));
-
-    const float dx = circleTransform.x - closestX;
-    const float dy = circleTransform.y - closestY;
-    return (dx * dx + dy * dy) < (circle.radius * circle.radius);
-}
-
-// Checks every collidable entity against every other one and returns the
-// pairs that overlap.
-//
-// Unlike MovementSystem, the engine does NOT run this for you every frame.
-// Its output is only useful to code that knows what the entities mean, so
-// game code decides when to ask (a turn-based game might ask once per move
-// rather than once per frame) and what the answer implies.
-//
-// This is the naive O(n^2) version: 100 collidables is ~5,000 checks, which
-// is nothing at this scale. Real engines put a "broad phase" in front of it
-// — a spatial grid or quadtree that rules out pairs too far apart to touch —
-// so they never build the full pair list at all.
-// Do these two entities overlap, whatever shapes they happen to use? Picks
-// the right test from the collider components each one carries. An entity
-// with both a Collider and a CircleCollider is treated as a box; give an
-// entity one shape or the other.
-inline bool collides(World& world, Entity a, Entity b) {
-    const Transform& ta = *world.getComponent<Transform>(a);
-    const Transform& tb = *world.getComponent<Transform>(b);
-
-    Collider* boxA = world.getComponent<Collider>(a);
-    Collider* boxB = world.getComponent<Collider>(b);
-    CircleCollider* circleA = world.getComponent<CircleCollider>(a);
-    CircleCollider* circleB = world.getComponent<CircleCollider>(b);
-
-    if (boxA && boxB) return aabbOverlap(ta, *boxA, tb, *boxB);
-    if (circleA && circleB) return circleOverlap(ta, *circleA, tb, *circleB);
-    if (circleA && boxB) return circleAabbOverlap(ta, *circleA, tb, *boxB);
-    if (boxA && circleB) return circleAabbOverlap(tb, *circleB, ta, *boxA);
-    return false;
-}
-
-inline std::vector<CollisionPair> CollisionSystem(World& world) {
-    // A collider says how big, a Transform says where. An entity needs a
-    // Transform and at least one collider shape to take part.
-    std::vector<Entity> collidable;
-    for (Entity entity : world.entities()) {
-        if (!world.hasComponent<Transform>(entity)) continue;
-        if (!world.hasComponent<Collider>(entity) &&
-            !world.hasComponent<CircleCollider>(entity)) {
-            continue;
-        }
-        collidable.push_back(entity);
-    }
-
-    std::vector<CollisionPair> collisions;
-    for (std::size_t i = 0; i < collidable.size(); ++i) {
-        // Starting j at i + 1 skips both self-pairs (i == j) and the
-        // mirrored duplicates already covered by an earlier i.
-        for (std::size_t j = i + 1; j < collidable.size(); ++j) {
-            if (collides(world, collidable[i], collidable[j])) {
-                collisions.push_back(
-                    CollisionPair{collidable[i], collidable[j]});
-            }
-        }
-    }
-    return collisions;
+// The systems the engine runs for every game, in the order it runs them.
+// Engine::run calls this, and so does anything driving the world without a
+// window — a test, a headless replay — so the two can't drift apart.
+inline void RunBuiltinSystems(World& world, float dt) {
+    MovementSystem(world, dt);
+    LifetimeSystem(world, dt);
 }
 
 }  // namespace engine
