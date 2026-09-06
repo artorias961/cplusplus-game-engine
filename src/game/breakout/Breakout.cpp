@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "engine/Font.h"
@@ -267,6 +268,12 @@ void moveBall(World& world, Entity ballEntity, Session& session, float dt) {
     const int steps = std::max(1, static_cast<int>(std::ceil(distance / kMaxSubstep)));
     const float stepDt = dt / static_cast<float>(steps);
 
+    // Bricks destroyed earlier in this frame are still alive — deletion is
+    // deferred to the end of it — so without remembering them, a brick the
+    // ball is still overlapping on the next substep would be scored a second
+    // time and click twice. Tracked across the whole move, not per substep.
+    std::unordered_set<Entity> alreadyBroken;
+
     for (int step = 0; step < steps; ++step) {
         transform->x += ball->velocity.x * stepDt;
         transform->y += ball->velocity.y * stepDt;
@@ -286,7 +293,10 @@ void moveBall(World& world, Entity ballEntity, Session& session, float dt) {
             const Contact contact = contactBetween(world, ballEntity, other);
             if (!contact.overlapping) continue;
 
-            if (world.hasComponent<Brick>(other)) bricksHit.push_back(other);
+            if (world.hasComponent<Brick>(other) &&
+                alreadyBroken.find(other) == alreadyBroken.end()) {
+                bricksHit.push_back(other);
+            }
 
             // Respond to the deepest contact only. Clipping the corner where
             // two bricks meet touches both, and reflecting twice in one step
@@ -299,6 +309,7 @@ void moveBall(World& world, Entity ballEntity, Session& session, float dt) {
 
         for (Entity brick : bricksHit) {
             if (Brick* data = world.getComponent<Brick>(brick)) playBrick(data->row);
+            alreadyBroken.insert(brick);
             world.destroyLater(brick);
             session.score += kBrickScore;
         }

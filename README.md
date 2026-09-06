@@ -47,7 +47,8 @@ engine_project/
 │   ├── Harness.h             Drives scenes headlessly, no window needed
 │   ├── engine_tests.cpp      Asserts about the engine's pure logic
 │   ├── asteroids_tests.cpp   Asserts about Asteroids' rules
-│   └── breakout_tests.cpp    Asserts about Breakout's rules
+│   ├── breakout_tests.cpp    Asserts about Breakout's rules
+│   └── engine_bench.cpp      Measures the naive parts; not a pass/fail test
 ├── .github/workflows/
 │   └── ci.yml          Builds and tests on Linux and macOS
 ├── assets/
@@ -495,6 +496,35 @@ freezing play, and clearing a field to advance. These are the paths unit tests
 can't reach, because they only exist in the interaction between scenes, input
 and the world — and they are why the pause bug above was found at all.
 
+### Knowing when to optimise
+
+`engine_bench` is not a test — it measures, so there's nothing to pass and it
+isn't registered with ctest. It exists because "optimise when it's slow" is
+useless advice unless someone actually checks. Run
+`.\build\Release\engine_bench.exe`:
+
+```
+entities | collision ms | movement ms | share of a 16.6ms frame
+      25 |        0.062 |       0.002 |    0.4%
+     100 |        0.892 |       0.006 |    5.4%
+     200 |        3.687 |       0.015 |   22.3%
+     400 |       15.084 |       0.024 |   91.0%
+     800 |       57.647 |       0.035 |  347.5%
+```
+
+Two things fall straight out of that. `CollisionSystem` compares every pair,
+so its cost grows with the *square* of the entity count — free at 25, a fifth
+of the frame at 200, and past 400 it eats the budget alone. And
+`MovementSystem`, which iterates the `unordered_map` storage everyone wants to
+replace with packed arrays, costs 0.02ms at 400 entities and 0.11ms at 1600.
+Packed storage would be optimising something that is already noise, while the
+pair loop next to it costs a thousand times more.
+
+Asteroids runs about 26 colliding entities; Breakout has 65 but sidesteps the
+system entirely (only the ball moves, so it tests the ball against each
+collider — O(n) instead of O(n²), worth roughly 1.5ms a frame here). Both sit
+far below where any of this begins to matter.
+
 The harness runs the same systems in the same order as `Engine::run`, calling
 the shared `RunBuiltinSystems` rather than repeating the list, so the two can't
 drift apart. It feeds real `SDL_Event`s into a real `InputManager`, so
@@ -558,14 +588,20 @@ in order of how much they'll teach you:
   collidable pair. Breakout sidesteps it — only the ball moves, so it tests
   the ball against each collider instead, which is O(n) rather than O(n²) —
   but a game where many things move would need the real fix: bucket entities
-  into a coarse spatial grid and only compare within a bucket.
+  into a coarse spatial grid and only compare within a bucket. `engine_bench`
+  says the pair loop stops being free somewhere between 100 and 200 entities
+  and is unaffordable by 400, so that is the size to build this at — and it is
+  by far the most valuable optimisation on this list.
 - **Fixed-timestep physics**: `TickTimer` already does this for game logic;
   `MovementSystem` still runs on the raw frame `dt` (a "variable timestep").
   Look up "fixed timestep game loop" to see how engines run physics on the
   same kind of fixed step, and interpolate between steps when rendering.
 - **Packed component storage**: swap `unordered_map` for a "sparse set"
-  (a dense array of components plus an index lookup) — same public API,
-  much faster iteration, because components end up contiguous in memory.
+  (a dense array of components plus an index lookup) — same public API, much
+  faster iteration, because components end up contiguous in memory. Worth
+  knowing before you start: `engine_bench` puts the iteration it would speed
+  up at 0.11ms per frame with *1600* entities, so this is a lesson in data
+  layout rather than a fix for anything.
 - **Generational entity IDs**: IDs currently count up and are never reused,
   so they leak ID space, and a stale copy of a destroyed entity's ID silently
   refers to whatever later takes its place. The fix is a free list plus a

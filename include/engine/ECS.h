@@ -133,6 +133,12 @@ public:
         return getPool<T>().all();
     }
 
+    // Every living entity, in creation order.
+    //
+    // This is the live list, not a copy, so creating an entity while looping
+    // over it can reallocate the vector under the loop. Destroying is fine —
+    // destroyLater only queues — but if a loop over entities() needs to spawn
+    // something, collect the work first and do it after the loop ends.
     const std::vector<Entity>& entities() const { return aliveEntities_; }
 
 private:

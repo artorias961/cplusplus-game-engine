@@ -60,6 +60,12 @@ add_executable(breakout_tests "${CMAKE_SOURCE_DIR}/tests/breakout_tests.cpp")
 target_include_directories(breakout_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")
 target_link_libraries(breakout_tests PRIVATE breakout_lib)
 
+# Not a test: it measures rather than asserts, so it is deliberately not
+# registered with ctest. It exists so "optimise when it's slow" can be
+# answered with a number instead of a guess.
+add_executable(engine_bench "${CMAKE_SOURCE_DIR}/tests/engine_bench.cpp")
+target_link_libraries(engine_bench PRIVATE engine)
+
 add_executable(asteroids_tests "${CMAKE_SOURCE_DIR}/tests/asteroids_tests.cpp")
 target_include_directories(asteroids_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")
 target_link_libraries(asteroids_tests PRIVATE asteroids_lib)
@@ -72,7 +78,7 @@ add_test(NAME breakout_tests COMMAND breakout_tests)
 add_test(NAME asteroids_tests COMMAND asteroids_tests)
 
 foreach(target engine asteroids_lib asteroids breakout_lib breakout
-                engine_tests breakout_tests asteroids_tests)
+                engine_tests breakout_tests asteroids_tests engine_bench)
     if (MSVC)
         target_compile_options(${target} PRIVATE /W4)
     else()

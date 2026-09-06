@@ -366,6 +366,13 @@ void Engine::run(World& world, SceneStack& scenes) {
         // Popping the last scene means the game is over in the largest sense.
         if (scenes.empty()) quit();
     });
+
+    // That lambda captured `scenes` by reference. Leaving it installed would
+    // leave the Engine holding a reference to a stack the caller is free to
+    // destroy the moment run() returns — and a later run() with a plain
+    // callback would then call it. Clearing it makes "always simulate" the
+    // default again, which is what the callback form expects.
+    shouldSimulate_ = nullptr;
 }
 
 }  // namespace engine

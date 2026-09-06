@@ -232,6 +232,40 @@ void testBallNeverFlattensOut() {
     check(true, "the ball keeps a usable vertical angle after repeated edge hits");
 }
 
+// Score must always equal ten points per brick actually destroyed.
+//
+// A brick queued for destruction stays alive until the end of the frame, so a
+// fast ball taking several substeps could still be overlapping one it already
+// broke — and score it again, and click again. The ball is only pushed clear
+// of the *deepest* contact, so a second brick clipped at the same moment is
+// exactly the case that lingers.
+void testBricksScoreOnlyOnce() {
+    Game game;
+    game.startPlaying();
+
+    const int bricksBefore = breakout::countBricks(game.world);
+
+    // Aim up through the seam between the first two columns, fast enough to
+    // need many substeps, so the ball clips two bricks at once.
+    Ball& ball = game.ballData();
+    Transform& at = game.ballAt();
+    ball.stuckToPaddle = false;
+    at.x = static_cast<float>(breakout::kWallThickness + breakout::kFieldMargin) +
+           breakout::brickWidth() + static_cast<float>(breakout::kBrickGap) / 2.0f;
+    at.y = static_cast<float>(breakout::kBrickTop +
+                              breakout::kBrickRows *
+                                  (breakout::kBrickHeight + breakout::kBrickGap)) +
+           30.0f;
+    ball.velocity = Vec2{0.0f, -1500.0f};
+
+    game.driver.step(2);
+
+    const int destroyed = bricksBefore - breakout::countBricks(game.world);
+    check(destroyed > 0, "the ball broke at least one brick");
+    check(game.session().score == destroyed * breakout::kBrickScore,
+          "score counts each broken brick exactly once");
+}
+
 void testLosingALife() {
     Game game;
     game.startPlaying();
@@ -343,6 +377,7 @@ int main() {
     testBallBreaksBricksAndScores();
     testFastBallDoesNotTunnel();
     testBallNeverFlattensOut();
+    testBricksScoreOnlyOnce();
     testLosingALife();
     testGameOverAndRestart();
     testPauseFreezesPlay();

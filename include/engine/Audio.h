@@ -30,6 +30,7 @@
 
 #include <SDL.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <iostream>
@@ -93,6 +94,12 @@ public:
         voice.samplesRemaining = static_cast<int>(seconds * kSampleRate);
         voice.samplesTotal = voice.samplesRemaining;
         if (voice.samplesRemaining <= 0) return;
+
+        // Every noise voice started from the same seed, so every explosion was
+        // bit-for-bit the same burst — noticeable once you have heard a few.
+        // Moving the seed on per sound makes each one different.
+        voice.noiseSeed = nextNoiseSeed_;
+        nextNoiseSeed_ = nextNoiseSeed_ * 1664525u + 1013904223u;
 
         std::lock_guard<std::mutex> lock(mutex_);
         for (Voice& slot : voices_) {
@@ -173,8 +180,13 @@ private:
     // third, so the sound starts and ends without a click.
     static float envelopeOf(const Voice& voice) {
         const int elapsed = voice.samplesTotal - voice.samplesRemaining;
-        const int attack = 64;
-        if (elapsed < attack) {
+
+        // The attack has to fit inside the sound. A blip shorter than the
+        // fade-in would otherwise end partway up the ramp, at a value well
+        // away from silence — which is precisely the click the envelope
+        // exists to prevent.
+        const int attack = std::min(64, voice.samplesTotal / 4);
+        if (attack > 0 && elapsed < attack) {
             return static_cast<float>(elapsed) / static_cast<float>(attack);
         }
         const float remaining = static_cast<float>(voice.samplesRemaining) /
@@ -192,6 +204,7 @@ private:
     SDL_AudioSpec spec_{};
     std::mutex mutex_;
     Voice voices_[kVoices];
+    std::uint32_t nextNoiseSeed_ = 22695477u;
 };
 
 }  // namespace engine
