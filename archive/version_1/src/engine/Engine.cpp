@@ -1,7 +1,6 @@
 #include "engine/Engine.h"
 
 #include <algorithm>
-#include <cmath>
 #include <iostream>
 #include <utility>
 #include <vector>
@@ -17,9 +16,6 @@ constexpr float kTargetFrameSeconds = 1.0f / kTargetFps;
 // Clamp huge frame times (e.g. the debugger paused the process) so a single
 // slow frame can't cause things to teleport across the screen.
 constexpr float kMaxFrameSeconds = 0.25f;
-// Spelled out rather than using M_PI, which isn't standard C++ and needs
-// _USE_MATH_DEFINES before <cmath> on MSVC.
-constexpr double kPi = 3.14159265358979323846;
 }  // namespace
 
 Engine::Engine(const std::string& title, int width, int height) {
@@ -140,71 +136,18 @@ void Engine::render(World& world) {
 
             // A zero-sized source rect means "the whole image"; otherwise it
             // selects one tile out of a sheet.
-            SDL_Rect source{sprite.srcX, sprite.srcY, sprite.srcW, sprite.srcH};
-            const SDL_Rect* sourcePtr =
-                (sprite.srcW > 0 && sprite.srcH > 0) ? &source : nullptr;
-
-            // RenderCopyEx is RenderCopy plus rotation. SDL measures the
-            // angle in degrees, while Transform stores radians, so this is
-            // the one place in the project that converts between them.
-            // Passing a null center rotates about the middle of the
-            // destination rectangle, which is what you almost always want.
-            const double degrees =
-                static_cast<double>(transform.rotation) * 180.0 / kPi;
-            SDL_RenderCopyEx(renderer_, sprite.texture, sourcePtr, &rect,
-                             degrees, nullptr, SDL_FLIP_NONE);
+            if (sprite.srcW > 0 && sprite.srcH > 0) {
+                SDL_Rect source{sprite.srcX, sprite.srcY, sprite.srcW,
+                                sprite.srcH};
+                SDL_RenderCopy(renderer_, sprite.texture, &source, &rect);
+            } else {
+                SDL_RenderCopy(renderer_, sprite.texture, nullptr, &rect);
+            }
         } else {
-            // Note that a plain colored rectangle ignores rotation: SDL fills
-            // axis-aligned rects only. Rotating untextured shapes is what the
-            // Polygon component below is for.
             SDL_SetRenderDrawColor(renderer_, sprite.r, sprite.g, sprite.b,
                                    sprite.a);
             SDL_RenderFillRect(renderer_, &rect);
         }
-    }
-
-    // Polygons: the vector-graphics path. Each point is rotated around the
-    // entity's Transform and then moved into place, which is the whole of 2D
-    // rotation in four lines:
-    //
-    //     x' = x cos(a) - y sin(a)
-    //     y' = x sin(a) + y cos(a)
-    //
-    // cos and sin are computed once per entity rather than once per point,
-    // because they only depend on the angle.
-    std::vector<std::pair<int, Entity>> polygonOrder;
-    for (auto& [entity, polygon] : world.view<Polygon>()) {
-        if (!world.hasComponent<Transform>(entity)) continue;
-        polygonOrder.emplace_back(polygon.layer, entity);
-    }
-    std::sort(polygonOrder.begin(), polygonOrder.end());
-
-    std::vector<SDL_FPoint> screenPoints;
-    for (const auto& [layer, entity] : polygonOrder) {
-        (void)layer;
-        const Polygon& polygon = *world.getComponent<Polygon>(entity);
-        const Transform& transform = *world.getComponent<Transform>(entity);
-        if (polygon.points.size() < 2) continue;
-
-        const float cosA = std::cos(transform.rotation);
-        const float sinA = std::sin(transform.rotation);
-
-        screenPoints.clear();
-        screenPoints.reserve(polygon.points.size() + 1);
-        for (const Vec2& point : polygon.points) {
-            screenPoints.push_back(SDL_FPoint{
-                transform.x + point.x * cosA - point.y * sinA,
-                transform.y + point.x * sinA + point.y * cosA,
-            });
-        }
-        // A closed shape just repeats its first point, so the last segment
-        // joins back around.
-        if (polygon.closed) screenPoints.push_back(screenPoints.front());
-
-        SDL_SetRenderDrawColor(renderer_, polygon.r, polygon.g, polygon.b,
-                               polygon.a);
-        SDL_RenderDrawLinesF(renderer_, screenPoints.data(),
-                             static_cast<int>(screenPoints.size()));
     }
 
     // Text is drawn after every sprite, so a heads-up display or a "PAUSED"
@@ -267,7 +210,6 @@ void Engine::run(World& world, const UpdateFn& onUpdate) {
 
         // --- 3. Update: run built-in systems, then the game's own logic.
         MovementSystem(world, dt);
-        LifetimeSystem(world, dt);
         if (onUpdate) onUpdate(world, input_, dt);
 
         // --- 4. Deletions: entities queued with destroyLater() during the

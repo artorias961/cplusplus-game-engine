@@ -1,38 +1,36 @@
 // ---------------------------------------------------------------------------
-// main.cpp — Snake, built on the engine in include/engine/.
+// main.cpp — Asteroids, built on the engine in include/engine/.
 //
-// Everything in this file is game-specific: how big a grid cell is, how fast
-// the snake steps, what a "segment" is, what happens when the head touches
-// food. None of that leaks into engine/ — the engine only ever sees
-// Transforms, Sprites, Colliders, Text, and scenes it updates one at a time.
+// This is the engine's second game, and it deliberately exercises the half
+// that Snake never touched:
 //
-// The engine features this game leans on, and why:
+//   - Continuous motion. Everything here has a Velocity and is moved by the
+//     engine's MovementSystem, scaled by dt. Snake moved on a fixed tick and
+//     never used Velocity at all.
+//   - Rotation. The ship turns, rocks tumble, and the renderer transforms
+//     every vertex accordingly (Transform::rotation, AngularVelocity).
+//   - Circle collision. A box collider is wrong for a rotating ship, so
+//     everything here uses CircleCollider — a different shape running through
+//     the same CollisionSystem that served Snake's boxes.
+//   - Entity churn. Bullets appear and expire, rocks split into smaller
+//     rocks, and all of it is deleted mid-frame through destroyLater.
 //
-//   1. AABB collision (engine/Systems.h). Food, the walls, and the snake's
-//      own body are all rectangles with a Collider, so one generic overlap
-//      test answers all three of the questions this game asks.
-//   2. Tick-based movement (engine/Timing.h). The engine's MovementSystem
-//      moves things smoothly every frame (Transform += Velocity * dt). Snake
-//      instead sits still and jumps one whole cell every kTickSeconds, which
-//      is what keeps everything grid-aligned. Nothing here has a Velocity at
-//      all, so MovementSystem runs every frame and finds nothing to do.
-//   3. Scenes (engine/Scene.h). Title, playing, paused and game-over are four
-//      objects on a stack rather than four booleans checked in every update.
-//   4. Text (engine/Components.h, engine/Font.h). The score and every menu
-//      label is an entity with a Text component, drawn by the same renderer
-//      that draws the snake.
-//   5. Textures (engine/Resources.h). The snake and the food are tiles cut
-//      out of one PNG; the walls are still plain colored rectangles, because
-//      a Sprite can be either. If the image is missing, everything falls
-//      back to rectangles and the game plays exactly the same.
+// It also uses both render paths on purpose: the ship, bullets and rocks are
+// vector Polygons (no assets, rotate exactly), while the lives display and
+// the title screen's tumbling rock are textured Sprites.
+//
+// As with Snake, none of this leaks into engine/. The engine has no idea what
+// a rock is; it sees Transforms, Velocities, Polygons and colliders.
 // ---------------------------------------------------------------------------
 
 #include <SDL.h>
 
+#include <cmath>
 #include <cstddef>
 #include <memory>
 #include <random>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "engine/Components.h"
@@ -41,7 +39,6 @@
 #include "engine/Font.h"
 #include "engine/Scene.h"
 #include "engine/Systems.h"
-#include "engine/Timing.h"
 
 using namespace engine;
 
@@ -49,424 +46,484 @@ namespace {
 
 // --- Tuning knobs ----------------------------------------------------------
 
-constexpr int kCellSize = 32;  // pixels per grid cell
-constexpr int kGridCols = 24;  // total columns, including the wall border
-constexpr int kGridRows = 18;  // total rows, including the wall border
+constexpr int kWindowWidth = 960;
+constexpr int kWindowHeight = 720;
 
-// The window is sized from the grid rather than the other way around, so
-// changing kCellSize or the grid dimensions can't leave a partial cell
-// hanging off the edge.
-constexpr int kWindowWidth = kCellSize * kGridCols;
-constexpr int kWindowHeight = kCellSize * kGridRows;
+constexpr float kPi = 3.14159265f;
+constexpr float kTwoPi = kPi * 2.0f;
 
-// How long the snake waits between moves. Note how much longer this is than
-// a frame (~16ms at 60fps): roughly seven frames pass between steps, and
-// nothing on the board moves during them.
-constexpr float kTickSeconds = 0.12f;
+// Ship handling. Thrust is an ACCELERATION, not a speed: holding Up adds to
+// the ship's velocity rather than setting it, which is why the ship drifts
+// and has to be flown rather than steered.
+constexpr float kTurnSpeed = 3.4f;    // radians per second
+constexpr float kThrust = 320.0f;     // pixels per second, per second
+constexpr float kDrag = 0.45f;        // fraction of speed shed per second
+constexpr float kMaxSpeed = 430.0f;
+constexpr float kShipRadius = 12.0f;
 
-constexpr int kStartLength = 4;  // segments, head included
+constexpr float kBulletSpeed = 560.0f;
+constexpr float kBulletLife = 1.05f;  // seconds before it expires on its own
+constexpr float kFireCooldown = 0.22f;
+constexpr float kBulletRadius = 2.5f;
 
-// One PNG holds three 32x32 tiles side by side: head, body, food. Drawing
-// from a sheet rather than three files means one load, one texture, and one
-// place to add the next frame of animation.
-constexpr int kTileSize = 32;
-constexpr int kHeadTile = 0;
-constexpr int kBodyTile = 1;
-constexpr int kFoodTile = 2;
+// Rocks come in three sizes, indexed 2 (large) down to 0 (small). A large one
+// breaks into two mediums, a medium into two smalls, a small into nothing.
+constexpr int kLargeRock = 2;
+constexpr float kRockRadius[3] = {14.0f, 26.0f, 46.0f};
+constexpr int kRockScore[3] = {100, 50, 20};
+constexpr float kRockSpeedMin[3] = {90.0f, 60.0f, 32.0f};
+constexpr float kRockSpeedMax[3] = {190.0f, 130.0f, 85.0f};
 
-// Draw layers. The board sits at 0; the dimming panel behind a pause or
-// game-over message sits above it. Text always draws above every sprite.
-constexpr int kBoardLayer = 0;
-constexpr int kOverlayLayer = 10;
+constexpr int kStartLives = 3;
+constexpr int kStartRocks = 4;
+constexpr float kRespawnDelay = 1.4f;      // pause after dying
+constexpr float kSpawnProtection = 2.5f;   // invulnerable seconds after that
+constexpr float kSafeSpawnDistance = 170.0f;
+// How much room a returning ship needs around the middle before it is safe
+// to put it back. Ship radius plus a margin wide enough that a rock drifting
+// past isn't already on top of you the moment you appear.
+constexpr float kRespawnClearance = 70.0f;
 
-// The sprite sheet, loaded once in main(). A larger game would gather its
-// textures into an Assets struct and hand that to each scene; with exactly
-// one image, a file-scope pointer is the honest amount of machinery.
+// The sprite sheet: a ship icon at (0,0,32,32) and a rock at (32,0,64,64).
+constexpr int kShipIconTile = 0;
 SDL_Texture* spriteSheet = nullptr;
 
+// Draw layers: the field, then overlay panels on top of it.
+constexpr int kFieldLayer = 0;
+constexpr int kOverlayLayer = 10;
+
 // --- Game-specific components ----------------------------------------------
-//
-// World stores components keyed by their C++ type, so game code can invent
-// its own without touching engine/ at all — these three types are unknown to
-// the engine and it works with them anyway.
-//
-// They're pure tags with no fields. Their only job is to let the game ask
-// "what did the head just run into?" and get a meaningful answer back, which
-// beats keeping three separate lists of entity IDs in sync by hand.
-struct SnakeSegment {};
-struct Food {};
-struct Wall {};
 
-// --- Grid helpers ----------------------------------------------------------
+struct Ship {};
+struct Bullet {};
 
-// A position in grid cells, not pixels. The game thinks entirely in cells;
-// pixels only appear at the moment a cell is written into a Transform for
-// the engine to draw. Integer cells also mean "same square?" is an exact
-// comparison, with none of the fuzziness of comparing floats.
-struct Cell {
-    int x = 0;
-    int y = 0;
+// Rocks carry one field rather than being a bare tag: the size index decides
+// what it looks like, what it scores, and what it breaks into.
+struct Rock {
+    int size = kLargeRock;
 };
 
-bool sameCell(Cell a, Cell b) { return a.x == b.x && a.y == b.y; }
+// --- Math helpers ----------------------------------------------------------
 
-// The fallback look: a flat rectangle 2px smaller than its cell, so
-// neighboring segments stay visually distinct. Its Collider stays a full cell
-// (see createBlock) — the gap is a drawing detail and must not change what
-// collides.
-Sprite cellSprite(unsigned char r, unsigned char g, unsigned char b) {
-    return Sprite{kCellSize - 2, kCellSize - 2, r, g, b, 255};
+// A unit vector pointing along `radians`. Rotation 0 points right, and y
+// grows downward, so this matches what the renderer does with the same angle.
+Vec2 heading(float radians) {
+    return Vec2{std::cos(radians), std::sin(radians)};
 }
 
-// The textured look: one tile of the sheet, filling the whole cell. The
-// artwork carries its own margin, so it doesn't need the 2px trim.
-Sprite tileSprite(int tileIndex) {
-    Sprite sprite;
-    sprite.width = kCellSize;
-    sprite.height = kCellSize;
-    sprite.texture = spriteSheet;
-    sprite.srcX = tileIndex * kTileSize;
-    sprite.srcY = 0;
-    sprite.srcW = kTileSize;
-    sprite.srcH = kTileSize;
-    sprite.layer = kBoardLayer;
-    return sprite;
+float randomRange(std::mt19937& rng, float low, float high) {
+    return std::uniform_real_distribution<float>(low, high)(rng);
 }
 
-// If the sheet failed to load, every one of these quietly returns the flat
-// rectangle instead. Delete assets/ and the game still plays — it just looks
-// like it did before there was any art.
-Sprite headSprite() {
-    return spriteSheet ? tileSprite(kHeadTile) : cellSprite(130, 230, 130);
-}
-Sprite bodySprite() {
-    return spriteSheet ? tileSprite(kBodyTile) : cellSprite(70, 170, 90);
-}
-Sprite foodSprite() {
-    return spriteSheet ? tileSprite(kFoodTile) : cellSprite(230, 80, 80);
+// Space wraps: fly off one edge and you come back on the opposite one.
+//
+// This is the simple version, which teleports an object once its centre
+// crosses the boundary — so a big rock briefly pops rather than sliding
+// across the seam. Drawing everything a second time, offset by one screen
+// width, is what fixes that; it costs a second set of entities or a second
+// draw pass, and at this size it isn't worth it.
+void wrapPosition(Transform& transform) {
+    const float width = static_cast<float>(kWindowWidth);
+    const float height = static_cast<float>(kWindowHeight);
+
+    if (transform.x < 0.0f) transform.x += width;
+    else if (transform.x >= width) transform.x -= width;
+
+    if (transform.y < 0.0f) transform.y += height;
+    else if (transform.y >= height) transform.y -= height;
 }
 
-// Creates one rectangle in the world: where it is (Transform), what it looks
-// like (Sprite), and what it collides with (Collider). The caller supplies
-// the Sprite, so a block can be drawn smaller than it collides — which is
-// exactly why Sprite and Collider are separate components.
-Entity createBlock(World& world, Cell cell, int cellsWide, int cellsTall,
-                   Sprite sprite) {
-    Entity entity = world.createEntity();
-    world.addComponent(entity, Transform{static_cast<float>(cell.x * kCellSize),
-                                         static_cast<float>(cell.y * kCellSize)});
-    world.addComponent(entity, sprite);
-    world.addComponent(entity, Collider{cellsWide * kCellSize,
-                                        cellsTall * kCellSize});
-    return entity;
+// --- Shapes ----------------------------------------------------------------
+//
+// Polygon points are in local space, centred on the entity, so the renderer's
+// rotate-then-translate puts them on screen facing the right way. At rotation
+// 0 the ship points right, matching heading() above.
+
+Polygon shipPolygon() {
+    Polygon polygon;
+    polygon.points = {
+        Vec2{16.0f, 0.0f},     // nose
+        Vec2{-11.0f, -10.0f},  // left wing
+        Vec2{-6.0f, 0.0f},     // notch in the tail
+        Vec2{-11.0f, 10.0f},   // right wing
+    };
+    polygon.r = 200;
+    polygon.g = 230;
+    polygon.b = 255;
+    return polygon;
 }
 
-// Moves an entity that already exists to a grid cell, by rewriting the only
-// thing the renderer actually reads: its Transform.
-void placeAt(World& world, Entity entity, Cell cell) {
-    if (Transform* transform = world.getComponent<Transform>(entity)) {
-        transform->x = static_cast<float>(cell.x * kCellSize);
-        transform->y = static_cast<float>(cell.y * kCellSize);
+// The thrust flame, drawn as an open V behind the ship. It's a separate
+// entity that follows the ship, switched on and off by setting its alpha —
+// cheaper and simpler than creating and destroying it several times a second.
+Polygon flamePolygon() {
+    Polygon polygon;
+    polygon.points = {Vec2{-7.0f, -5.0f}, Vec2{-19.0f, 0.0f}, Vec2{-7.0f, 5.0f}};
+    polygon.closed = false;
+    polygon.r = 255;
+    polygon.g = 170;
+    polygon.b = 60;
+    polygon.a = 0;  // hidden until the player thrusts
+    return polygon;
+}
+
+// Every rock gets its own lumpy outline: points spaced evenly around a circle
+// and then pushed in or out at random. Two rocks are never quite alike, and
+// it costs nothing but a few random numbers — the kind of thing vector
+// graphics make easy and a sprite sheet makes tedious.
+Polygon rockPolygon(std::mt19937& rng, float radius) {
+    Polygon polygon;
+    const int pointCount = static_cast<int>(randomRange(rng, 8.0f, 12.0f));
+
+    for (int i = 0; i < pointCount; ++i) {
+        const float angle = kTwoPi * static_cast<float>(i) /
+                            static_cast<float>(pointCount);
+        const float distance = radius * randomRange(rng, 0.72f, 1.14f);
+        polygon.points.push_back(
+            Vec2{std::cos(angle) * distance, std::sin(angle) * distance});
     }
+
+    polygon.r = 190;
+    polygon.g = 190;
+    polygon.b = 205;
+    return polygon;
+}
+
+// A short dash pointing the way it travels — the classic look, and it keeps
+// the bullet centred on its Transform the way its circle collider is.
+Polygon bulletPolygon() {
+    Polygon polygon;
+    polygon.points = {Vec2{-3.0f, 0.0f}, Vec2{3.0f, 0.0f}};
+    polygon.closed = false;
+    polygon.r = 255;
+    polygon.g = 240;
+    polygon.b = 180;
+    return polygon;
 }
 
 // --- Text helpers ----------------------------------------------------------
 
-// A line of text centered horizontally in the window. textWidth() comes from
-// the engine's font, which is what makes centering possible without the game
-// knowing anything about glyph shapes.
-// A translucent panel covering the window, used to dim the board behind an
-// overlay's text. It works because the renderer enables alpha blending and
-// because its layer puts it above the board — before those two things it
-// would have been an opaque rectangle in an unpredictable position.
-Entity createBackdrop(World& world) {
+Entity createText(World& world, const std::string& value, int x, int y,
+                  int scale, unsigned char r, unsigned char g,
+                  unsigned char b) {
     Entity entity = world.createEntity();
-    world.addComponent(entity, Transform{0.0f, 0.0f});
-
-    Sprite panel;
-    panel.width = kWindowWidth;
-    panel.height = kWindowHeight;
-    panel.r = 10;
-    panel.g = 10;
-    panel.b = 18;
-    panel.a = 170;  // ~2/3 opaque: the board shows through, dimmed
-    panel.layer = kOverlayLayer;
-    world.addComponent(entity, panel);
-
+    world.addComponent(entity, Transform{static_cast<float>(x),
+                                         static_cast<float>(y), 0.0f});
+    world.addComponent(entity, Text{value, scale, r, g, b, 255});
     return entity;
 }
 
 Entity createCenteredText(World& world, const std::string& value, int y,
                           int scale, unsigned char r, unsigned char g,
                           unsigned char b) {
-    Entity entity = world.createEntity();
     const int x = (kWindowWidth - textWidth(value, scale)) / 2;
+    return createText(world, value, x, y, scale, r, g, b);
+}
 
-    world.addComponent(entity, Transform{static_cast<float>(x),
-                                         static_cast<float>(y)});
-    world.addComponent(entity, Text{value, scale, r, g, b, 255});
+// The translucent panel that dims the field behind an overlay's text.
+Entity createBackdrop(World& world) {
+    Entity entity = world.createEntity();
+    world.addComponent(entity, Transform{0.0f, 0.0f, 0.0f});
+
+    Sprite panel;
+    panel.width = kWindowWidth;
+    panel.height = kWindowHeight;
+    panel.r = 8;
+    panel.g = 8;
+    panel.b = 16;
+    panel.a = 175;
+    panel.layer = kOverlayLayer;
+    world.addComponent(entity, panel);
+
     return entity;
 }
 
 // --- Game state ------------------------------------------------------------
 
-// One link in the snake: the entity the engine draws, plus the cell the game
-// thinks it occupies. Keeping both in one struct means they can't drift out
-// of sync the way two parallel vectors would.
-struct Segment {
-    Entity entity = kInvalidEntity;
-    Cell cell;
-};
-
-// All the round's bookkeeping in one place. This is NOT an ECS component —
-// components are per-entity data the engine iterates over, while this is the
-// game's own state. The functions below follow the same shape the engine uses
-// for systems: plain data in a struct, plain functions that operate on it.
 struct GameState {
-    std::vector<Segment> snake;  // snake[0] is the head, back() is the tail
-    Cell direction{1, 0};        // cells per tick; {1,0} is "moving right"
-    Cell nextDirection{1, 0};    // buffered input, applied at the next tick
-    Entity food = kInvalidEntity;
-    bool gameOver = false;
-    bool won = false;
-    int score = 0;
+    Entity ship = kInvalidEntity;
+    Entity flame = kInvalidEntity;
 
-    TickTimer tick{kTickSeconds};
+    int score = 0;
+    int lives = kStartLives;
+    int wave = 0;
+    bool gameOver = false;
+
+    float fireCooldown = 0.0f;
+    float respawnDelay = 0.0f;      // counting down to a new ship
+    float spawnProtection = 0.0f;   // invulnerable while this is positive
+
     std::mt19937 rng{std::random_device{}()};
 };
 
-bool cellHasSnake(const GameState& state, Cell cell) {
-    for (const Segment& segment : state.snake) {
-        if (sameCell(segment.cell, cell)) return true;
+int countRocks(World& world) {
+    int count = 0;
+    for (Entity entity : world.entities()) {
+        if (world.hasComponent<Rock>(entity)) ++count;
     }
-    return false;
+    return count;
 }
 
-// --- Board setup -----------------------------------------------------------
-
-// The border. Four slabs, not a ring of individual cells: a wall is one
-// entity whose Collider spans a whole edge, which is cheaper and reads
-// better, and the AABB test doesn't care how big the rectangles are.
-Entity createWall(World& world, Cell cell, int cellsWide, int cellsTall) {
-    Sprite sprite{cellsWide * kCellSize, cellsTall * kCellSize,
-                  60, 60, 80, 255};
-    Entity wall = createBlock(world, cell, cellsWide, cellsTall, sprite);
-    world.addComponent(wall, Wall{});
-    return wall;
-}
-
-void createWalls(World& world, std::vector<Entity>& walls) {
-    walls.push_back(createWall(world, Cell{0, 0}, kGridCols, 1));
-    walls.push_back(createWall(world, Cell{0, kGridRows - 1}, kGridCols, 1));
-    walls.push_back(createWall(world, Cell{0, 1}, 1, kGridRows - 2));
-    walls.push_back(createWall(world, Cell{kGridCols - 1, 1}, 1,
-                               kGridRows - 2));
-}
-
-// Puts the food on a random cell that is neither wall nor snake.
+// Is the middle of the screen clear enough to put a ship back into?
 //
-// The obvious approach — pick a random cell, try again if it's taken — is
-// fine while the board is mostly empty, but it gets slower as the snake
-// fills the board and never finishes at all once the board is full. Listing
-// the free cells first costs one cheap pass and is always correct.
-void spawnFood(World& world, GameState& state) {
-    std::vector<Cell> freeCells;
-    for (int y = 1; y < kGridRows - 1; ++y) {  // 1..rows-2 skips the border
-        for (int x = 1; x < kGridCols - 1; ++x) {
-            Cell cell{x, y};
-            if (!cellHasSnake(state, cell)) freeCells.push_back(cell);
+// Without this check a new ship appears at the centre regardless of what is
+// already there. Spawn protection hides the problem for a couple of seconds
+// and then the ship dies the instant it wears off — and again on the next
+// life, and the next, which can empty the whole stock of lives without the
+// player ever touching a control. Rocks are always moving, so waiting for a
+// gap always terminates.
+bool spawnAreaClear(World& world) {
+    const float centerX = static_cast<float>(kWindowWidth) / 2.0f;
+    const float centerY = static_cast<float>(kWindowHeight) / 2.0f;
+
+    for (Entity entity : world.entities()) {
+        if (!world.hasComponent<Rock>(entity)) continue;
+
+        Transform* transform = world.getComponent<Transform>(entity);
+        CircleCollider* collider = world.getComponent<CircleCollider>(entity);
+        if (!transform || !collider) continue;
+
+        const float distance = std::hypot(transform->x - centerX,
+                                          transform->y - centerY);
+        if (distance < collider->radius + kRespawnClearance) return false;
+    }
+    return true;
+}
+
+// --- Spawning --------------------------------------------------------------
+
+void spawnShip(World& world, GameState& state) {
+    Entity ship = world.createEntity();
+    // -pi/2 is "up": rotation 0 points right and y grows downward.
+    world.addComponent(ship, Transform{static_cast<float>(kWindowWidth) / 2.0f,
+                                       static_cast<float>(kWindowHeight) / 2.0f,
+                                       -kPi / 2.0f});
+    world.addComponent(ship, Velocity{});
+    world.addComponent(ship, shipPolygon());
+    world.addComponent(ship, CircleCollider{kShipRadius});
+    world.addComponent(ship, PlayerControlled{});
+    world.addComponent(ship, Ship{});
+
+    // The flame is its own entity that copies the ship's Transform each frame.
+    Entity flame = world.createEntity();
+    world.addComponent(flame, Transform{});
+    world.addComponent(flame, flamePolygon());
+
+    state.ship = ship;
+    state.flame = flame;
+    state.spawnProtection = kSpawnProtection;
+}
+
+Entity spawnRock(World& world, GameState& state, float x, float y, int size) {
+    const float radius = kRockRadius[size];
+
+    Entity rock = world.createEntity();
+    world.addComponent(rock, Transform{x, y, randomRange(state.rng, 0.0f, kTwoPi)});
+
+    const float angle = randomRange(state.rng, 0.0f, kTwoPi);
+    const float speed = randomRange(state.rng, kRockSpeedMin[size],
+                                    kRockSpeedMax[size]);
+    world.addComponent(rock, Velocity{std::cos(angle) * speed,
+                                      std::sin(angle) * speed});
+    world.addComponent(rock, AngularVelocity{randomRange(state.rng, -1.5f, 1.5f)});
+    world.addComponent(rock, rockPolygon(state.rng, radius));
+
+    // A little smaller than the drawn outline, because the outline's points
+    // stick out past the average radius and a hitbox that punishes near
+    // misses feels unfair.
+    world.addComponent(rock, CircleCollider{radius * 0.85f});
+    world.addComponent(rock, Rock{size});
+
+    return rock;
+}
+
+// Fills the field with large rocks, avoiding the middle so the player isn't
+// killed the instant a wave begins.
+void spawnWave(World& world, GameState& state) {
+    ++state.wave;
+    const int count = kStartRocks + state.wave - 1;
+
+    const float centerX = static_cast<float>(kWindowWidth) / 2.0f;
+    const float centerY = static_cast<float>(kWindowHeight) / 2.0f;
+
+    for (int i = 0; i < count; ++i) {
+        float x = 0.0f;
+        float y = 0.0f;
+        do {
+            x = randomRange(state.rng, 0.0f, static_cast<float>(kWindowWidth));
+            y = randomRange(state.rng, 0.0f, static_cast<float>(kWindowHeight));
+        } while (std::hypot(x - centerX, y - centerY) < kSafeSpawnDistance);
+
+        spawnRock(world, state, x, y, kLargeRock);
+    }
+}
+
+void fireBullet(World& world, GameState& state) {
+    Transform* shipTransform = world.getComponent<Transform>(state.ship);
+    Velocity* shipVelocity = world.getComponent<Velocity>(state.ship);
+    if (!shipTransform || !shipVelocity) return;
+
+    const Vec2 direction = heading(shipTransform->rotation);
+
+    Entity bullet = world.createEntity();
+    world.addComponent(bullet, Transform{shipTransform->x + direction.x * 16.0f,
+                                         shipTransform->y + direction.y * 16.0f,
+                                         shipTransform->rotation});
+
+    // The ship's own velocity is added in, so shots fired while flying fast
+    // keep up with the ship instead of being left behind.
+    world.addComponent(bullet,
+                       Velocity{shipVelocity->dx + direction.x * kBulletSpeed,
+                                shipVelocity->dy + direction.y * kBulletSpeed});
+    world.addComponent(bullet, bulletPolygon());
+    world.addComponent(bullet, CircleCollider{kBulletRadius});
+
+    // No bookkeeping list of live bullets: LifetimeSystem deletes it.
+    world.addComponent(bullet, Lifetime{kBulletLife});
+    world.addComponent(bullet, Bullet{});
+
+    state.fireCooldown = kFireCooldown;
+}
+
+// --- Per-frame logic -------------------------------------------------------
+
+void controlShip(World& world, GameState& state, InputManager& input, float dt) {
+    if (state.ship == kInvalidEntity) return;
+
+    Transform* transform = world.getComponent<Transform>(state.ship);
+    Velocity* velocity = world.getComponent<Velocity>(state.ship);
+    if (!transform || !velocity) return;
+
+    if (input.isKeyDown(SDL_SCANCODE_LEFT)) transform->rotation -= kTurnSpeed * dt;
+    if (input.isKeyDown(SDL_SCANCODE_RIGHT)) transform->rotation += kTurnSpeed * dt;
+
+    const bool thrusting = input.isKeyDown(SDL_SCANCODE_UP);
+    if (thrusting) {
+        const Vec2 direction = heading(transform->rotation);
+        velocity->dx += direction.x * kThrust * dt;
+        velocity->dy += direction.y * kThrust * dt;
+    }
+
+    // Drag, so the ship eventually coasts to a stop instead of drifting
+    // forever. Multiplying by (1 - k*dt) rather than subtracting a fixed
+    // amount keeps the slowdown proportional to the current speed.
+    const float damping = 1.0f - kDrag * dt;
+    velocity->dx *= damping;
+    velocity->dy *= damping;
+
+    const float speed = std::hypot(velocity->dx, velocity->dy);
+    if (speed > kMaxSpeed) {
+        velocity->dx = velocity->dx / speed * kMaxSpeed;
+        velocity->dy = velocity->dy / speed * kMaxSpeed;
+    }
+
+    // Keep the flame glued to the ship, and light it only under thrust.
+    if (Transform* flameTransform = world.getComponent<Transform>(state.flame)) {
+        *flameTransform = *transform;
+    }
+    if (Polygon* flame = world.getComponent<Polygon>(state.flame)) {
+        flame->a = thrusting ? 255 : 0;
+    }
+
+    state.fireCooldown -= dt;
+    if (input.isKeyDown(SDL_SCANCODE_SPACE) && state.fireCooldown <= 0.0f) {
+        fireBullet(world, state);
+    }
+}
+
+void breakRock(World& world, GameState& state, Entity rock) {
+    Rock* data = world.getComponent<Rock>(rock);
+    Transform* transform = world.getComponent<Transform>(rock);
+    if (!data || !transform) return;
+
+    state.score += kRockScore[data->size];
+
+    // Large breaks into two mediums, medium into two smalls, small into
+    // nothing. Note this ADDS entities while the caller is working through a
+    // list of collisions — safe, because that list is a plain vector taken
+    // before any of this ran, not a live view into a component pool.
+    if (data->size > 0) {
+        for (int i = 0; i < 2; ++i) {
+            spawnRock(world, state, transform->x, transform->y, data->size - 1);
         }
     }
 
-    if (freeCells.empty()) {
-        // The snake covers every playable cell: there is nowhere left to put
-        // food, which is the only way to actually beat this game.
+    world.destroyLater(rock);
+}
+
+void killShip(World& world, GameState& state) {
+    world.destroyLater(state.ship);
+    world.destroyLater(state.flame);
+    state.ship = kInvalidEntity;
+    state.flame = kInvalidEntity;
+
+    --state.lives;
+    if (state.lives <= 0) {
         state.gameOver = true;
-        state.won = true;
-        return;
-    }
-
-    std::uniform_int_distribution<std::size_t> pick(0, freeCells.size() - 1);
-    const Cell cell = freeCells[pick(state.rng)];
-
-    // Reuse the one food entity across respawns; only its Transform changes.
-    if (state.food == kInvalidEntity) {
-        state.food = createBlock(world, cell, 1, 1, foodSprite());
-        world.addComponent(state.food, Food{});
     } else {
-        placeAt(world, state.food, cell);
+        state.respawnDelay = kRespawnDelay;
     }
 }
 
-// Removes the snake and the food. Destruction is deferred: this can be
-// called from inside a scene transition, and queuing means it doesn't matter
-// what else is mid-iteration when it happens.
-void clearRound(World& world, GameState& state) {
-    for (const Segment& segment : state.snake) {
-        world.destroyLater(segment.entity);
-    }
-    state.snake.clear();
-
-    if (state.food != kInvalidEntity) {
-        world.destroyLater(state.food);
-        state.food = kInvalidEntity;
-    }
-}
-
-// Clears whatever was left of the last round and builds a fresh snake. The
-// walls belong to the scene, not the round, so they are left alone.
-void startRound(World& world, GameState& state) {
-    clearRound(world, state);
-
-    state.direction = Cell{1, 0};
-    state.nextDirection = state.direction;
-    state.gameOver = false;
-    state.won = false;
-    state.score = 0;
-    state.tick.reset();
-
-    // Start mid-board facing right, with the tail trailing off to the left.
-    const Cell head{kGridCols / 2, kGridRows / 2};
-    for (int i = 0; i < kStartLength; ++i) {
-        const Cell cell{head.x - i, head.y};
-        const bool isHead = (i == 0);
-
-        Entity entity = createBlock(world, cell, 1, 1,
-                                    isHead ? headSprite() : bodySprite());
-        world.addComponent(entity, SnakeSegment{});
-        if (isHead) {
-            // The head is the entity the player actually steers, so it gets
-            // the engine's PlayerControlled tag. Nothing in the engine reads
-            // it — it is here so the intent is recorded in the world itself
-            // rather than only in this file.
-            world.addComponent(entity, PlayerControlled{});
-        }
-        state.snake.push_back(Segment{entity, cell});
-    }
-
-    spawnFood(world, state);
-}
-
-// --- Per-frame and per-tick logic ------------------------------------------
-
-// Runs every frame, so a key press between two ticks is never missed: it is
-// remembered in nextDirection and applied when the next tick fires.
-void readDirectionInput(GameState& state, InputManager& input) {
-    Cell wanted = state.nextDirection;
-    if (input.isKeyDown(SDL_SCANCODE_LEFT))  wanted = Cell{-1, 0};
-    if (input.isKeyDown(SDL_SCANCODE_RIGHT)) wanted = Cell{1, 0};
-    if (input.isKeyDown(SDL_SCANCODE_UP))    wanted = Cell{0, -1};
-    if (input.isKeyDown(SDL_SCANCODE_DOWN))  wanted = Cell{0, 1};
-
-    // A snake cannot turn back into its own neck, so reversals are ignored.
-    // The comparison is against `direction` (where the snake is actually
-    // travelling) and not `nextDirection`: while moving right, pressing Up
-    // and then Left inside a single tick would otherwise leave the snake
-    // headed left, straight into itself, without ever having moved up.
-    const bool reversing = wanted.x == -state.direction.x &&
-                           wanted.y == -state.direction.y;
-    if (!reversing) state.nextDirection = wanted;
-}
-
-// One tick: the snake's entire turn happens here, and nothing happens
-// between ticks. This is the heart of the game.
-void stepSnake(World& world, GameState& state) {
-    state.direction = state.nextDirection;
-
-    // 1. Where is the head going? One cell, in the current direction.
-    const Cell headCell = state.snake.front().cell;
-    const Cell newHead{headCell.x + state.direction.x,
-                       headCell.y + state.direction.y};
-
-    // 2. Shuffle the body up: every segment takes the cell of the one ahead
-    //    of it. Walking backwards from the tail means each cell is read
-    //    before it gets overwritten. (The snake always has a head, so
-    //    size() - 1 is safe.)
-    //
-    //    The tail's old cell matters twice over: it is where a new segment
-    //    goes if we eat this tick, and because the tail vacates it *before*
-    //    collisions are checked, the head is allowed to move into it —
-    //    chasing your own tail is legal, as in the original game.
-    const Cell oldTailCell = state.snake.back().cell;
-    for (std::size_t i = state.snake.size() - 1; i > 0; --i) {
-        state.snake[i].cell = state.snake[i - 1].cell;
-    }
-    state.snake.front().cell = newHead;
-
-    // 3. Push the new cells into the ECS. Until this runs the move has only
-    //    happened in the game's own bookkeeping; the engine still has the
-    //    snake at its old position and would draw it there.
-    for (const Segment& segment : state.snake) {
-        placeAt(world, segment.entity, segment.cell);
-    }
-
-    // 4. Now that the world is up to date, ask the engine what overlaps.
-    //    This runs once per tick rather than once per frame: between ticks
-    //    nothing has moved, so the answer could not have changed.
-    const Entity head = state.snake.front().entity;
-    bool ateFood = false;
+void handleCollisions(World& world, GameState& state) {
+    // Entities queued for destruction stay alive until the end of the frame,
+    // so the same rock can turn up in several pairs. This remembers what has
+    // already been dealt with, so one rock isn't scored or split twice.
+    std::unordered_set<Entity> resolved;
 
     for (const CollisionPair& pair : CollisionSystem(world)) {
-        // Only collisions involving the head can mean anything in Snake.
-        Entity other = kInvalidEntity;
-        if (pair.a == head) {
-            other = pair.b;
-        } else if (pair.b == head) {
-            other = pair.a;
-        } else {
+        // Which of the two is the bullet, and which the rock?
+        Entity bullet = kInvalidEntity;
+        Entity rock = kInvalidEntity;
+        if (world.hasComponent<Bullet>(pair.a) && world.hasComponent<Rock>(pair.b)) {
+            bullet = pair.a;
+            rock = pair.b;
+        } else if (world.hasComponent<Bullet>(pair.b) &&
+                   world.hasComponent<Rock>(pair.a)) {
+            bullet = pair.b;
+            rock = pair.a;
+        }
+
+        if (bullet != kInvalidEntity) {
+            if (resolved.count(bullet) || resolved.count(rock)) continue;
+            resolved.insert(bullet);
+            resolved.insert(rock);
+
+            world.destroyLater(bullet);
+            breakRock(world, state, rock);
             continue;
         }
 
-        // The tags decide what the overlap means. This is the collision
-        // *response* that the engine deliberately left to game code.
-        if (world.hasComponent<Food>(other)) {
-            ateFood = true;
-        } else if (world.hasComponent<Wall>(other) ||
-                   world.hasComponent<SnakeSegment>(other)) {
-            state.gameOver = true;
+        // Otherwise: did a rock hit the ship?
+        const bool shipHit =
+            (pair.a == state.ship && world.hasComponent<Rock>(pair.b)) ||
+            (pair.b == state.ship && world.hasComponent<Rock>(pair.a));
+
+        if (shipHit && state.ship != kInvalidEntity &&
+            state.spawnProtection <= 0.0f) {
+            killShip(world, state);
         }
-    }
-
-    if (state.gameOver) return;
-
-    if (ateFood) {
-        // Grow by one: a new segment appears in the cell the tail just left,
-        // so the snake gets longer without any part of it jumping. Because
-        // it is appended at the back it becomes the new tail, and the
-        // shuffle in step 2 picks it up automatically from next tick on.
-        Entity segment = createBlock(world, oldTailCell, 1, 1, bodySprite());
-        world.addComponent(segment, SnakeSegment{});
-        state.snake.push_back(Segment{segment, oldTailCell});
-
-        ++state.score;
-        spawnFood(world, state);
     }
 }
 
 // --- Scenes ----------------------------------------------------------------
-//
-// Each scene owns the entities it creates and destroys them on the way out.
-// Because only the top scene updates, none of them needs to know whether the
-// others exist — and because every scene's entities stay in the World until
-// it exits, whatever is underneath keeps being drawn.
 
-// An overlay shown on top of the finished board. It doesn't clear anything:
-// the dead snake stays visible underneath, which is the whole reason this is
-// pushed rather than swapped in.
 class GameOverScene : public Scene {
 public:
-    GameOverScene(bool won, int score) : won_(won), score_(score) {}
+    GameOverScene(int score, int wave) : score_(score), wave_(wave) {}
 
     void onEnter(World& world) override {
-        const std::string headline = won_ ? "YOU WIN" : "GAME OVER";
         owned_.push_back(createBackdrop(world));
-        owned_.push_back(createCenteredText(world, headline, 190, 5,
-                                            240, 90, 90));
+        owned_.push_back(createCenteredText(world, "GAME OVER", 230, 6,
+                                            240, 100, 100));
         owned_.push_back(createCenteredText(
-            world, "SCORE: " + std::to_string(score_), 260, 3, 235, 235, 235));
-        owned_.push_back(createCenteredText(world, "R TO PLAY AGAIN", 320, 2,
+            world, "SCORE: " + std::to_string(score_), 320, 3, 235, 235, 235));
+        owned_.push_back(createCenteredText(
+            world, "WAVES CLEARED: " + std::to_string(wave_ - 1), 365, 2,
+            170, 170, 195));
+        owned_.push_back(createCenteredText(world, "R TO PLAY AGAIN", 430, 2,
                                             170, 170, 195));
-        owned_.push_back(createCenteredText(world, "ESC TO QUIT", 350, 2,
+        owned_.push_back(createCenteredText(world, "ESC TO QUIT", 460, 2,
                                             170, 170, 195));
     }
 
@@ -477,26 +534,22 @@ public:
 
     void update(World& /*world*/, InputManager& input, float /*dt*/,
                 SceneStack& scenes) override {
-        // Popping this overlay uncovers the play scene, whose onResume sees a
-        // finished game and starts a fresh round.
         if (input.wasKeyPressed(SDL_SCANCODE_R)) scenes.pop();
     }
 
 private:
-    bool won_;
     int score_;
+    int wave_;
     std::vector<Entity> owned_;
 };
 
-// Pushed on top of the running game. The play scene below stops updating but
-// keeps every entity it owns, so the board is frozen rather than unloaded.
 class PauseScene : public Scene {
 public:
     void onEnter(World& world) override {
         owned_.push_back(createBackdrop(world));
-        owned_.push_back(createCenteredText(world, "PAUSED", 210, 5,
+        owned_.push_back(createCenteredText(world, "PAUSED", 280, 6,
                                             235, 235, 235));
-        owned_.push_back(createCenteredText(world, "P TO RESUME", 275, 2,
+        owned_.push_back(createCenteredText(world, "P TO RESUME", 370, 2,
                                             170, 170, 195));
     }
 
@@ -514,45 +567,82 @@ private:
     std::vector<Entity> owned_;
 };
 
-// The game proper: owns the walls, the score readout, and the current round.
 class PlayScene : public Scene {
 public:
     void onEnter(World& world) override {
-        createWalls(world, walls_);
+        scoreText_ = createText(world, "SCORE: 0", 16, 14, 3, 200, 200, 215);
 
-        // The score sits on the top wall bar. Text draws after every sprite,
-        // so it lands on top of the wall rather than behind it.
-        scoreText_ = world.createEntity();
-        world.addComponent(scoreText_, Transform{10.0f, 6.0f});
-        world.addComponent(scoreText_, Text{"SCORE: 0", 3, 200, 200, 215, 255});
+        // Lives are drawn as textured ship icons — the one place this game
+        // uses the Sprite path instead of a Polygon. All of them are created
+        // up front and switched on or off with alpha, rather than being
+        // destroyed and rebuilt every time a life is lost.
+        for (int i = 0; i < kStartLives; ++i) {
+            Entity icon = world.createEntity();
+            world.addComponent(
+                icon, Transform{static_cast<float>(kWindowWidth - 44 - i * 34),
+                                12.0f, 0.0f});
+            Sprite sprite;
+            sprite.width = 28;
+            sprite.height = 28;
+            sprite.texture = spriteSheet;
+            sprite.srcX = kShipIconTile * 32;
+            sprite.srcY = 0;
+            sprite.srcW = 32;
+            sprite.srcH = 32;
+            sprite.layer = kFieldLayer;
+            world.addComponent(icon, sprite);
+            livesIcons_.push_back(icon);
+        }
 
-        startRound(world, state_);
+        spawnShip(world, state_);
+        spawnWave(world, state_);
     }
 
     void onExit(World& world) override {
-        clearRound(world, state_);
-        for (Entity wall : walls_) world.destroyLater(wall);
-        walls_.clear();
+        // Everything this scene put on the field, whoever created it.
+        for (Entity entity : world.entities()) {
+            if (world.hasComponent<Rock>(entity) ||
+                world.hasComponent<Bullet>(entity) ||
+                world.hasComponent<Ship>(entity)) {
+                world.destroyLater(entity);
+            }
+        }
+        world.destroyLater(state_.flame);
         world.destroyLater(scoreText_);
-        scoreText_ = kInvalidEntity;
+        for (Entity icon : livesIcons_) world.destroyLater(icon);
+        livesIcons_.clear();
     }
 
     void onResume(World& world) override {
-        // Two different scenes pop back to here. After the game-over overlay
-        // the round is finished and a new one starts; after pause, nothing
-        // should change at all.
-        if (state_.gameOver) {
-            startRound(world, state_);
-            overlayShown_ = false;
+        // Coming back from the game-over overlay starts a fresh game;
+        // coming back from pause must change nothing.
+        if (!state_.gameOver) return;
+
+        for (Entity entity : world.entities()) {
+            if (world.hasComponent<Rock>(entity) ||
+                world.hasComponent<Bullet>(entity)) {
+                world.destroyLater(entity);
+            }
         }
+
+        state_.score = 0;
+        state_.lives = kStartLives;
+        state_.wave = 0;
+        state_.gameOver = false;
+        state_.respawnDelay = 0.0f;
+        state_.fireCooldown = 0.0f;
+        overlayShown_ = false;
+
+        spawnShip(world, state_);
+        spawnWave(world, state_);
     }
 
     void update(World& world, InputManager& input, float dt,
                 SceneStack& scenes) override {
         if (state_.gameOver) {
             if (!overlayShown_) {
-                scenes.push(std::make_unique<GameOverScene>(state_.won,
-                                                            state_.score));
+                scenes.push(std::make_unique<GameOverScene>(state_.score,
+                                                            state_.wave));
                 overlayShown_ = true;
             }
             return;
@@ -563,59 +653,124 @@ public:
             return;
         }
 
-        readDirectionInput(state_, input);
+        // A cleared field means the next wave, one rock bigger than the last.
+        if (countRocks(world) == 0) spawnWave(world, state_);
 
-        // The tick loop. On most frames advance() returns 0 and this body
-        // never runs — the snake simply stands still, which is the whole
-        // difference between this and the dt-scaled MovementSystem that the
-        // engine ran a moment ago.
-        const int ticks = state_.tick.advance(dt);
-        for (int i = 0; i < ticks && !state_.gameOver; ++i) {
-            stepSnake(world, state_);
+        state_.spawnProtection -= dt;
+        controlShip(world, state_, input, dt);
+
+        // MovementSystem has already moved everything by the time this
+        // callback runs, so wrapping happens right after, on the new
+        // positions, before anything is drawn.
+        for (Entity entity : world.entities()) {
+            if (!world.hasComponent<Velocity>(entity)) continue;
+            if (Transform* transform = world.getComponent<Transform>(entity)) {
+                wrapPosition(*transform);
+            }
         }
 
-        refreshScore(world);
+        handleCollisions(world, state_);
+        respawnIfNeeded(world, dt);
+        blinkWhileProtected(world);
+        refreshHud(world);
     }
 
 private:
-    // Rebuilding the string every frame would work and would be wasted; the
-    // score changes a few times a minute.
-    void refreshScore(World& world) {
-        if (state_.score == shownScore_) return;
-        if (Text* text = world.getComponent<Text>(scoreText_)) {
-            text->value = "SCORE: " + std::to_string(state_.score);
+    void respawnIfNeeded(World& world, float dt) {
+        if (state_.ship != kInvalidEntity || state_.gameOver) return;
+
+        state_.respawnDelay -= dt;
+        if (state_.respawnDelay > 0.0f) return;
+
+        // The delay has passed, but the ship only returns once there is room
+        // for it. Checked every frame until the rocks drift clear.
+        if (!spawnAreaClear(world)) return;
+
+        spawnShip(world, state_);
+    }
+
+    // A newly spawned ship flashes while it can't be hurt, so the rule is
+    // visible rather than something the player has to infer.
+    void blinkWhileProtected(World& world) {
+        if (state_.ship == kInvalidEntity) return;
+
+        Polygon* polygon = world.getComponent<Polygon>(state_.ship);
+        if (!polygon) return;
+
+        if (state_.spawnProtection <= 0.0f) {
+            polygon->a = 255;
+            return;
         }
-        shownScore_ = state_.score;
+        const float phase = std::fmod(state_.spawnProtection, 0.28f);
+        polygon->a = (phase < 0.14f) ? 90 : 255;
+    }
+
+    void refreshHud(World& world) {
+        if (state_.score != shownScore_) {
+            if (Text* text = world.getComponent<Text>(scoreText_)) {
+                text->value = "SCORE: " + std::to_string(state_.score);
+            }
+            shownScore_ = state_.score;
+        }
+
+        if (state_.lives != shownLives_) {
+            for (std::size_t i = 0; i < livesIcons_.size(); ++i) {
+                if (Sprite* sprite = world.getComponent<Sprite>(livesIcons_[i])) {
+                    sprite->a = (static_cast<int>(i) < state_.lives) ? 255 : 0;
+                }
+            }
+            shownLives_ = state_.lives;
+        }
     }
 
     GameState state_;
-    std::vector<Entity> walls_;
     Entity scoreText_ = kInvalidEntity;
-    int shownScore_ = -1;  // never equal to a real score, so the first
-                           // update always writes the readout
+    std::vector<Entity> livesIcons_;
+    int shownScore_ = -1;
+    int shownLives_ = -1;
     bool overlayShown_ = false;
 };
 
-// The first scene. Replacing (rather than pushing) the play scene means the
-// title screen is gone for good once the game starts.
 class TitleScene : public Scene {
 public:
     void onEnter(World& world) override {
-        texts_.push_back(createCenteredText(world, "SNAKE", 150, 9,
-                                            120, 220, 130));
-        texts_.push_back(createCenteredText(world, "ARROW KEYS TO STEER", 290,
-                                            2, 200, 200, 215));
-        texts_.push_back(createCenteredText(world, "P PAUSES", 320, 2,
-                                            150, 150, 175));
-        texts_.push_back(createCenteredText(world, "SPACE TO START", 380, 3,
+        // A slowly tumbling textured rock, which is the rotated-Sprite path:
+        // AngularVelocity turns it and the renderer spins the image with
+        // SDL_RenderCopyEx. The rocks in the game itself are Polygons, so
+        // between the two screens both render paths are exercised under
+        // rotation.
+        decoration_ = world.createEntity();
+        world.addComponent(decoration_,
+                           Transform{static_cast<float>(kWindowWidth) / 2.0f - 80.0f,
+                                     380.0f, 0.0f});
+        world.addComponent(decoration_, AngularVelocity{0.35f});
+        Sprite rock;
+        rock.width = 160;
+        rock.height = 160;
+        rock.texture = spriteSheet;
+        rock.srcX = 32;
+        rock.srcY = 0;
+        rock.srcW = 64;
+        rock.srcH = 64;
+        rock.a = 90;
+        world.addComponent(decoration_, rock);
+
+        owned_.push_back(createCenteredText(world, "ASTEROIDS", 120, 9,
+                                            200, 230, 255));
+        owned_.push_back(createCenteredText(world, "ARROWS TURN AND THRUST",
+                                            250, 2, 200, 200, 215));
+        owned_.push_back(createCenteredText(world, "SPACE FIRES - P PAUSES",
+                                            280, 2, 170, 170, 195));
+        owned_.push_back(createCenteredText(world, "SPACE TO START", 600, 3,
                                             235, 235, 235));
-        texts_.push_back(createCenteredText(world, "Q TO QUIT", 430, 2,
-                                            150, 150, 175));
+        owned_.push_back(createCenteredText(world, "Q TO QUIT", 650, 2,
+                                            170, 170, 195));
     }
 
     void onExit(World& world) override {
-        for (Entity text : texts_) world.destroyLater(text);
-        texts_.clear();
+        for (Entity entity : owned_) world.destroyLater(entity);
+        owned_.clear();
+        world.destroyLater(decoration_);
     }
 
     void update(World& /*world*/, InputManager& input, float /*dt*/,
@@ -624,25 +779,25 @@ public:
             scenes.replace(std::make_unique<PlayScene>());
         } else if (input.wasKeyPressed(SDL_SCANCODE_Q)) {
             // Popping the last scene empties the stack, which the engine
-            // treats as "quit" — game code never touches the Engine itself.
+            // treats as "quit".
             scenes.pop();
         }
     }
 
 private:
-    std::vector<Entity> texts_;
+    Entity decoration_ = kInvalidEntity;
+    std::vector<Entity> owned_;
 };
 
 }  // namespace
 
 int main(int, char**) {
-    Engine gameEngine("Tiny Engine - Snake", kWindowWidth, kWindowHeight);
+    Engine gameEngine("Tiny Engine - Asteroids", kWindowWidth, kWindowHeight);
     World world;
 
-    // Load the artwork once, up front, before any scene asks for a sprite.
-    // A failure here is not fatal: spriteSheet stays null and every sprite
-    // falls back to a flat colored rectangle.
-    spriteSheet = gameEngine.textures().load("assets/snake.png");
+    // Only the HUD icons and the title screen's rock need artwork; if it is
+    // missing they fall back to plain rectangles and the game is unaffected.
+    spriteSheet = gameEngine.textures().load("assets/asteroids.png");
 
     SceneStack scenes;
     scenes.push(std::make_unique<TitleScene>());

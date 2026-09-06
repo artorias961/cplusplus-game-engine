@@ -2,10 +2,14 @@
 
 A minimal 2D game engine in C++17 + SDL2, built to be read end to end in one
 sitting. It's the smallest version of the architecture real engines use: a
-game loop, an Entity-Component-System, a layered renderer with textures and
-bitmap text, input handling, AABB collision, fixed-tick timing and a scene
-stack — each in its own file with heavy comments explaining *why*, not just
-*what*.
+game loop, an Entity-Component-System, a layered renderer with textures,
+rotation, vector shapes and bitmap text, input handling, box and circle
+collision, fixed-tick timing and a scene stack — each in its own file with
+heavy comments explaining *why*, not just *what*.
+
+Two games are built on it: **Asteroids**, in `src/game/`, and **Snake**, kept
+as a standalone snapshot in `archive/version_1/`. That's on purpose — an
+engine with only one game is a hypothesis, not an engine.
 
 It is **not** trying to be fast, complete, or production-ready. Storage uses
 `std::unordered_map` instead of packed arrays, there's no batching, no scene
@@ -20,8 +24,8 @@ engine_project/
 ├── CMakeLists.txt
 ├── include/engine/
 │   ├── ECS.h           Entity type + component storage + World
-│   ├── Components.h    Transform, Velocity, Sprite, Collider, Text, ...
-│   ├── Systems.h       MovementSystem + CollisionSystem (AABB overlap)
+│   ├── Components.h    Transform, Velocity, Sprite, Polygon, colliders, ...
+│   ├── Systems.h       Movement, Lifetime, Collision (boxes and circles)
 │   ├── Timing.h        TickTimer (variable frames -> fixed-length ticks)
 │   ├── Scene.h         Scene + SceneStack (menu / playing / paused / ...)
 │   ├── Font.h          A 5x7 bitmap font, built into the binary
@@ -31,10 +35,44 @@ engine_project/
 ├── src/engine/
 │   └── Engine.cpp      SDL setup, the loop, and the built-in render system
 ├── src/game/
-│   └── main.cpp        The game: Snake, built on top of all of the above
-└── assets/
-    └── snake.png       One 96x32 sheet: head, body, food tiles
+│   └── main.cpp        The game: Asteroids, built on all of the above
+├── tests/
+│   └── engine_tests.cpp  Asserts about the engine's pure logic
+├── assets/
+│   └── asteroids.png   Ship icon + rock, for the HUD and title screen
+└── archive/
+    └── version_1/      Snake: the first game, kept as a standalone project
 ```
+
+The build produces three targets, and the split is the point:
+
+| Target | What it is |
+| --- | --- |
+| `engine` | A static library. Knows nothing about any particular game. |
+| `asteroids` | The game. Links `engine`. |
+| `engine_tests` | Asserts about the engine. Links `engine`. |
+
+Everything used to compile into a single executable, which made "game code
+depends on engine code, never the reverse" a rule you had to enforce by
+reading. Now the build enforces it: `engine`'s include path contains only
+`include/`, and the library is compiled and linked without any game object
+files — so an engine file that reaches for game code fails to compile, and one
+that calls into it fails to link. Adding a second game is now another
+`add_executable` that links `engine` — three lines, not a restructure.
+
+`archive/version_1/` is a complete, self-contained copy of the project as it
+stood when Snake was the game — its own `CMakeLists.txt`, engine and assets.
+It still builds and plays:
+
+```powershell
+cmake -S archive\version_1 -B archive\version_1\build -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -A x64
+cmake --build archive\version_1\build --config Release
+```
+
+The engine there is deliberately frozen and does not receive later changes —
+that's what makes it a snapshot rather than a second copy to maintain. The
+trade-off is that Snake no longer builds against the current engine, so it
+can't catch regressions in it; that job now belongs to `engine_tests`.
 
 The dependency direction only ever goes one way: `main.cpp` depends on
 `engine/`, never the reverse. The engine has no idea what a "player" or an
@@ -50,13 +88,13 @@ iteration does five things, in this order, forever, until the window closes:
    runs at the same *speed* whether it's rendering at 30fps or 300fps.
 2. **Input** — drain SDL's event queue and update `InputManager`'s "which
    keys are held" state.
-3. **Update** — run `MovementSystem` (built into the engine), then call your
-   game's own logic: either an `onUpdate` callback or the top scene.
+3. **Update** — run the built-in systems (`MovementSystem`, then
+   `LifetimeSystem`), then call your game's own logic: either an `onUpdate`
+   callback or the top scene.
 4. **Deletions** — destroy every entity queued with `destroyLater()` during
    the update. This happens here, and only here, because it's the one point
    in the frame where nothing is iterating a component pool.
-5. **Render** — draw every entity that has a `Transform` and a `Sprite`, then
-   every entity that has a `Transform` and a `Text`.
+5. **Render** — sprites first (sorted by layer), then polygons, then text.
 6. **Frame limiting** — if the frame finished early, sleep the rest so the
    loop doesn't spin at 100% CPU.
 
@@ -75,12 +113,25 @@ controllable vehicle when the player enters it isn't cleanly a `Crate` or a
 `Vehicle` — it's an entity that gains a `PlayerControlled` component. ECS
 makes "mix and match behavior" the default instead of the exception.
 
-**Collision** (`CollisionSystem` in `Systems.h`) answers one question:
-which pairs of entities have overlapping `Collider` rectangles? Because
-nothing here rotates, that's the AABB ("axis-aligned bounding box") test —
+**Collision** (`CollisionSystem` in `Systems.h`) answers one question: which
+pairs of entities overlap? Entities carry one of two shapes, and the system
+picks the right test for each pair.
+
+A `Collider` is a rectangle, tested with AABB ("axis-aligned bounding box") —
 four comparisons per pair. The comparisons are strict (`<`, not `<=`), so
 rectangles that merely touch along an edge don't count as overlapping, which
 is what makes it usable for grid games where neighboring cells share edges.
+
+A `CircleCollider` is a circle, tested by comparing squared distance against
+squared radii — no square root needed. Circles exist because AABB is simply
+*wrong* for anything that rotates: turn a ship 45° and its axis-aligned box
+either stops covering it or covers empty space. A circle looks identical at
+every angle, which is why arcade games full of spinning things use them, and
+why it's far cheaper than the real alternative (SAT on rotated polygons).
+
+The two anchor differently on purpose — a box hangs down-right from its
+Transform, a circle is centred on it — because that's the natural convention
+for each shape, and the mixed circle-vs-box test accounts for it.
 
 Two things about it are worth noticing. First, `Collider` is separate from
 `Sprite` on purpose: what a thing looks like and what it hits are different
@@ -131,6 +182,33 @@ in charge, and the ID tiebreak keeps the order stable between frames so
 nothing flickers. Text always draws after every sprite — which is why the
 score stays bright over a dimmed board.
 
+**Rotation and vector shapes.** `Transform` carries a `rotation` in radians,
+and `AngularVelocity` is to it exactly what `Velocity` is to position — both
+applied by `MovementSystem`, so a tumbling rock needs no per-frame code.
+
+There are two ways to draw something rotated. A textured `Sprite` goes
+through `SDL_RenderCopyEx`, which is `RenderCopy` plus an angle (SDL wants
+degrees, so the renderer converts from radians at that one point). A
+`Polygon` is an outline of points in *local* space that the renderer rotates
+and translates itself, which is all of 2D rotation in two lines:
+
+```
+x' = x cos(a) - y sin(a)
+y' = x sin(a) + y cos(a)
+```
+
+Polygons need no assets, stay sharp at any size, and can be generated at
+runtime — every rock in Asteroids has its own lumpy outline made from a few
+random numbers. Note that a plain *untextured* `Sprite` ignores rotation
+entirely: SDL fills axis-aligned rectangles only, and rotating an untextured
+shape is what `Polygon` is for.
+
+**Lifetimes.** A `Lifetime` component counts down and deletes its entity when
+it expires, run by `LifetimeSystem` in the engine loop. It's how bullets clean
+themselves up without any game-side list of live bullets — and it's the
+clearest example of why `destroyLater` exists, since it deletes entities from
+inside a loop over the very pool they live in.
+
 **Textures** (`Resources.h`) are loaded through a `TextureCache` the Engine
 owns. Ask for the same path twice and you get the same texture; everything it
 loaded is freed together when it dies. Paths resolve relative to the
@@ -155,30 +233,81 @@ matters more than it sounds: a key stays physically down for six or more
 frames, so a menu built on `isKeyDown` would fire six times and toggle itself
 back. `Engine::processEvents` is the only place that reads `SDL_Event`s.
 
-**The game** (`main.cpp`) is Snake, and it's where every game-shaped decision
-lives: the cell size, the 24x18 grid, the 120ms tick, the four scenes (title,
-playing, paused, game over), and the meaning of the three tag components it
-invents for itself (`SnakeSegment`, `Food`, `Wall`). `World` stores components
-keyed by C++ type, so game code can define its own components without the
-engine knowing they exist.
+**The game** (`main.cpp`) is Asteroids, and it's where every game-shaped
+decision lives: how hard the ship accelerates, how long a bullet survives,
+what a rock breaks into, and the meaning of the three components it invents
+for itself (`Ship`, `Bullet`, `Rock`). `World` stores components keyed by C++
+type, so game code defines its own without the engine knowing they exist.
 
-Each snake segment is its own entity with a `Transform`, `Sprite` and
-`Collider`; the game keeps them in an ordered list, head first. On each tick
-every segment takes the cell of the one ahead of it, the head advances one
-cell, and only then are collisions checked — which is why moving into the
-cell the tail just vacated is legal, exactly as in the original game. The
-border is four wall entities, one per edge, so hitting a wall goes through
-the same AABB test as hitting food or hitting yourself.
+Thrust is an *acceleration*: holding Up adds to the ship's velocity rather
+than setting it, which is why the ship drifts and has to be flown. Rocks come
+in three sizes; a bullet hit scores, deletes the rock, and spawns two of the
+next size down, so one large rock is worth seven kills. Bullets are never
+tracked in a list — each carries a `Lifetime` and removes itself. Space wraps
+at the edges, which is game code, because "the world is a torus" is a rule
+about *this* game, not about engines.
 
-Notice what it still never does: touch SDL, or write a render loop. It only
-describes *what exists* and *what should happen when*.
+**Why a second game matters more than another engine feature.** Asteroids was
+chosen to exercise everything Snake couldn't. Snake is grid-locked and
+tick-based, so it never used `Velocity`, never rotated anything, and only ever
+asked collision a yes/no question. Asteroids is continuous, rotates constantly,
+uses circles instead of boxes, and creates and destroys entities every second.
+An engine with one game is a hypothesis; the second game is the test — and
+everything the engine gained here (rotation, circles, polygons, lifetimes)
+was pulled out by a real requirement rather than guessed at in advance.
+
+Notice what game code still never does: touch SDL, or write a render loop. It
+only describes *what exists* and *what should happen when*.
+
+## Requirements
+
+| What | Why it's needed | Tested with |
+| --- | --- | --- |
+| A C++17 compiler | `if constexpr`-era language features, structured bindings, `inline` variables | MSVC 19.4x (Visual Studio 2022, v17.13) |
+| CMake 3.15 or newer | generates the build files | 4.4.3 |
+| SDL2 2.0.10+ | window, renderer, input, timing | 2.32.10 |
+| SDL2_image 2.0+ | loads `assets/asteroids.png` | 2.8.12 |
+| Git | only on Windows, to fetch vcpkg | any |
+
+On Windows you also need **Visual Studio 2022** with the *Desktop development
+with C++* workload (that's what provides the MSVC compiler and MSBuild; the
+free Community edition is fine). CMake ships with that workload, so a separate
+CMake install is optional.
+
+No audio library is needed — the game is silent.
+
+### Graphics drivers
+
+The engine asks SDL for a **hardware-accelerated renderer** (Direct3D on
+Windows, OpenGL or Metal elsewhere), which needs a working GPU driver:
+
+- **Windows** — the vendor driver for your GPU (NVIDIA / AMD / Intel). A fresh
+  Windows install running on "Microsoft Basic Display Adapter" has no 3D
+  driver until you install one.
+- **Linux** — Mesa (`libgl1-mesa-dri`), plus a running X11 or Wayland session.
+- **macOS** — nothing to install; Metal is part of the OS.
+
+None of this is strictly *required*. If SDL can't provide an accelerated
+renderer — a VM without 3D acceleration, a remote-desktop session, a
+driverless machine — the engine prints
+
+```
+Accelerated renderer unavailable (...), falling back to the default renderer.
+```
+
+and carries on with software rendering. The game looks identical and plays
+fine; it just does the drawing on the CPU and loses vsync. That fallback is
+deliberate (see `Engine::Engine`), and it's why this project still runs on
+machines where most SDL samples refuse to start.
+
+For a headless machine (CI, an SSH session with no display), set
+`SDL_VIDEODRIVER=dummy` and it will run with no window at all.
 
 ## Building and running
 
-You'll need CMake, a C++17 compiler, and SDL2 + SDL2_image development
-packages. How you get those packages differs by platform — `CMakeLists.txt`
-auto-detects which of the two methods below you used, so no manual editing
-is needed either way.
+`CMakeLists.txt` auto-detects how SDL2 was installed — vcpkg's CMake config
+package first, falling back to `pkg-config` — so no manual editing is needed
+on any platform.
 
 ### Linux / macOS
 
@@ -194,16 +323,20 @@ sudo apt-get install libsdl2-dev libsdl2-image-dev cmake g++
 brew install sdl2 sdl2_image cmake
 ```
 
+Then, from the project root:
+
 ```bash
-mkdir build && cd build
-cmake ..
-make
-./tiny_engine
+cmake -S . -B build
+cmake --build build
+./build/asteroids
 ```
+
+To rebuild after editing a file, only the last two lines are needed — the
+first step is one-time setup per machine.
 
 ### Windows (Visual Studio / MSVC)
 
-This is the setup your error came from. On Windows there's no system package
+On Windows there's no system package
 manager for C++ libraries, and MSVC doesn't use `pkg-config` the way
 Linux/macOS do — `pkg-config.exe` on Windows is usually a leftover from
 MSYS2/MinGW, and even if it *did* find an `sdl2.pc`, the libraries it points
@@ -229,38 +362,92 @@ just installed (the Visual Studio generator defaults to 32-bit otherwise,
 which would silently mismatch):
 
 ```powershell
+# 3. Configure (one time per machine), from the project root
 cd engine_project
-mkdir build
-cd build
-cmake .. -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -A x64
-cmake --build . --config Release
-.\Release\tiny_engine.exe
+cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -A x64
+
+# 4. Build, and run
+cmake --build build --config Release
+.\build\Release\asteroids.exe
 ```
 
+Every time you change a source file after that, only step 4 is needed.
+
 Two things to note if you're new to the Visual Studio generator: `make`
-doesn't exist on Windows, so `cmake --build . --config Release` (or opening
-the generated `TinyEngine.sln` in Visual Studio and hitting Build) is the
-equivalent; and it's a "multi-config" generator, meaning `Debug`/`Release`
+doesn't exist on Windows, so `cmake --build build --config Release` (or
+opening the generated `TinyEngine.sln` in Visual Studio and hitting Build) is
+the equivalent; and it's a "multi-config" generator, meaning `Debug`/`Release`
 binaries land in their own subfolders (`build\Release\`, not `build\`).
 
-A title screen opens: `SPACE` starts a game, `Q` quits. Arrow keys steer,
-eating the red food grows you by one segment, `P` pauses, and hitting a wall
-or your own body ends the round — the board freezes behind a game-over
-overlay so you can see how you died, and `R` plays again. Escape or closing
-the window quits from anywhere.
+The executable is **not** standalone. Next to it the build puts the SDL
+runtime — `SDL2.dll`, `SDL2_image.dll`, `libpng16.dll`, `z.dll` (copied by
+vcpkg) — and the `assets/` folder (copied by `CMakeLists.txt`). Copying just
+the `.exe` somewhere else will fail to start, or start without artwork. Move
+the whole `Release` folder.
+
+### Running the tests
+
+The same build produces a test binary. It needs no window and no GPU, and
+finishes in milliseconds:
+
+```powershell
+ctest --test-dir build -C Release
+```
+
+Or run it directly — `.\build\Release\engine_tests.exe` — which prints how
+many checks passed. It covers the collision maths (including the strict
+edge-touching rule a grid game depends on), `TickTimer`'s accumulation and
+its zero-interval guard, entity creation and deferred destruction, the
+movement and lifetime systems, the exact ordering of scene-stack transitions,
+and the integrity of every glyph in the font table. Anything needing a window
+is deliberately absent: rendering is verified by looking at it.
+
+### Controls
+
+A title screen opens: `SPACE` starts a game, `Q` quits.
+
+| Key | Action |
+| --- | --- |
+| Left / Right | Turn the ship |
+| Up | Thrust (you keep drifting after you let go) |
+| Space | Fire |
+| P | Pause and resume |
+| R | Play again, on the game-over screen |
+| Escape | Quit from anywhere |
+
+Shoot the rocks: large breaks into two medium, medium into two small, small
+into nothing, scoring 20 / 50 / 100. Clear the field and the next wave arrives
+one rock larger. Colliding with a rock costs one of three lives; a fresh ship
+flashes while it's briefly invulnerable.
+
+### When it doesn't work
+
+| Symptom | Cause and fix |
+| --- | --- |
+| CMake: `Could not find a package configuration file provided by "SDL2"` | The toolchain file wasn't passed, or the packages aren't installed. Re-run the configure line with `-DCMAKE_TOOLCHAIN_FILE=...`, after `vcpkg install sdl2:x64-windows sdl2-image:x64-windows`. |
+| Linker: `module machine type 'x64' conflicts with target machine type 'x86'` | The `-A x64` was left off, so a 32-bit build is trying to link 64-bit libraries. Delete `build/` and configure again with `-A x64`. |
+| `SDL2.dll was not found` on launch | The `.exe` was moved away from its DLLs. Run it from `build\Release\`, or move that whole folder. |
+| The game runs, but everything is flat colored squares | `assets/asteroids.png` is not next to the executable. The console says so. Rebuilding re-copies it. |
+| `Accelerated renderer unavailable ...` on startup | No 3D driver available; it fell back to software rendering. Harmless — see *Graphics drivers* above. |
+| Linux: `No package 'sdl2' found` | The development headers are missing (the runtime library alone isn't enough): `sudo apt-get install libsdl2-dev libsdl2-image-dev`. |
+| Nothing opens, no error, over SSH or in CI | There's no display. Either run it locally, or set `SDL_VIDEODRIVER=dummy` to run headless. |
 
 ## Where to go from here
 
 Once this structure feels obvious, these are the natural next steps, roughly
 in order of how much they'll teach you:
 
+- **Audio**: `SDL_mixer`, and a thump when a rock breaks. It's the cheapest
+  change on this list and the one that most changes how the game feels.
 - **Sprite-sheet animation**: `Sprite` already has a source rect, so an
-  animated snake needs only an `Animation` component (a list of frames and a
+  animated sprite needs only an `Animation` component (a list of frames and a
   frame duration) and a system that advances `srcX` over time — the same
   shape as `MovementSystem`, operating on a different field.
-- **Audio**: `SDL_mixer`, and a short blip when the snake eats. It is the
-  cheapest change on this list and the one that most changes how the game
-  feels.
+- **Collision response**: `CollisionSystem` reports *that* two things
+  overlap, never how deeply or from which side. Neither game so far has needed
+  more — Snake dies, Asteroids explodes — but anything that bounces or gets
+  pushed does. Returning a contact normal and penetration depth is the next
+  real step, and a game where things ricochet is what should drive its design.
 - **Text in the draw order**: text is currently drawn after every sprite, full
   stop, so a translucent panel can dim the board but never the score on top of
   it. Giving `Text` a layer and sorting sprites and text together would fix
@@ -284,6 +471,11 @@ in order of how much they'll teach you:
   number" for safety.
 - **A scene/level format**: load entity layouts from a JSON or text file
   instead of hardcoding them in `main.cpp`.
+- **A second live game**: the engine currently has exactly one consumer, since
+  Snake is a frozen snapshot rather than a target in this build. Now that
+  adding a game is three lines of CMake, a second one — Breakout is the
+  obvious candidate, since bouncing is what would force collision response
+  into existence — would keep the engine honest in a way tests alone can't.
 
 None of these require rewriting what's here — they slot into the same
 World/Component/System pattern.

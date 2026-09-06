@@ -9,7 +9,6 @@
 // ---------------------------------------------------------------------------
 
 #include <string>
-#include <vector>
 
 // Declared, not included: SDL_Texture is an opaque type, so a Sprite can hold
 // a pointer to one without this header pulling in all of SDL. Components stay
@@ -18,24 +17,10 @@ struct SDL_Texture;
 
 namespace engine {
 
-// A point or direction in 2D. Transform predates this and keeps its own
-// x/y fields so existing code and aggregate initialization still work.
-struct Vec2 {
-    float x = 0.0f;
-    float y = 0.0f;
-};
-
-// Where an entity is in the world, in pixels, and which way it faces.
-//
-// `rotation` is in RADIANS, measured from "pointing right" and increasing
-// clockwise on screen (screen y grows downward, which flips the usual
-// mathematical convention). Radians because that is what std::cos and
-// std::sin take, and game code does far more trigonometry than SDL does —
-// the renderer converts to degrees at the single point SDL needs them.
+// Where an entity is in the world, in pixels.
 struct Transform {
     float x = 0.0f;
     float y = 0.0f;
-    float rotation = 0.0f;
 };
 
 // How fast an entity is moving, in pixels per second. A MovementSystem reads
@@ -43,13 +28,6 @@ struct Transform {
 struct Velocity {
     float dx = 0.0f;
     float dy = 0.0f;
-};
-
-// How fast an entity is turning, in radians per second — exactly what
-// Velocity is to position, for Transform::rotation. MovementSystem applies
-// both, so a tumbling object needs no per-frame code of its own.
-struct AngularVelocity {
-    float radiansPerSecond = 0.0f;
 };
 
 // What an entity looks like on screen.
@@ -86,27 +64,6 @@ struct Sprite {
     int layer = 0;
 };
 
-// An outline drawn as connected line segments — the "vector graphics" look of
-// early arcade games, and the natural partner to Transform::rotation.
-//
-// Points are in LOCAL space: relative to the entity's Transform, which acts
-// as the origin the shape rotates around. So a triangle listed around (0,0)
-// spins about its own middle, and the same points can be reused by every
-// entity of that kind. The renderer does the rotate-then-translate.
-//
-// Unlike Sprite, a Polygon needs no texture and no assets at all, and it
-// scales to any size without blurring, because it is recomputed every frame
-// rather than stretched.
-struct Polygon {
-    std::vector<Vec2> points;
-    bool closed = true;  // join the last point back to the first
-    unsigned char r = 255;
-    unsigned char g = 255;
-    unsigned char b = 255;
-    unsigned char a = 255;
-    int layer = 0;
-};
-
 // The rectangle an entity collides with, in pixels, anchored at its
 // Transform (which is the top-left corner, same as Sprite).
 //
@@ -119,33 +76,6 @@ struct Polygon {
 struct Collider {
     int width = 32;
     int height = 32;
-};
-
-// The circle an entity collides with — the right shape for anything that
-// rotates. A box collider is defined by axis-aligned edges, so it is simply
-// wrong for a spinning ship: rotate the ship and the box either stops
-// covering it or covers empty space. A circle looks the same at every angle,
-// which is why arcade games full of rotating things use circles and why this
-// is cheaper than the alternative (SAT on rotated polygons).
-//
-// Anchoring differs from Collider, deliberately: a circle is centered ON the
-// Transform, while a box hangs down-right FROM it. Each is the natural
-// convention for its shape — a rotating object wants its pivot at its middle,
-// while a rectangle is naturally placed by its corner — and the mixed
-// circle/box test below accounts for the difference. Worth knowing when you
-// put both on the same entity.
-struct CircleCollider {
-    float radius = 16.0f;
-};
-
-// Destroys the entity once the countdown runs out. LifetimeSystem (Systems.h)
-// ticks it down each frame; the engine runs that for you.
-//
-// This exists because "spawn a thing that removes itself shortly after" —
-// bullets, explosions, damage numbers, particles — is otherwise a bookkeeping
-// list in every game that needs it.
-struct Lifetime {
-    float secondsRemaining = 1.0f;
 };
 
 // A line of text drawn at the entity's Transform, in the built-in bitmap

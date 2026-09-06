@@ -8,7 +8,6 @@
 // what makes them easy to reorder, disable, or test in isolation.
 // ---------------------------------------------------------------------------
 
-#include <algorithm>
 #include <cstddef>
 #include <vector>
 
@@ -17,31 +16,13 @@
 
 namespace engine {
 
-// Moves and turns every entity, scaled by delta time so speed is in "per
-// second" units regardless of frame rate. Position comes from Velocity and
-// facing from AngularVelocity; an entity can have either, both, or neither.
+// Moves every entity that has both a Transform and a Velocity, scaled by
+// delta time so speed is in "pixels per second" regardless of frame rate.
 inline void MovementSystem(World& world, float dt) {
     for (auto& [entity, transform] : world.view<Transform>()) {
         if (Velocity* vel = world.getComponent<Velocity>(entity)) {
             transform.x += vel->dx * dt;
             transform.y += vel->dy * dt;
-        }
-        if (AngularVelocity* spin = world.getComponent<AngularVelocity>(entity)) {
-            transform.rotation += spin->radiansPerSecond * dt;
-        }
-    }
-}
-
-// Counts down every Lifetime and queues the expired ones for destruction.
-//
-// Note that it calls destroyLater rather than destroyEntity, from inside a
-// loop over the Lifetime pool — which is precisely the situation that makes
-// immediate destruction unsafe. This system is the reason destroyLater exists.
-inline void LifetimeSystem(World& world, float dt) {
-    for (auto& [entity, lifetime] : world.view<Lifetime>()) {
-        lifetime.secondsRemaining -= dt;
-        if (lifetime.secondsRemaining <= 0.0f) {
-            world.destroyLater(entity);
         }
     }
 }
@@ -87,42 +68,6 @@ inline bool aabbOverlap(const Transform& ta, const Collider& ca,
            ta.y < bBottom && tb.y < aBottom;
 }
 
-// Circle against circle: the cheapest test of all. Two circles overlap when
-// the distance between their centers is less than the sum of their radii, and
-// comparing squared distances avoids a square root entirely.
-//
-// Both circles are centered on their Transform (see CircleCollider).
-inline bool circleOverlap(const Transform& ta, const CircleCollider& ca,
-                          const Transform& tb, const CircleCollider& cb) {
-    const float dx = tb.x - ta.x;
-    const float dy = tb.y - ta.y;
-    const float radii = ca.radius + cb.radius;
-    return (dx * dx + dy * dy) < (radii * radii);
-}
-
-// Circle against box, for entities that mix the two conventions.
-//
-// The trick: find the point on the rectangle closest to the circle's center
-// by clamping that center into the rectangle's range on each axis. If that
-// closest point is nearer than the radius, they overlap. Remember the box
-// hangs down-right from its Transform while the circle is centered on its own.
-inline bool circleAabbOverlap(const Transform& circleTransform,
-                              const CircleCollider& circle,
-                              const Transform& boxTransform,
-                              const Collider& box) {
-    const float left = boxTransform.x;
-    const float top = boxTransform.y;
-    const float right = left + static_cast<float>(box.width);
-    const float bottom = top + static_cast<float>(box.height);
-
-    const float closestX = std::max(left, std::min(circleTransform.x, right));
-    const float closestY = std::max(top, std::min(circleTransform.y, bottom));
-
-    const float dx = circleTransform.x - closestX;
-    const float dy = circleTransform.y - closestY;
-    return (dx * dx + dy * dy) < (circle.radius * circle.radius);
-}
-
 // Checks every collidable entity against every other one and returns the
 // pairs that overlap.
 //
@@ -135,47 +80,31 @@ inline bool circleAabbOverlap(const Transform& circleTransform,
 // is nothing at this scale. Real engines put a "broad phase" in front of it
 // — a spatial grid or quadtree that rules out pairs too far apart to touch —
 // so they never build the full pair list at all.
-// Do these two entities overlap, whatever shapes they happen to use? Picks
-// the right test from the collider components each one carries. An entity
-// with both a Collider and a CircleCollider is treated as a box; give an
-// entity one shape or the other.
-inline bool collides(World& world, Entity a, Entity b) {
-    const Transform& ta = *world.getComponent<Transform>(a);
-    const Transform& tb = *world.getComponent<Transform>(b);
-
-    Collider* boxA = world.getComponent<Collider>(a);
-    Collider* boxB = world.getComponent<Collider>(b);
-    CircleCollider* circleA = world.getComponent<CircleCollider>(a);
-    CircleCollider* circleB = world.getComponent<CircleCollider>(b);
-
-    if (boxA && boxB) return aabbOverlap(ta, *boxA, tb, *boxB);
-    if (circleA && circleB) return circleOverlap(ta, *circleA, tb, *circleB);
-    if (circleA && boxB) return circleAabbOverlap(ta, *circleA, tb, *boxB);
-    if (boxA && circleB) return circleAabbOverlap(tb, *circleB, ta, *boxA);
-    return false;
-}
-
 inline std::vector<CollisionPair> CollisionSystem(World& world) {
-    // A collider says how big, a Transform says where. An entity needs a
-    // Transform and at least one collider shape to take part.
+    // A Collider says how big, a Transform says where. An entity needs both
+    // to take part; anything missing one is simply not collidable.
     std::vector<Entity> collidable;
     for (Entity entity : world.entities()) {
+        if (!world.hasComponent<Collider>(entity)) continue;
         if (!world.hasComponent<Transform>(entity)) continue;
-        if (!world.hasComponent<Collider>(entity) &&
-            !world.hasComponent<CircleCollider>(entity)) {
-            continue;
-        }
         collidable.push_back(entity);
     }
 
     std::vector<CollisionPair> collisions;
     for (std::size_t i = 0; i < collidable.size(); ++i) {
+        const Entity a = collidable[i];
+        const Transform& ta = *world.getComponent<Transform>(a);
+        const Collider& ca = *world.getComponent<Collider>(a);
+
         // Starting j at i + 1 skips both self-pairs (i == j) and the
         // mirrored duplicates already covered by an earlier i.
         for (std::size_t j = i + 1; j < collidable.size(); ++j) {
-            if (collides(world, collidable[i], collidable[j])) {
-                collisions.push_back(
-                    CollisionPair{collidable[i], collidable[j]});
+            const Entity b = collidable[j];
+            const Transform& tb = *world.getComponent<Transform>(b);
+            const Collider& cb = *world.getComponent<Collider>(b);
+
+            if (aabbOverlap(ta, ca, tb, cb)) {
+                collisions.push_back(CollisionPair{a, b});
             }
         }
     }
