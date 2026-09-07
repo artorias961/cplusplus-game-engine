@@ -276,14 +276,73 @@ constexpr float kRankGap = 6.0f;             // clear space between queued units
 // Symmetry costs nothing and makes the difficulty a single number to change.
 constexpr float kEnemyIncomeMultiplier = 1.0f;
 
-// The opponent's composition, cycled. It banks until it can afford the next
-// whole wave and then sends it, because spending on sight is a losing policy —
-// slice 2 measured that too. This is not clever, but it is no longer free to
-// beat: a player who also spends on sight now loses.
-constexpr int kEnemyComposition[] = {1, 1, 2, 0, 1, 0};  // soldier-heavy, some archers and runners
-constexpr int kEnemyCompositionLength =
-    static_cast<int>(sizeof(kEnemyComposition) / sizeof(kEnemyComposition[0]));
-constexpr int kEnemyWaveSize = 3;            // units banked for before spending
+// --- Stages ----------------------------------------------------------------
+//
+// A campaign rather than one endless skirmish. Each stage is the same battle
+// with the opponent's three levers set differently: how fast it earns, how
+// much castle it has to chew through, and what it sends.
+//
+// That last one is what makes the stages feel different rather than merely
+// harder. A stage fielding only soldiers is answered by archers behind a thin
+// line; one fielding archers of its own has to be rushed before they set up.
+// Turning up a difficulty number would have produced eight identical fights.
+constexpr int kMaxComposition = 12;
+
+struct StageKind {
+    const char* name;
+    float enemyIncome;        // multiplier on the base gold rate
+    float enemyCastleHealth;
+    int waveSize;             // units it banks for before spending
+    const char* composition;  // roster indices, e.g. "1,1,2"
+};
+
+// These numbers were measured, not chosen. The first attempt ran 0.75 to 1.60
+// on income and 600 to 1500 on castle health, which produced a campaign whose
+// first stage a naive army could only draw and whose last three **no strategy
+// could win at all**. Playing every stage with three different armies said so
+// in one run; reading the table would never have.
+// The COMPOSITION escalates as much as the numbers do, and that is not
+// decoration — measuring showed it matters more than either dial.
+//
+// The second attempt raised income and castle health smoothly but let the
+// compositions wander, and stage three came out a wall that nothing could beat
+// while stage four was comfortable. Stage three fielded a lean "1,1,2" and
+// stage four a "1,1,2,0" padded with a runner: a weak unit in the cycle
+// spends gold that would otherwise have bought a soldier, so the higher
+// income bought a worse army. Early stages are diluted on purpose; the last
+// ones are lean.
+constexpr StageKind kDefaultStages[] = {
+    {"THE BORDER",     0.40f,  350.0f, 2, "1,0"},
+    {"RIVER CROSSING", 0.55f,  450.0f, 2, "1,1,0"},
+    {"THE FOOTHILLS",  0.68f,  550.0f, 3, "1,1,0,2"},
+    {"OLD ROAD",       0.80f,  650.0f, 3, "1,1,2,0"},
+    {"THE PASS",       0.90f,  750.0f, 3, "1,1,2"},
+    {"BLACK FIELD",    1.00f,  850.0f, 4, "1,2,1,2,0"},
+    {"THE GATES",      1.05f,  900.0f, 4, "1,1,2,0,2"},
+    {"THE KEEP",       1.15f, 1000.0f, 4, "1,1,2,2"},
+};
+constexpr int kDefaultStageCount =
+    static_cast<int>(sizeof(kDefaultStages) / sizeof(kDefaultStages[0]));
+constexpr int kMaxStages = 24;
+
+const StageKind& stageKind(int stage);
+int stageCount();
+
+// How far through the campaign the player has got.
+//
+// A separate component from Session because Session is one battle and this
+// outlives them: it is created once and read by the stage-select screen, the
+// play scene, and the victory that unlocks the next stage.
+//
+// It is NOT saved anywhere yet — close the game and the campaign restarts.
+// Persisting it is slice 10, and doing it here would have been building the
+// half of a feature whose other half does not exist.
+struct Campaign {
+    int stagesUnlocked = 1;
+    int currentStage = 0;
+};
+
+Campaign& campaignOf(engine::World& world);  // created on first use
 
 // --- The view --------------------------------------------------------------
 //
@@ -496,6 +555,15 @@ struct Session {
     int enemyWaveIndex = 0;
     int enemyWaveRemaining = 0;
 
+    // The stage's settings, copied in when the battle starts. Held here rather
+    // than read from the stage table on every use, so a battle is decided by
+    // one snapshot taken at the start — and so a test can set up a fight
+    // without inventing a stage to hold it.
+    int composition[kMaxComposition] = {1, 1, 2, 0, 1, 0};
+    int compositionLength = 6;
+    int enemyWaveSize = 3;
+    float enemyIncome = 1.0f;
+
     // Counts down while the player is steering the view by hand. Above zero
     // the camera obeys the arrow keys or the drag; at zero it goes back to
     // following.
@@ -594,6 +662,24 @@ void setAudioDevice(engine::AudioDevice* audio);
 // --- Scenes ----------------------------------------------------------------
 
 std::unique_ptr<engine::Scene> makeTitleScene();
+std::unique_ptr<engine::Scene> makeStageSelectScene();
+
+// Plays whichever stage the Campaign says is current.
 std::unique_ptr<engine::Scene> makePlayScene();
+
+// Where the stage rows are drawn, and which one is under a screen position
+// (-1 for none). Exposed for the same reason the spawn bar's layout is: a test
+// that clicks a stage should not have to re-derive where it sits.
+constexpr float kStageX = 260.0f;
+constexpr float kStageY = 120.0f;
+constexpr float kStageWidth = 440.0f;
+constexpr float kStageHeight = 34.0f;
+constexpr float kStageGap = 6.0f;
+
+constexpr float stageTop(int index) {
+    return kStageY + static_cast<float>(index) * (kStageHeight + kStageGap);
+}
+
+int stageAt(float screenX, float screenY);
 
 }  // namespace lanebattle

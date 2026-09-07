@@ -385,6 +385,84 @@ would have measured a bad *player* and reported it as a bad *game*. The first
 run after the change said the mixed strategy no longer won, which looked like a
 balance regression and was a helper that had stopped playing properly.
 
+### Slice 9
+
+**Done**: a campaign. Eight stages, a list you pick from, locked rows you can
+see but not play, and a win that opens the next one. **No engine code**, as
+predicted — the scene stack already did this, and the stage tables rode on the
+`DataFile` loader slice 7 built early for exactly this reason.
+
+Each stage sets the opponent's three levers: how fast it earns, how much castle
+it has, and **what it sends**. That last one is what makes stages feel
+different rather than merely harder — a stage fielding only soldiers is
+answered by archers behind a thin line, one fielding archers of its own has to
+be rushed before they set up. Turning a difficulty number up would have
+produced eight identical fights.
+
+Progress is not saved: close the game and the campaign restarts. That is slice
+10, and doing it here would have been building half of a feature whose other
+half does not exist.
+
+#### The curve was measured three times before it was a curve
+
+Playing all eight stages with three different armies takes one run and says
+more than reading the table ever could.
+
+**First attempt** — income 0.75 to 1.60, castle 600 to 1500:
+
+    1 THE BORDER      soldiers DRAW   mixed WON
+    2..5              soldiers LOST   mixed WON
+    6,7,8             soldiers LOST   mixed LOST
+
+Three stages nobody could win, and an opening stage a naive army could only
+draw. A campaign whose first level does not teach and whose last three cannot
+be finished.
+
+**Second attempt** raised the numbers more gently and produced something worse
+in an interesting way: **stage three became a wall while stage four was
+comfortable.** Stage three fielded a lean `1,1,2` and stage four a `1,1,2,0`
+padded with a runner. A weak unit in the cycle spends gold that would have
+bought a soldier, so the higher-income stage bought a *worse* army.
+
+**Composition matters more than either dial.** Early stages are diluted with
+runners on purpose now, and the last ones are lean.
+
+**Third attempt**, and the shape it settled into:
+
+| Stage | Soldiers only | Mixed | With two income upgrades |
+| --- | --- | --- | --- |
+| 1 | **Wins** | Wins | — |
+| 2 | Draws | **Wins** | — |
+| 3-7 | Loses | **Wins** | — |
+| 8 | Loses | Loses | **Wins** |
+
+Which reads as a teaching order without anyone having designed one: stage one
+teaches the button, stage two that one unit type is not enough, stages three to
+seven that composition wins, and stage eight that composition alone does not —
+it wants two income upgrades behind it. One upgrade is *worse* than none, so
+the last stage is a genuine commit-or-don't.
+
+#### Three bugs the campaign exposed in older tests
+
+- **A test misnamed since slice 1.** `testRestartingAfterDefeat` broke the
+  *enemy* castle, which is a win. Nothing noticed for eight slices because a
+  win and a loss did the same thing; they no longer do, so it is two tests with
+  the names they should always have had.
+- **`testTheEconomiesAreSymmetric` asserted something the campaign
+  deliberately breaks.** It now checks the opponent earns the player's rate
+  times the stage's multiplier — symmetric up to exactly one dial, which was
+  always the real claim.
+- **The design guard was measuring the wrong stage.** `testOneUnitTypeIsNotEnough`
+  ran on stage one, which mono-type armies are *supposed* to win — that is the
+  on-ramp. It runs mid-campaign now, and a second test guards the on-ramp from
+  the other side.
+
+#### And one mutation that survived
+
+Dropping every retry back to stage one passed cleanly, because the test that
+checked it retried stage one. Retrying a later stage cannot confuse "restart
+this stage" with "restart at the beginning". Sixth of six caught after that.
+
 ## Between slices: an audit, and closing the last untested gaps
 
 ### The audit

@@ -50,8 +50,8 @@ an optimisation is worth doing.
 
 **The live tree is now growing a fourth game**, Lane Battle, and the engine
 grows only where that game demands it — the same rule that produced everything
-in v1.0. Eight slices in, it has demanded four things: two small headers, mouse
-input, and a parallax factor. Half of those eight needed no engine code at all.
+in v1.0. Nine slices in, it has demanded four things: two small headers, mouse
+input, and a parallax factor. Five of those nine needed no engine code at all.
 `docs/v3-plan.md` has the running notes — including how measuring whole
 battles, rather than individual rules, found the game unwinnable twice before
 it was playable — and `docs/roadmap-cartoonwars.md` has what is left.
@@ -101,7 +101,7 @@ engine_project/
 ├── manual_testing/     verify (do the checks pass) + mutate (would they notice?)
 ├── assets/
 │   ├── asteroids.png   Ship icon + rock, for the HUD and title screen
-│   └── lanebattle/units.txt   Lane Battle's roster and upgrades; edit, no rebuild
+│   └── lanebattle/units.txt   Roster, upgrades and the campaign; edit, no rebuild
 └── archive/
     ├── version_1/      Snake: the first engine, frozen
     └── version2/       This release (v1.0), frozen
@@ -701,7 +701,11 @@ starts. Where it lands across the paddle's face angles the bounce — that's the
 whole skill of it. Clear the field and the next level refills it with a faster
 ball. Missing the ball costs one of three lives.
 
-**Lane Battle** (`.\build\Release\lanebattle.exe`)
+**Lane Battle** (`.uildReleaseanebattle.exe`)
+
+An eight-stage campaign. Pick a battle from the list; winning one opens the
+next. Each stage gives the opponent a different economy, a different castle
+and — the part that actually changes the fight — a different army.
 
 | Input | Action |
 | --- | --- |
@@ -713,6 +717,7 @@ ball. Missing the ball costs one of three lives.
 | Drag the field | Scroll the view |
 | Left / Right | Look up and down the field; lets go after a moment |
 | Click an upgrade | Buy INCOME, WALLS or SUPPLY; each costs more than the last |
+| Enter | On the stage list, plays the furthest battle you have reached |
 
 Gold accrues on its own, and killing something pays you a share of what it cost
 its owner. Units march right, stop when an enemy is in reach, and fight until

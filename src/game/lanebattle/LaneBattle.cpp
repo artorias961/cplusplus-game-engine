@@ -131,6 +131,50 @@ Entity createBackdrop(World& world) {
 // A unit's forward direction: +1 for the left side, -1 for the right.
 float facing(bool leftSide) { return leftSide ? 1.0f : -1.0f; }
 
+// Reads "1,1,2,0" into a session's composition.
+//
+// Entries naming a unit the roster does not have are dropped rather than
+// clamped: a stage asking for kind 7 of a three-unit roster has a typo in it,
+// and silently substituting the archer would make the stage quietly wrong
+// instead of visibly short.
+void parseComposition(const char* text, Session& session) {
+    int count = 0;
+    int value = 0;
+    bool haveDigits = false;
+
+    for (const char* cursor = text; ; ++cursor) {
+        if (*cursor >= '0' && *cursor <= '9') {
+            value = value * 10 + (*cursor - '0');
+            haveDigits = true;
+            continue;
+        }
+
+        if (haveDigits && count < kMaxComposition && value < unitKindCount()) {
+            session.composition[count++] = value;
+        }
+        value = 0;
+        haveDigits = false;
+
+        if (*cursor == '\0') break;
+    }
+
+    // A stage whose composition is empty or entirely unreadable would leave
+    // the opponent unable to field anything at all, which reads as a bug
+    // rather than as an easy level.
+    if (count == 0) {
+        session.composition[count++] = 1;
+    }
+    session.compositionLength = count;
+}
+
+// Copies one stage's settings into the battle about to be fought.
+void applyStage(Session& session, int stage) {
+    const StageKind& kind = stageKind(stage);
+    session.enemyIncome = kind.enemyIncome;
+    session.enemyWaveSize = std::max(1, kind.waveSize);
+    parseComposition(kind.composition, session);
+}
+
 // A colour channel out of a data file, clamped rather than wrapped: 300 should
 // read as "as bright as it goes", not as 44.
 unsigned char channel(const DataSection& section, const char* key,
@@ -401,6 +445,46 @@ int indexOfName(const std::string& name) {
 std::vector<std::unique_ptr<std::string>> gLoadedNames;
 }  // namespace
 
+// --- Stages ----------------------------------------------------------------
+
+namespace {
+std::vector<StageKind> gStages(std::begin(kDefaultStages),
+                               std::end(kDefaultStages));
+
+// Keeps the strings a data file supplies alive: StageKind holds `const char*`
+// pointing either at a literal in the defaults or at one of these.
+std::vector<std::unique_ptr<std::string>> gStageStrings;
+}  // namespace
+
+const StageKind& stageKind(int stage) {
+    if (stage < 0) return gStages.front();
+    if (static_cast<std::size_t>(stage) >= gStages.size()) return gStages.back();
+    return gStages[static_cast<std::size_t>(stage)];
+}
+
+int stageCount() { return static_cast<int>(gStages.size()); }
+
+int stageAt(float screenX, float screenY) {
+    if (screenX < kStageX || screenX > kStageX + kStageWidth) return -1;
+
+    for (int index = 0; index < stageCount(); ++index) {
+        const float top = stageTop(index);
+        if (screenY >= top && screenY <= top + kStageHeight) return index;
+    }
+    return -1;
+}
+
+Campaign& campaignOf(World& world) {
+    for (auto& entry : world.view<Campaign>()) return entry.second;
+
+    // Created on first use rather than by whichever scene happens to run
+    // first. The title screen, the stage list and a test that starts a battle
+    // directly all need it, and none of them should have to own it.
+    const Entity entity = world.createEntity();
+    world.addComponent(entity, Campaign{});
+    return *world.getComponent<Campaign>(entity);
+}
+
 const UnitKind& unitKind(int kind) {
     if (kind < 0) return gUnitKinds.front();
     if (static_cast<std::size_t>(kind) >= gUnitKinds.size()) {
@@ -414,6 +498,8 @@ int unitKindCount() { return static_cast<int>(gUnitKinds.size()); }
 void resetBalance() {
     gUnitKinds.assign(std::begin(kDefaultUnitKinds), std::end(kDefaultUnitKinds));
     gLoadedNames.clear();
+    gStages.assign(std::begin(kDefaultStages), std::end(kDefaultStages));
+    gStageStrings.clear();
     for (int index = 0; index < kUpgradeCount; ++index) {
         gUpgrades[index] = kDefaultUpgrades[index];
     }
@@ -465,6 +551,41 @@ bool loadBalance(const std::string& path) {
         kind.rightR = channel(*section, "right_r", kind.rightR);
         kind.rightG = channel(*section, "right_g", kind.rightG);
         kind.rightB = channel(*section, "right_b", kind.rightB);
+    }
+
+    // Stages, unlike units, are REPLACED rather than merged. A campaign is an
+    // ordered list, not a set of named things: a file that describes three
+    // stages means a three-stage campaign, and quietly leaving the other five
+    // behind it would produce a campaign nobody wrote.
+    const std::vector<const DataSection*> stages = file.all("stage");
+    if (!stages.empty()) {
+        gStages.clear();
+        gStageStrings.clear();
+
+        for (const DataSection* section : stages) {
+            if (gStages.size() >= static_cast<std::size_t>(kMaxStages)) break;
+
+            gStageStrings.push_back(std::make_unique<std::string>(
+                section->text("name", "STAGE")));
+            const char* name = gStageStrings.back()->c_str();
+
+            gStageStrings.push_back(std::make_unique<std::string>(
+                section->text("composition", "1")));
+            const char* composition = gStageStrings.back()->c_str();
+
+            StageKind stage;
+            stage.name = name;
+            stage.composition = composition;
+            stage.enemyIncome = section->number("enemy_income", 1.0f);
+            stage.enemyCastleHealth =
+                section->number("enemy_castle_health", kCastleHealth);
+            stage.waveSize = section->integer("wave_size", 3);
+            gStages.push_back(stage);
+        }
+
+        if (gStages.empty()) {
+            gStages.assign(std::begin(kDefaultStages), std::end(kDefaultStages));
+        }
     }
 
     // Upgrades are matched by name against a fixed set rather than appended:
@@ -762,8 +883,9 @@ public:
             world, playerWon_ ? "VICTORY" : "DEFEAT", 170, 6,
             playerWon_ ? 140 : 240, playerWon_ ? 230 : 110,
             playerWon_ ? 150 : 110, kOverlayTextLayer));
-        owned_.push_back(createCenteredText(world, "R TO FIGHT AGAIN", 280, 2,
-                                            170, 170, 195, kOverlayTextLayer));
+        owned_.push_back(createCenteredText(
+            world, playerWon_ ? "R FOR THE CAMPAIGN" : "R TO TRY AGAIN", 280, 2,
+            170, 170, 195, kOverlayTextLayer));
         owned_.push_back(createCenteredText(world, "ESC TO QUIT", 310, 2,
                                             170, 170, 195, kOverlayTextLayer));
     }
@@ -815,6 +937,12 @@ public:
         sessionEntity_ = world.createEntity();
         world.addComponent(sessionEntity_, Session{});
 
+        // Which stage this battle is. Read once, here, so everything below
+        // works from one snapshot rather than consulting the campaign
+        // mid-fight.
+        stage_ = campaignOf(world).currentStage;
+        applyStage(*world.getComponent<Session>(sessionEntity_), stage_);
+
         // One camera, on its own entity. The renderer picks up the first one
         // it finds; before this game the only thing that ever moved it was
         // Asteroids' screen shake, a few pixels at a time.
@@ -846,6 +974,9 @@ public:
                                   static_cast<int>(kButtonY) - 22, 2,
                                   130, 130, 155, kHudLayer));
 
+        hud_.push_back(createText(world, stageKind(stage_).name, 16, 140, 2,
+                                  200, 190, 150, kHudLayer));
+
         buildMinimap(world);
 
         // Start looking at your own castle rather than at the origin, so the
@@ -865,8 +996,25 @@ public:
         Session* session = world.getComponent<Session>(sessionEntity_);
         if (!session || !session->gameOver) return;  // returning from pause
 
+        // A win ends this battle for good: the next stage is open, so the
+        // player goes back to the list rather than replaying what they just
+        // beat. A loss restarts the same stage where they stand.
+        //
+        // The pop happens in update() rather than here, because onResume has
+        // no SceneStack to ask — and popping the scene that is mid-resume
+        // would be a poor idea even if it did.
+        if (session->playerWon) {
+            returnToCampaign_ = true;
+            return;
+        }
+
         clearField(world);
         *session = Session{};
+
+        // Re-applied after the reset, which wipes it. Forgetting this makes
+        // every retry of stage eight secretly a retry of stage one.
+        applyStage(*session, stage_);
+
         buildField(world);
         snapCameraToTarget(world);
         overlayShown_ = false;
@@ -876,6 +1024,11 @@ public:
 
     void update(World& world, InputManager& input, float dt,
                 SceneStack& scenes) override {
+        if (returnToCampaign_) {
+            scenes.pop();
+            return;
+        }
+
         Session* session = world.getComponent<Session>(sessionEntity_);
         if (!session) return;
 
@@ -939,7 +1092,9 @@ private:
                                   kCastleWidth, kCastleHeight, 170, 90, 80,
                                   kFieldLayer);
         world.addComponent(right, Team{false});
-        world.addComponent(right, Castle{});
+        // The stage decides how much castle there is to chew through, which is
+        // half of what makes a later stage longer as well as harder.
+        world.addComponent(right, Castle{stageKind(stage_).enemyCastleHealth});
         field_.push_back(right);
     }
 
@@ -1079,7 +1234,7 @@ private:
     static void earnGold(Session& session, float dt) {
         session.gold += goldPerSecondFor(session, true) * dt;
         session.enemyGold +=
-            goldPerSecondFor(session, false) * kEnemyIncomeMultiplier * dt;
+            goldPerSecondFor(session, false) * session.enemyIncome * dt;
     }
 
     // --- Upgrades ----------------------------------------------------------
@@ -1220,7 +1375,7 @@ private:
 
         if (session.enemyWaveRemaining <= 0) {
             if (session.enemyGold >= waveCost(session)) {
-                session.enemyWaveRemaining = kEnemyWaveSize;
+                session.enemyWaveRemaining = session.enemyWaveSize;
             }
             return;
         }
@@ -1235,10 +1390,10 @@ private:
         // waiting out the first one's cooldown instead of sending the archer
         // behind it. Per-kind cooldowns only reward you for diversifying if
         // you are allowed to diversify.
-        for (int step = 0; step < kEnemyCompositionLength; ++step) {
+        for (int step = 0; step < session.compositionLength; ++step) {
             const int index =
-                (session.enemyWaveIndex + step) % kEnemyCompositionLength;
-            const int kind = kEnemyComposition[index];
+                (session.enemyWaveIndex + step) % session.compositionLength;
+            const int kind = session.composition[index];
 
             if (kind >= kMaxUnitKinds) continue;
             if (session.enemySpawnCooldowns[kind] > 0.0f) continue;
@@ -1246,7 +1401,7 @@ private:
 
             session.enemyGold -= unitKind(kind).cost;
             session.enemySpawnCooldowns[kind] = cooldownFor(kind);
-            session.enemyWaveIndex = (index + 1) % kEnemyCompositionLength;
+            session.enemyWaveIndex = (index + 1) % session.compositionLength;
             --session.enemyWaveRemaining;
             spawnUnit(world, false, kind);
             return;
@@ -1257,10 +1412,10 @@ private:
     // wherever it currently is.
     static float waveCost(const Session& session) {
         float total = 0.0f;
-        for (int step = 0; step < kEnemyWaveSize; ++step) {
+        for (int step = 0; step < session.enemyWaveSize; ++step) {
             const int index = (session.enemyWaveIndex + step) %
-                              kEnemyCompositionLength;
-            total += unitKind(kEnemyComposition[index]).cost;
+                              session.compositionLength;
+            total += unitKind(session.composition[index]).cost;
         }
         return total;
     }
@@ -1315,6 +1470,16 @@ private:
                     // The player holds the left castle, so the right one
                     // falling is a win.
                     session.playerWon = castleTeam && !castleTeam->leftSide;
+
+                    if (session.playerWon) {
+                        // Winning opens the next stage. Clamped to the last
+                        // one, so finishing the campaign does not leave the
+                        // list pointing past its own end.
+                        Campaign& campaign = campaignOf(world);
+                        campaign.stagesUnlocked =
+                            std::min(stageCount(),
+                                     std::max(campaign.stagesUnlocked, stage_ + 2));
+                    }
                 }
             }
         }
@@ -1788,6 +1953,8 @@ private:
                                   static_cast<int>(std::max(0.0f, health->health)));
     }
 
+    int stage_ = 0;
+    bool returnToCampaign_ = false;
     Entity sessionEntity_ = kInvalidEntity;
     Entity cameraEntity_ = kInvalidEntity;
     Entity goldText_ = kInvalidEntity;
@@ -1811,6 +1978,96 @@ private:
     int shownGold_ = -1;
     int shownPopulation_ = -1;
     bool overlayShown_ = false;
+};
+
+// The campaign, as a list you pick from.
+//
+// Locked stages are drawn but not clickable, which is the point of showing
+// them: a list of eight with two lit says "there is more of this" in a way a
+// single "next battle" button never could.
+class StageSelectScene : public Scene {
+public:
+    void onEnter(World& world) override {
+        const Campaign& campaign = campaignOf(world);
+
+        owned_.push_back(createCenteredText(world, "CHOOSE A BATTLE", 60, 4,
+                                            220, 200, 140, kHudLayer));
+
+        for (int stage = 0; stage < stageCount(); ++stage) {
+            const bool unlocked = stage < campaign.stagesUnlocked;
+            const float top = stageTop(stage);
+
+            Entity plate = createRect(world, kStageX, top, kStageWidth,
+                                      kStageHeight,
+                                      unlocked ? 44 : 26,
+                                      unlocked ? 50 : 30,
+                                      unlocked ? 64 : 38, kHudLayer);
+            world.getComponent<Sprite>(plate)->screenSpace = true;
+            owned_.push_back(plate);
+
+            const std::string label =
+                std::to_string(stage + 1) + "  " +
+                (unlocked ? stageKind(stage).name : "- LOCKED -");
+            owned_.push_back(createText(
+                world, label, static_cast<int>(kStageX) + 12,
+                static_cast<int>(top) + 10, 2,
+                unlocked ? 215 : 90, unlocked ? 215 : 90, unlocked ? 230 : 105,
+                kHudLayer));
+        }
+
+        owned_.push_back(createCenteredText(
+            world, "CLICK A BATTLE, OR ENTER FOR THE LATEST", 470, 2,
+            160, 160, 185, kHudLayer));
+        owned_.push_back(createCenteredText(world, "Q TO QUIT", 496, 2,
+                                            140, 140, 165, kHudLayer));
+    }
+
+    void onExit(World& world) override {
+        for (Entity entity : owned_) world.destroyLater(entity);
+        owned_.clear();
+    }
+
+    void onResume(World& world) override {
+        // Coming back from a battle: a stage may have just been unlocked, so
+        // the list is rebuilt rather than left showing what it showed before.
+        onExit(world);
+        world.flushDestroyed();
+        onEnter(world);
+    }
+
+    void update(World& world, InputManager& input, float,
+                SceneStack& scenes) override {
+        Campaign& campaign = campaignOf(world);
+
+        if (input.wasKeyPressed(SDL_SCANCODE_Q)) {
+            scenes.pop();
+            return;
+        }
+
+        // Enter plays the furthest stage reached, which is what you want nine
+        // times in ten and saves aiming at a row.
+        if (input.wasKeyPressed(SDL_SCANCODE_RETURN) ||
+            input.wasKeyPressed(SDL_SCANCODE_KP_ENTER) ||
+            input.wasKeyPressed(SDL_SCANCODE_SPACE)) {
+            campaign.currentStage = campaign.stagesUnlocked - 1;
+            scenes.push(makePlayScene());
+            return;
+        }
+
+        if (!input.wasMousePressed()) return;
+
+        const int picked = stageAt(static_cast<float>(input.mouseX()),
+                                   static_cast<float>(input.mouseY()));
+        if (picked < 0 || picked >= campaign.stagesUnlocked) return;
+
+        campaign.currentStage = picked;
+        scenes.push(makePlayScene());
+    }
+
+    bool simulatesWorld() const override { return false; }
+
+private:
+    std::vector<Entity> owned_;
 };
 
 class TitleScene : public Scene {
@@ -1837,7 +2094,7 @@ public:
 
     void update(World&, InputManager& input, float, SceneStack& scenes) override {
         if (input.wasKeyPressed(SDL_SCANCODE_SPACE)) {
-            scenes.replace(makePlayScene());
+            scenes.replace(makeStageSelectScene());
         } else if (input.wasKeyPressed(SDL_SCANCODE_Q)) {
             scenes.pop();  // an empty stack is how the engine is told to quit
         }
@@ -1851,6 +2108,10 @@ private:
 
 std::unique_ptr<Scene> makeTitleScene() {
     return std::make_unique<TitleScene>();
+}
+
+std::unique_ptr<Scene> makeStageSelectScene() {
+    return std::make_unique<StageSelectScene>();
 }
 
 std::unique_ptr<Scene> makePlayScene() {

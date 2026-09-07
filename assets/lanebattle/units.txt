@@ -106,3 +106,80 @@ name   = SUPPLY
 cost   = 200
 growth = 1.85
 effect = 3
+
+# ---------------------------------------------------------------------------
+# The campaign. Unlike units, these REPLACE the built-in list rather than
+# merging into it: a campaign is an ordered sequence, so a file describing
+# three stages means a three-stage campaign.
+#
+#   enemy_income         multiplier on the opponent's gold rate
+#   enemy_castle_health  how much castle there is to chew through
+#   wave_size            how many units it banks for before spending
+#   composition          roster indices it cycles: 0 runner, 1 soldier, 2 archer
+#
+# The shape of this curve was measured, not chosen. Every stage is played by
+# three different armies in the tests, and the numbers below are the third
+# attempt: the first left three stages nobody could win, and the second put a
+# wall at stage three because a LEAN composition beats a padded one even at
+# lower income. Early stages are diluted with runners on purpose.
+#
+# Roughly: stage 1 teaches you the button, stage 2 that one unit type is not
+# enough, stages 3-7 that composition wins, and stage 8 that composition alone
+# does not — it needs two income upgrades behind it.
+# ---------------------------------------------------------------------------
+
+[stage]
+name                = THE BORDER
+enemy_income        = 0.40
+enemy_castle_health = 350
+wave_size           = 2
+composition         = 1,0
+
+[stage]
+name                = RIVER CROSSING
+enemy_income        = 0.55
+enemy_castle_health = 450
+wave_size           = 2
+composition         = 1,1,0
+
+[stage]
+name                = THE FOOTHILLS
+enemy_income        = 0.68
+enemy_castle_health = 550
+wave_size           = 3
+composition         = 1,1,0,2
+
+[stage]
+name                = OLD ROAD
+enemy_income        = 0.80
+enemy_castle_health = 650
+wave_size           = 3
+composition         = 1,1,2,0
+
+[stage]
+name                = THE PASS
+enemy_income        = 0.90
+enemy_castle_health = 750
+wave_size           = 3
+composition         = 1,1,2
+
+[stage]
+name                = BLACK FIELD
+enemy_income        = 1.00
+enemy_castle_health = 850
+wave_size           = 4
+composition         = 1,2,1,2,0
+
+[stage]
+name                = THE GATES
+enemy_income        = 1.05
+enemy_castle_health = 900
+wave_size           = 4
+composition         = 1,1,2,0,2
+
+[stage]
+name                = THE KEEP
+enemy_income        = 1.15
+enemy_castle_health = 1000
+wave_size           = 4
+composition         = 1,1,2,2

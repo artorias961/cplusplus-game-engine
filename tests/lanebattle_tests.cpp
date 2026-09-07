@@ -76,10 +76,30 @@ struct Game {
     // and the failure would land somewhere else entirely.
     Game() : scenes(), driver(world, scenes) { lanebattle::resetBalance(); }
 
+    // Title -> stage list -> battle. The stage list arrived with the campaign
+    // and sits between the two, so this is two taps rather than one.
+    //
+    // Stage 1 unless told otherwise: it is the only one unlocked at the start,
+    // and every test written before the campaign existed assumes the settings
+    // it happens to have.
     void startPlaying() {
         scenes.push(lanebattle::makeTitleScene());
         driver.step();
+        driver.tap(SDL_SCANCODE_SPACE);   // title -> stage list
+        driver.step(2);
+        driver.tap(SDL_SCANCODE_RETURN);  // stage list -> the latest stage
+        driver.step(2);
+    }
+
+    // Opens the campaign up to `stage` and plays that one, for tests about
+    // stages rather than about the battle.
+    void startStage(int stage) {
+        scenes.push(lanebattle::makeTitleScene());
+        driver.step();
+        lanebattle::campaignOf(world).stagesUnlocked = stage + 1;
         driver.tap(SDL_SCANCODE_SPACE);
+        driver.step(2);
+        driver.tap(SDL_SCANCODE_RETURN);
         driver.step(2);
     }
 
@@ -325,15 +345,24 @@ void testTheEnemySpawnsOnItsOwn() {
     Game game;
     game.startPlaying();
 
-    // It banks for a whole wave first, so nothing appears immediately — which
-    // is the point of the change, and worth asserting rather than assuming.
-    game.driver.step(5);
-    check(lanebattle::countUnits(game.world, false) == 0,
-          "the enemy does not spend on sight any more");
+    // Emptied first. Stage one opens with two soldiers and the starting purse
+    // already covers them, so the opponent legitimately sends its first wave
+    // on the opening frame — which made this look like "spends on sight" when
+    // it is "could afford the whole wave immediately".
+    game.session().enemyGold = 0.0f;
+    game.session().enemyWaveRemaining = 0;
 
-    game.driver.step(60 * 12);  // long enough to bank and send
+    game.driver.step(30);
+    check(lanebattle::countUnits(game.world, false) == 0,
+          "an opponent that cannot afford a whole wave sends nothing");
+
+    // Handed the money rather than left to earn it: the first stage's opponent
+    // is deliberately poor, so waiting for it to save up measures the stage's
+    // income dial instead of the thing this test is about.
+    game.session().enemyGold = 5000.0f;
+    game.driver.step(60 * 8);
     check(lanebattle::countUnits(game.world, false) >= 2,
-          "it sends a wave rather than a trickle");
+          "and one that can afford a wave sends a wave, not a trickle");
 }
 
 // The opponent used to spend the instant it could afford to, which measuring a
@@ -391,9 +420,12 @@ void testTheEnemyPaysForItsUnits() {
 
     const int fieldedBefore = lanebattle::countUnits(game.world, false);
     const float before = game.session().enemyGold;
-    game.driver.step(2);
 
-    check(lanebattle::countUnits(game.world, false) == fieldedBefore + 1,
+    // Three frames, not two: the first decides it can afford a wave and the
+    // next actually sends one, so stopping at two lands exactly on the seam.
+    game.driver.step(3);
+
+    check(lanebattle::countUnits(game.world, false) >= fieldedBefore + 1,
           "the enemy spawned");
     check(game.session().enemyGold < before, "and paid for it");
 
@@ -421,8 +453,16 @@ void testTheEconomiesAreSymmetric() {
 
     const float playerEarned = game.session().gold - playerBefore;
     const float enemyEarned = game.session().enemyGold - enemyBefore;
-    check(std::fabs(playerEarned - enemyEarned) < 0.01f,
-          "both sides earn at the same rate");
+
+    // Symmetric UP TO the stage's difficulty dial, which is the whole point of
+    // that dial: there is exactly one number making the opponent richer or
+    // poorer, and it is written on the stage. Before the campaign this checked
+    // for equality, because the multiplier was fixed at 1.
+    const float expected = playerEarned * game.session().enemyIncome;
+    check(std::fabs(enemyEarned - expected) < 0.05f,
+          "the opponent earns the player's rate times the stage's multiplier");
+    check(game.session().enemyIncome == lanebattle::stageKind(0).enemyIncome,
+          "and that multiplier is the one the stage asked for");
 }
 
 void testPauseFreezesTheBattle() {
@@ -450,12 +490,16 @@ void testPauseFreezesTheBattle() {
           "unpausing resumes the battle");
 }
 
-void testRestartingAfterDefeat() {
+// This used to be one test called "restarting after defeat", which broke the
+// ENEMY castle — a win — and then checked the battle restarted. It had been
+// misnamed since slice 1 and nothing noticed, because before the campaign a
+// win and a loss both did the same thing. They no longer do, so it is two
+// tests with the names they should always have had.
+void testWinningReturnsToTheCampaign() {
     Game game;
     game.startPlaying();
     game.suppressEnemySpawns();
 
-    // End it quickly.
     const Entity mine = lanebattle::spawnUnit(game.world, true);
     const Entity enemyCastle = lanebattle::findCastle(game.world, false);
     game.world.getComponent<Transform>(mine)->x =
@@ -463,24 +507,57 @@ void testRestartingAfterDefeat() {
         stats(kSoldier).range + 4.0f;
     game.world.getComponent<Castle>(enemyCastle)->health = 1.0f;
     game.driver.step(4);
+
     check(game.session().gameOver, "the battle is over");
+    check(game.session().playerWon, "and it was a win");
+
+    game.driver.tap(SDL_SCANCODE_R);
+    game.driver.step(4);
+
+    check(lanebattle::findSession(game.world) == nullptr,
+          "R after a win leaves the battle entirely");
+    check(lanebattle::campaignOf(game.world).stagesUnlocked >= 2,
+          "and the next stage is open");
+}
+
+void testLosingLetsYouRetryTheSameStage() {
+    // Started on a LATER stage on purpose. Retrying stage one cannot tell
+    // "restart this stage" from "restart at stage one", so the mutation that
+    // drops every retry back to the beginning passed cleanly against it.
+    constexpr int kStage = 3;
+
+    Game game;
+    game.startStage(kStage);
+    game.suppressEnemySpawns();
+
+    const Entity myCastle = lanebattle::findCastle(game.world, true);
+    game.world.getComponent<Castle>(myCastle)->health = 0.0f;
+    game.session().gameOver = true;
+    game.driver.step(4);
 
     game.driver.tap(SDL_SCANCODE_R);
     game.driver.step(3);
 
-    check(!game.session().gameOver, "R starts a fresh battle");
+    check(lanebattle::findSession(game.world) != nullptr,
+          "R after a loss stays in the battle");
+    check(!game.session().gameOver, "and starts a fresh one");
     check(game.session().gold >= lanebattle::kStartingGold &&
               game.session().gold < lanebattle::kStartingGold + 5.0f,
           "the purse resets");
-    check(game.castleHealth(false) == lanebattle::kCastleHealth,
-          "the enemy castle is rebuilt");
+    check(game.castleHealth(true) == lanebattle::kCastleHealth,
+          "your castle is rebuilt");
     check(lanebattle::countUnits(game.world, true) == 0,
           "the previous battle's units are gone");
-    // The enemy starts spending again immediately with its refilled purse, so
-    // it may already have one on the field. What matters is that the old army
-    // didn't survive the reset.
-    check(lanebattle::countUnits(game.world, false) <= 1,
-          "and the enemy is starting over too");
+
+    // The retry is the SAME stage, not the first one. Forgetting to re-apply
+    // the stage after resetting the session would make every retry of stage
+    // eight secretly a retry of stage one.
+    check(game.session().enemyIncome ==
+              lanebattle::stageKind(kStage).enemyIncome,
+          "and it is still the stage you lost, not the first one");
+    check(game.castleHealth(false) ==
+              lanebattle::stageKind(kStage).enemyCastleHealth,
+          "with that stage's castle back up, not the opening one's");
 }
 
 // --- The view (slice 2) ----------------------------------------------------
@@ -2191,6 +2268,7 @@ void testTheEnemyUpgradesToo() {
     check(total > 0, "the opponent buys upgrades of its own");
 }
 
+
 // --- Can the game actually be played? --------------------------------------
 
 // Plays a whole battle on a fixed composition, sending each unit as soon as it
@@ -2225,6 +2303,190 @@ int playBattle(Game& game, const int* cycle, int cycleLength) {
         if (game.session().gameOver) return game.session().playerWon ? 1 : -1;
     }
     return 0;
+}
+
+// --- The campaign (slice 9) ------------------------------------------------
+
+void testTheCampaignStartsWithOneStageOpen() {
+    Game game;
+    World& world = game.world;
+    check(lanebattle::campaignOf(world).stagesUnlocked == 1,
+          "a new campaign has exactly one stage open");
+    check(lanebattle::stageCount() >= 8, "and eight of them to get through");
+}
+
+void testTheStageListOnlyLetsYouPlayWhatIsUnlocked() {
+    Game game;
+    game.scenes.push(lanebattle::makeTitleScene());
+    game.driver.step();
+    game.driver.tap(SDL_SCANCODE_SPACE);
+    game.driver.step(2);
+
+    lanebattle::campaignOf(game.world).stagesUnlocked = 2;
+
+    // A locked row is drawn but does nothing. Clicking it must not start a
+    // battle, or the campaign's order means nothing.
+    game.driver.clickAt(static_cast<int>(lanebattle::kStageX + 20),
+                        static_cast<int>(lanebattle::stageTop(5) + 8));
+    game.driver.step(3);
+    check(lanebattle::findSession(game.world) == nullptr,
+          "clicking a locked stage starts nothing");
+
+    // An unlocked one does.
+    game.driver.clickAt(static_cast<int>(lanebattle::kStageX + 20),
+                        static_cast<int>(lanebattle::stageTop(1) + 8));
+    game.driver.step(3);
+    check(lanebattle::findSession(game.world) != nullptr,
+          "clicking an unlocked stage starts that battle");
+    check(lanebattle::campaignOf(game.world).currentStage == 1,
+          "and it is the stage that was clicked");
+}
+
+void testStageHitTesting() {
+    for (int stage = 0; stage < lanebattle::stageCount(); ++stage) {
+        check(lanebattle::stageAt(lanebattle::kStageX + 10.0f,
+                                  lanebattle::stageTop(stage) + 8.0f) == stage,
+              "each stage row is its own button");
+    }
+    check(lanebattle::stageAt(60.0f, lanebattle::stageTop(0) + 8.0f) == -1,
+          "and the margin beside the list is not one");
+}
+
+// Each stage sets the opponent's three levers. If they were not actually
+// applied, every stage would be the same fight with a different name — which
+// is the failure mode a stage table invites.
+void testEachStageConfiguresItsOwnBattle() {
+    Game easy;
+    easy.startStage(0);
+    const float easyIncome = easy.session().enemyIncome;
+    const float easyCastle = easy.castleHealth(false);
+
+    Game hard;
+    hard.startStage(lanebattle::stageCount() - 1);
+    const float hardIncome = hard.session().enemyIncome;
+    const float hardCastle = hard.castleHealth(false);
+
+    check(hardIncome > easyIncome,
+          "a later stage gives the opponent a better economy");
+    check(hardCastle > easyCastle, "and more castle to chew through");
+    check(easyIncome == lanebattle::stageKind(0).enemyIncome,
+          "and each battle uses the numbers its own stage asked for");
+    check(easyCastle == lanebattle::stageKind(0).enemyCastleHealth,
+          "including the castle it was given");
+}
+
+void testStagesFieldDifferentArmies() {
+    Game first;
+    first.startStage(0);
+    Game last;
+    last.startStage(lanebattle::stageCount() - 1);
+
+    bool differs = first.session().compositionLength !=
+                   last.session().compositionLength;
+    for (int index = 0; index < first.session().compositionLength && !differs;
+         ++index) {
+        if (first.session().composition[index] !=
+            last.session().composition[index]) {
+            differs = true;
+        }
+    }
+    check(differs,
+          "stages field different armies, not the same one at a higher price");
+
+    // A composition naming a unit the roster does not have is dropped rather
+    // than clamped onto some other unit.
+    for (int index = 0; index < last.session().compositionLength; ++index) {
+        check(last.session().composition[index] < lanebattle::unitKindCount(),
+              "and every unit a stage asks for actually exists");
+    }
+}
+
+// The difficulty curve, asserted at both ends.
+//
+// These are the most fragile tests here and deliberately so. The first version
+// of the stage table left THREE stages that no strategy could win, and the
+// second put an unbeatable wall at stage three. Neither was visible in the
+// numbers; both took playing every stage to find.
+void testTheFirstStageIsAnOnRamp() {
+    static const int onlySoldiers[] = {kSoldier};
+    Game game;
+    game.startStage(0);
+    check(playBattle(game, onlySoldiers, 1) == 1,
+          "the first stage can be won without knowing anything about mixing");
+}
+
+void testTheLastStageNeedsMoreThanComposition() {
+    static const int mixed[] = {kSoldier, kSoldier, kArcher};
+    const int last = lanebattle::stageCount() - 1;
+
+    Game unaided;
+    unaided.startStage(last);
+    check(playBattle(unaided, mixed, 3) == -1,
+          "a good army alone does not win the last stage");
+
+    // The same army behind two income upgrades does. That is the capstone
+    // asking for the one system the earlier stages never forced you to use.
+    Game funded;
+    funded.startStage(last);
+    const int income = static_cast<int>(lanebattle::Upgrade::Income);
+    funded.session().upgrades[income] = 2;
+    check(playBattle(funded, mixed, 3) == 1,
+          "but the same army behind two income upgrades does");
+}
+
+void testWinningUnlocksTheNextStageOnly() {
+    Game game;
+    game.startStage(2);
+    check(lanebattle::campaignOf(game.world).stagesUnlocked == 3,
+          "three stages open going in");
+
+    game.suppressEnemySpawns();
+    const Entity mine = lanebattle::spawnUnit(game.world, true);
+    const Entity enemyCastle = lanebattle::findCastle(game.world, false);
+    game.world.getComponent<Transform>(mine)->x =
+        game.world.getComponent<Transform>(enemyCastle)->x -
+        stats(kSoldier).range + 4.0f;
+    game.world.getComponent<Castle>(enemyCastle)->health = 1.0f;
+    game.driver.step(4);
+
+    check(game.session().playerWon, "the stage was won");
+    check(lanebattle::campaignOf(game.world).stagesUnlocked == 4,
+          "which opens the next one and no more than that");
+}
+
+void testStagesCanComeFromAFile() {
+    lanebattle::resetBalance();
+    const int builtIn = lanebattle::stageCount();
+
+    const std::string path = writeRoster("lb_stages.txt", R"(
+[stage]
+name                = A SHORT WAR
+enemy_income        = 0.25
+enemy_castle_health = 200
+wave_size           = 1
+composition         = 0
+
+[stage]
+name                = A LONGER ONE
+enemy_income        = 2.0
+enemy_castle_health = 3000
+wave_size           = 6
+composition         = 2,2,1
+)");
+    check(lanebattle::loadBalance(path), "the file loaded");
+
+    // Stages REPLACE rather than merge: a file describing two stages means a
+    // two-stage campaign, not two stages bolted onto the built-in eight.
+    check(lanebattle::stageCount() == 2,
+          "a file's stages replace the built-in campaign entirely");
+    check(std::string(lanebattle::stageKind(0).name) == "A SHORT WAR",
+          "in the order the file gave them");
+    check(lanebattle::stageKind(1).enemyCastleHealth == 3000.0f,
+          "with the numbers the file gave them");
+
+    lanebattle::resetBalance();
+    check(lanebattle::stageCount() == builtIn,
+          "and resetting puts the built-in campaign back");
 }
 //
 // Every test above checks a rule in isolation: this one checks that the rules
@@ -2268,18 +2530,28 @@ void testOneUnitTypeIsNotEnough() {
     static const int onlyRunners[] = {kRunner};
     static const int onlyArchers[] = {kArcher};
 
+    // Fought on a LATER stage, not the first one.
+    //
+    // Stage one exists to be beaten by someone who has not learned anything
+    // yet: a weaker opponent behind a smaller castle. Mono-type armies win it,
+    // and that is correct rather than a balance failure — it is where the game
+    // teaches you to press a button. The claim being guarded here is that one
+    // unit type stops being enough once the campaign gets going, so it has to
+    // be measured somewhere the campaign has got going.
+    constexpr int kProvingGround = 4;
+
     Game soldiers;
-    soldiers.startPlaying();
+    soldiers.startStage(kProvingGround);
     check(playBattle(soldiers, onlySoldiers, 1) == -1,
-          "an army of nothing but soldiers loses");
+          "an army of nothing but soldiers loses a mid-campaign stage");
 
     Game runners;
-    runners.startPlaying();
+    runners.startStage(kProvingGround);
     check(playBattle(runners, onlyRunners, 1) == -1,
-          "an army of nothing but runners loses");
+          "an army of nothing but runners loses it too");
 
     Game archers;
-    archers.startPlaying();
+    archers.startStage(kProvingGround);
     check(playBattle(archers, onlyArchers, 1) == -1,
           "and archers with nobody to hide behind lose fastest of all");
 }
@@ -2305,7 +2577,8 @@ int main() {
     testTheEnemyPaysForItsUnits();
     testTheEconomiesAreSymmetric();
     testPauseFreezesTheBattle();
-    testRestartingAfterDefeat();
+    testWinningReturnsToTheCampaign();
+    testLosingLetsYouRetryTheSameStage();
 
     testTheFieldIsWiderThanTheWindow();
     testTheCameraStartsOnYourOwnCastle();
@@ -2381,6 +2654,16 @@ int main() {
     testUpgradesAreDataDriven();
     testARetunedUpgradeActuallyChangesTheGame();
     testTheEnemyUpgradesToo();
+
+    testTheCampaignStartsWithOneStageOpen();
+    testTheStageListOnlyLetsYouPlayWhatIsUnlocked();
+    testStageHitTesting();
+    testEachStageConfiguresItsOwnBattle();
+    testStagesFieldDifferentArmies();
+    testTheFirstStageIsAnOnRamp();
+    testTheLastStageNeedsMoreThanComposition();
+    testWinningUnlocksTheNextStageOnly();
+    testStagesCanComeFromAFile();
 
     testABattleCanBeWon();
     testOneUnitTypeIsNotEnough();
