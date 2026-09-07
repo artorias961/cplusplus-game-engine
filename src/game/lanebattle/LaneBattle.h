@@ -181,6 +181,26 @@ constexpr float kCameraMaxX = kWorldWidth - static_cast<float>(kWindowWidth);
 // for each castle and each side's front line. On a one-screen field this would
 // be clutter; on a field two and a half screens wide it is the only way to
 // know a push is happening while you are looking somewhere else.
+// --- Animation -------------------------------------------------------------
+//
+// Units are drawn as a coloured block with an articulated stick figure over
+// the top of it: two legs that swing while walking, and an arm that swings
+// through an arc when a blow lands. The block is the silhouette and reads at a
+// glance; the figure is what makes it obvious whether something is marching or
+// fighting, which was previously visible only as a rectangle that had stopped.
+//
+// It is built out of `Polygon`, whose points are a plain vector this rebuilds
+// every frame. No sprite sheets, no art files, and — the reason this route was
+// taken over sprites — nothing to draw before it works.
+//
+// That does mean this slice does NOT deliver the `Animation` component and
+// `Sprite.flip` the roadmap predicted. Those are for frame-based sprite
+// animation, and building them now would be building for art that does not
+// exist. They stay on the roadmap for whenever it does.
+constexpr float kWalkCycleRate = 0.10f;   // radians of leg swing per pixel walked
+constexpr float kLegSwing = 6.0f;         // how far a foot travels from centre
+constexpr float kSwingDecayRate = 5.0f;   // how fast an attack swing plays out
+
 // --- The spawn bar ---------------------------------------------------------
 //
 // One button per row of the roster, along the bottom of the screen. The number
@@ -234,6 +254,36 @@ struct Unit {
     int kind = 1;  // an index into kUnitKinds
     float health = 0.0f;
     float timeUntilAttack = 0.0f;
+
+    // Where the walk cycle has got to, advanced by distance travelled rather
+    // than by time — so a runner's legs move faster than a soldier's for free,
+    // and nothing slides with its feet still.
+    float phase = 0.0f;
+
+    // Counts down from 1 to 0 after a blow lands, driving the arm through its
+    // arc. Separate from timeUntilAttack because the swing should be quick and
+    // the same length for every unit, while the delay between blows is a
+    // balance number that differs per kind.
+    float swing = 0.0f;
+
+    // The stick figure drawn over this unit, so a death can take it along in
+    // the same frame. Relying on the orphan sweep alone left the figure alive
+    // for a frame after its unit — invisible on screen, but it meant "one
+    // figure per unit" was briefly false during every fight, and a test that
+    // has to tolerate a transient cannot catch a real leak.
+    engine::Entity figure = engine::kInvalidEntity;
+};
+
+// The stick figure drawn over a unit. One per unit, owning no state of its own
+// — everything about it is recomputed each frame from its owner.
+//
+// It is a separate entity rather than more fields on the unit because the
+// renderer draws components, and a unit needs to be both a filled block and a
+// line drawing. Keeping the link one-way (figure knows its owner, not the
+// reverse) means nothing has to remember to tidy up: a figure whose owner has
+// gone is an orphan, and the animation pass sweeps orphans.
+struct Figure {
+    engine::Entity owner = engine::kInvalidEntity;
 };
 
 struct Castle {
@@ -288,6 +338,15 @@ engine::Camera* findCamera(engine::World& world);
 // castle when it has nothing on the field. This is what the camera follows and
 // what the minimap marks.
 float frontLineX(engine::World& world, bool leftSide);
+
+// How many stick figures are on the field. Exposed only so a test can prove
+// they are cleaned up: a unit that dies leaving its figure behind is an entity
+// leak that nothing else would notice until the frame rate did.
+int countFigures(engine::World& world);
+
+// Advances every unit's walk cycle and attack swing and rebuilds its figure,
+// then sweeps away figures whose owner has died. Called once per frame.
+void animateUnits(engine::World& world, float dt);
 
 // Which spawn-bar button is under this screen position, or -1 for none.
 // Exposed because it is the rule the UI is built on, and a test should be able

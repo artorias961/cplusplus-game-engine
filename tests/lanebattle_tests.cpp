@@ -997,6 +997,184 @@ void testTheKeysStillWork() {
           "and charge the same as clicking does");
 }
 
+// --- Animation (slice 5) ---------------------------------------------------
+//
+// A unit is now two entities: a coloured block and a stick figure drawn over
+// it. None of what that looks like can be tested here — no window, no eyes —
+// so these check the two things that CAN go wrong invisibly: the figure
+// tracking the wrong thing, and figures piling up after their units die.
+
+Entity figureOf(World& world, Entity owner) {
+    for (Entity entity : world.entities()) {
+        lanebattle::Figure* figure = world.getComponent<lanebattle::Figure>(entity);
+        if (figure && figure->owner == owner) return entity;
+    }
+    return kInvalidEntity;
+}
+
+void testEveryUnitHasAFigure() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    check(lanebattle::countFigures(game.world) == 0, "an empty field has none");
+
+    lanebattle::spawnUnit(game.world, true, kSoldier);
+    lanebattle::spawnUnit(game.world, true, kArcher);
+    game.driver.step();
+
+    check(lanebattle::countFigures(game.world) == 2,
+          "one figure per unit, whatever kind");
+}
+
+void testAFigureFollowsItsUnit() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const Entity unit = lanebattle::spawnUnit(game.world, true, kSoldier);
+    game.driver.step();
+
+    const Entity figure = figureOf(game.world, unit);
+    check(figure != kInvalidEntity, "the figure can be found from its unit");
+
+    game.driver.step(30);  // half a second of walking
+
+    const Transform* body = game.world.getComponent<Transform>(unit);
+    const Transform* drawn = game.world.getComponent<Transform>(figure);
+    check(std::fabs(drawn->x - (body->x + stats(kSoldier).width / 2.0f)) < 0.01f,
+          "it sits on the centre line of the block it decorates");
+    check(std::fabs(drawn->y - lanebattle::kGroundY) < 0.01f,
+          "with its feet on the ground");
+
+    const Polygon* lines = game.world.getComponent<Polygon>(figure);
+    check(lines != nullptr && lines->points.size() >= 4,
+          "and it actually has limbs to draw");
+}
+
+// The walk cycle is driven by distance travelled rather than by time, so a
+// runner's legs move faster than a soldier's without either being told to, and
+// nothing ever slides along with its feet still.
+void testLegsMoveWithTheUnitNotWithTheClock() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const Entity walker = lanebattle::spawnUnit(game.world, true, kSoldier);
+    game.driver.step(30);
+    const float walked = game.world.getComponent<Unit>(walker)->phase;
+    check(walked > 0.0f, "a walking unit's legs swing");
+
+    // Now stop it by putting an enemy in reach, and let time keep passing.
+    const Entity blocker = lanebattle::spawnUnit(game.world, false, kSoldier);
+    const float walkerX = game.world.getComponent<Transform>(walker)->x;
+    game.world.getComponent<Transform>(blocker)->x =
+        walkerX + stats(kSoldier).range - 4.0f;
+    game.driver.step(2);
+
+    const float stopped = game.world.getComponent<Unit>(walker)->phase;
+    game.driver.step(30);
+    check(std::fabs(game.world.getComponent<Unit>(walker)->phase - stopped) < 0.01f,
+          "a unit standing still does not walk on the spot");
+
+    // A runner covers more ground per second, so its legs must cycle faster.
+    Game other;
+    other.startPlaying();
+    other.suppressEnemySpawns();
+    const Entity runner = lanebattle::spawnUnit(other.world, true, kRunner);
+    other.driver.step(30);
+    check(other.world.getComponent<Unit>(runner)->phase > walked,
+          "and a faster unit's legs cycle faster");
+}
+
+void testLandingABlowSwingsTheArm() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const Entity mine = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const Entity theirs = lanebattle::spawnUnit(game.world, false, kSoldier);
+    game.world.getComponent<Transform>(mine)->x = 400.0f;
+    game.world.getComponent<Transform>(theirs)->x =
+        400.0f + stats(kSoldier).range - 4.0f;
+
+    check(game.world.getComponent<Unit>(mine)->swing == 0.0f,
+          "a unit that has not swung is at rest");
+
+    game.driver.step(2);
+    check(game.world.getComponent<Unit>(mine)->swing > 0.0f,
+          "landing a blow starts the arm through its arc");
+
+    // And the arc plays out rather than sticking.
+    game.driver.step(30);
+    check(game.world.getComponent<Unit>(mine)->swing >= 0.0f,
+          "the swing never goes negative");
+}
+
+// The one thing about this slice that could rot silently: units are now two
+// entities, and if the second one is not cleaned up, a long battle leaks one
+// figure per death until the frame rate notices.
+void testFiguresDoNotOutliveTheirUnits() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const Entity doomed = lanebattle::spawnUnit(game.world, true, kSoldier);
+    game.driver.step();
+    check(lanebattle::countFigures(game.world) == 1, "it has a figure");
+
+    game.world.getComponent<Unit>(doomed)->health = 0.0f;
+    game.driver.step(3);
+
+    check(lanebattle::countUnits(game.world, true) == 0, "the unit died");
+    check(lanebattle::countFigures(game.world) == 0,
+          "and took its figure with it");
+}
+
+// The same guard, but over a whole battle with dozens of deaths — the shape
+// the leak would actually take.
+void testNoFiguresLeakAcrossABattle() {
+    Game game;
+    game.startPlaying();
+
+    for (int frame = 0; frame < 60 * 60; ++frame) {
+        if (game.session().spawnCooldown <= 0.0f) {
+            game.driver.tap(SDL_SCANCODE_2);
+        }
+        game.driver.step();
+        if (game.session().gameOver) break;
+    }
+
+    const int units = lanebattle::countUnits(game.world, true) +
+                      lanebattle::countUnits(game.world, false);
+    check(lanebattle::countFigures(game.world) == units,
+          "after a minute of fighting there is still exactly one figure per unit");
+}
+
+void testRestartingLeavesNoFiguresBehind() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    lanebattle::spawnUnit(game.world, true, kSoldier);
+    lanebattle::spawnUnit(game.world, true, kRunner);
+    game.driver.step();
+    check(lanebattle::countFigures(game.world) == 2, "two figures on the field");
+
+    // Lose, then restart.
+    const Entity myCastle = lanebattle::findCastle(game.world, true);
+    game.world.getComponent<Castle>(myCastle)->health = 0.0f;
+    game.session().gameOver = true;
+    game.driver.step(3);
+    game.driver.tap(SDL_SCANCODE_R);
+    game.driver.step(4);
+
+    const int units = lanebattle::countUnits(game.world, true) +
+                      lanebattle::countUnits(game.world, false);
+    check(lanebattle::countFigures(game.world) == units,
+          "a restart clears the old figures along with the old army");
+}
+
 // --- Can the game actually be played? --------------------------------------
 
 // Plays a whole battle on a fixed composition, sending each unit as soon as it
@@ -1130,6 +1308,14 @@ int main() {
     testDraggingScrollsTheView();
     testDraggingFromTheBarDoesNotScroll();
     testTheKeysStillWork();
+
+    testEveryUnitHasAFigure();
+    testAFigureFollowsItsUnit();
+    testLegsMoveWithTheUnitNotWithTheClock();
+    testLandingABlowSwingsTheArm();
+    testFiguresDoNotOutliveTheirUnits();
+    testNoFiguresLeakAcrossABattle();
+    testRestartingLeavesNoFiguresBehind();
 
     testABattleCanBeWon();
     testOneUnitTypeIsNotEnough();

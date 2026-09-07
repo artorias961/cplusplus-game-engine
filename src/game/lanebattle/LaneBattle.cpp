@@ -136,6 +136,33 @@ Entity createBackdrop(World& world) {
 // A unit's forward direction: +1 for the left side, -1 for the right.
 float facing(bool leftSide) { return leftSide ? 1.0f : -1.0f; }
 
+// The stick figure that goes over a unit's block. Drawn a shade darker than
+// the block so the limbs read against it.
+//
+// It carries no points yet — animateUnits fills them in on the first frame,
+// which keeps the shape of the figure in exactly one place instead of two that
+// have to agree.
+//
+// It draws on top of the block because it is created after it: within a layer
+// the renderer sorts by entity id, and ids increase in creation order. That is
+// a real guarantee rather than luck, but it is a quiet one, so: creating the
+// figure before its unit would put the limbs behind the silhouette.
+Entity createFigure(World& world, Entity owner, const Sprite& body) {
+    Entity figure = world.createEntity();
+    world.addComponent(figure, Transform{0.0f, 0.0f, 0.0f});
+    world.addComponent(figure, Figure{owner});
+
+    Polygon lines;
+    lines.closed = false;
+    lines.r = static_cast<unsigned char>(body.r / 3);
+    lines.g = static_cast<unsigned char>(body.g / 3);
+    lines.b = static_cast<unsigned char>(body.b / 3);
+    lines.layer = kFieldLayer;
+    world.addComponent(figure, lines);
+
+    return figure;
+}
+
 // --- Combat ----------------------------------------------------------------
 
 // The nearest enemy ahead of `attacker` and within reach, or kInvalidEntity.
@@ -305,6 +332,72 @@ int countUnitsOfKind(World& world, bool leftSide, int kind) {
     return count;
 }
 
+int countFigures(World& world) {
+    int count = 0;
+    for (Entity entity : world.entities()) {
+        if (world.hasComponent<Figure>(entity)) ++count;
+    }
+    return count;
+}
+
+void animateUnits(World& world, float dt) {
+    for (auto& [entity, figure] : world.view<Figure>()) {
+        Unit* unit = world.getComponent<Unit>(figure.owner);
+        Team* team = world.getComponent<Team>(figure.owner);
+        Transform* body = world.getComponent<Transform>(figure.owner);
+        Velocity* velocity = world.getComponent<Velocity>(figure.owner);
+
+        // An orphan. A death already takes its own figure with it, so this is
+        // the safety net rather than the mechanism: it catches any future path
+        // that makes a unit disappear without going through removeTheDead.
+        if (!unit || !team || !body || !velocity) {
+            world.destroyLater(entity);
+            continue;
+        }
+
+        const UnitKind& stats = kindOf(unit->kind);
+        const float direction = facing(team->leftSide);
+
+        // The walk cycle advances with DISTANCE, not with time, so a runner's
+        // legs move faster than a soldier's without either being told to and
+        // nothing ever slides along with its feet still.
+        unit->phase += std::fabs(velocity->dx) * dt * kWalkCycleRate;
+        unit->swing = std::max(0.0f, unit->swing - dt * kSwingDecayRate);
+
+        Transform* at = world.getComponent<Transform>(entity);
+        Polygon* lines = world.getComponent<Polygon>(entity);
+        if (!at || !lines) continue;
+
+        // The figure hangs off the bottom centre of the block it decorates.
+        at->x = body->x + stats.width / 2.0f;
+        at->y = kGroundY;
+
+        const float hipY = -stats.height * 0.45f;
+        const float shoulderY = -stats.height * 0.78f;
+        const float step = std::sin(unit->phase) * kLegSwing;
+
+        // The arm sweeps from raised to lowered as the swing plays out, and
+        // rests slightly forward when idle.
+        const float armAngle = unit->swing > 0.0f
+                                   ? (-1.1f + 1.9f * (1.0f - unit->swing))
+                                   : 0.25f;
+        const float reach = stats.range > 100.0f ? 10.0f : 16.0f;  // a bow is held closer
+        const float handX = std::cos(armAngle) * reach * direction;
+        const float handY = shoulderY + std::sin(armAngle) * reach;
+
+        // One unbroken stroke, retracing the hip: foot, hip, other foot, back
+        // up through the hip to the shoulder, then out along the arm. Retracing
+        // costs one duplicated line and saves needing a second entity.
+        lines->points.clear();
+        lines->points.push_back(Vec2{step * direction, 0.0f});
+        lines->points.push_back(Vec2{0.0f, hipY});
+        lines->points.push_back(Vec2{-step * direction, 0.0f});
+        lines->points.push_back(Vec2{0.0f, hipY});
+        lines->points.push_back(Vec2{0.0f, shoulderY});
+        lines->points.push_back(Vec2{handX, handY});
+    }
+}
+
 int buttonAt(float screenX, float screenY) {
     if (screenY < kButtonY || screenY > kButtonY + kButtonHeight) return -1;
 
@@ -381,6 +474,7 @@ Entity spawnUnit(World& world, bool leftSide, int kind) {
     component.kind = kind;
     component.health = stats.health;  // the table is the only source of health
     world.addComponent(unit, component);
+    world.getComponent<Unit>(unit)->figure = createFigure(world, unit, sprite);
 
     // A different pitch per kind, so you can hear what you just sent without
     // looking away from the front line.
@@ -541,6 +635,7 @@ public:
         // After the dead are gone, so the camera never chases a corpse for a
         // frame, and after the fight, so the minimap shows this frame's front
         // line rather than last frame's.
+        animateUnits(world, dt);
         updateCamera(world, *session, input, dt);
         refreshHud(world, *session);
         refreshMinimap(world);
@@ -590,8 +685,12 @@ private:
 
     void clearField(World& world) {
         for (Entity entity : world.entities()) {
+            // Figures go explicitly rather than being left to the orphan
+            // sweep: onExit is the one path where no further frame runs, so
+            // there would be nothing left to sweep them.
             if (world.hasComponent<Unit>(entity) ||
-                world.hasComponent<Shard>(entity)) {
+                world.hasComponent<Shard>(entity) ||
+                world.hasComponent<Figure>(entity)) {
                 world.destroyLater(entity);
             }
         }
@@ -726,6 +825,7 @@ private:
             if (unit->timeUntilAttack > 0.0f) continue;
 
             unit->timeUntilAttack = stats.attackDelay;
+            unit->swing = 1.0f;  // starts the arm through its arc
 
             if (Unit* victim = world.getComponent<Unit>(target)) {
                 victim->health -= stats.damage;
@@ -771,6 +871,7 @@ private:
             }
             playDeath();
             world.destroyLater(entity);
+            if (unit->figure != kInvalidEntity) world.destroyLater(unit->figure);
         }
     }
 

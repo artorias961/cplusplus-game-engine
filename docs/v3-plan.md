@@ -103,6 +103,46 @@ both were easy to get wrong:
   "the last button whose left edge you are past" silently makes the gaps part
   of the button to their left.
 
+**Slice 5 is done**, but not the way the roadmap predicted, and the difference
+is the whole point of it.
+
+The plan said slice 5 would pull an `Animation` component and `Sprite.flip` out
+of the engine — the machinery for frame-based sprite animation. It did not,
+because **there is no art and no artist**, and building a sprite-animation
+system for sprites that do not exist would have been the first speculative
+feature this project ever shipped.
+
+Instead each unit is now a coloured block with an articulated stick figure
+drawn over it, built out of `Polygon` — whose `points` are a plain vector the
+game rebuilds every frame. Two legs that swing while walking, an arm that
+sweeps through an arc when a blow lands. No sprite sheets, no files, and
+nothing to draw before it works. **It needed no engine code**, which is the
+third Lane Battle slice out of five to need none.
+
+`Animation` and `Sprite.flip` stay on the roadmap for whenever real art exists.
+They are not cancelled; they are just not owed yet.
+
+Three things in it are worth keeping:
+
+- **The walk cycle advances with distance travelled, not with time.** A runner's
+  legs cycle faster than a soldier's without either being told to, and nothing
+  ever slides along with its feet still. Driving it from the clock instead is a
+  one-word change and looks wrong immediately.
+- **A unit is now two entities, which is a leak waiting to happen.** The first
+  version relied on an orphan sweep — a figure whose owner has gone gets
+  destroyed — and that was *almost* right: deferred destruction meant the
+  figure outlived its unit by a frame, so "one figure per unit" was briefly
+  false during every fight. A death now takes its own figure with it, and the
+  sweep is the safety net rather than the mechanism. The test that found this
+  is the only one that catches it.
+- **The figure draws on top because it is created after the unit.** Within a
+  layer the renderer sorts by entity id, and ids increase in creation order.
+  That is a real guarantee, but a quiet one.
+
+What this slice cannot tell you: whether any of it looks right. There is no
+window in a test. Every other slice has been measurable; this one is the first
+that genuinely needs eyes.
+
 ## The open question, answered — and then answered again
 
 **Slice 2's verdict: it was not fun, and the reason was not the camera.**

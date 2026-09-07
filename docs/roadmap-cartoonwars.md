@@ -34,7 +34,8 @@ balance lives in files exported from a spreadsheet, one of which is called
 | --- | --- | --- | --- |
 | ~~**3**~~ **DONE** | **Make the battle a battle.** Three unit types (runner, soldier, archer) in a table, keys `1`-`3`, a population cap of 10, units that queue rather than standing inside one another, an opponent that banks a wave and cycles a composition — **and gold paid for kills**, which was not in this plan and turned out to be the mechanic the whole design rested on. | **Nothing**, as predicted. | **Yes.** Mono-type loses every time, ranged without a front line loses fastest, and mixed compositions win. See `v3-plan.md` for the measurements and the two wrong turns on the way. |
 | ~~**4**~~ **DONE** | **A spawn bar.** Clickable unit buttons showing cost, affordability and the draining cooldown; drag the field to scroll. Number keys kept. | **Mouse input** (held / pressed-this-frame / released) and **`screenToWorld`**, both exactly as predicted — plus mouse events in the test harness, which was not predicted and is what makes any of it testable. | Open. The bar teaches the roster where the keys did not, but whether it is *better* needs a player. |
-| **5** | **Units that move.** Walk, attack and death animations; units facing the way they travel. | **`Animation`** — a component plus a system advancing `Sprite.srcX`. `Sprite` already carries a source rect, so this is small. And **`Sprite.flip`**: `SDL_FLIP_NONE` is currently hardcoded, so today a left-facing unit needs a second copy of every frame. | Does it read as a fight rather than as rectangles sliding? |
+| ~~**5**~~ **DONE, differently** | **Units that move.** Each unit is a coloured block with an articulated stick figure over it: legs that swing while walking, an arm that sweeps when a blow lands. Built from `Polygon`, whose points the game rebuilds each frame. | **Nothing.** Option 1 from *the thing that is not on this list* below was taken, so no art exists to animate and no sprite machinery was owed. | Open — this is the first slice that cannot be measured. It needs eyes. |
+| **5b** | **Frame-based sprite animation**, if real art ever arrives. | **`Animation`** — a component plus a system advancing `Sprite.srcX`. And **`Sprite.flip`**: `SDL_FLIP_NONE` is hardcoded, so a left-facing unit needs a second copy of every frame. | Deferred, not cancelled. Owed the moment there are sprites. |
 | **6** | **A battlefield worth looking at.** Three or four background layers scrolling at different rates, a skyline, a foreground. | **A per-layer scroll factor.** `screenSpace` is a boolean today — full camera or none — with nothing in between, which is exactly what parallax needs. | Does the wide field feel like a place instead of a corridor? |
 | **7** | **Balance you can edit without a compiler.** Unit stats, costs and stage definitions move out of `constexpr` and into data files. | **File reading** — the engine has none at all today. `Resources.h` loads PNGs through SDL_image; nothing anywhere reads a data file. A small key/value or CSV reader is enough. | Only worth doing once the constants genuinely hurt — around six unit types. Until then it is speculative. |
 | **8** | **A castle that fights.** An aimed shot on a cooldown, and in-battle upgrades: income rate, castle health, population cap. | Probably nothing; projectiles are Transform + Velocity + Collider, all of which exist. | Is there anything to do while you wait for gold? |
@@ -47,9 +48,12 @@ balance lives in files exported from a spreadsheet, one of which is called
 ## Five engine additions, total
 
 Across eleven slices the engine gains: ~~**mouse input**~~ (done, slice 4),
-**`Animation` + sprite flip**, **a parallax scroll factor**, **file reading**,
-and **save/load** — plus a spatial grid if and only if a measurement asks for
-one.
+**`Animation` + sprite flip** (deferred — no art to animate), **a parallax
+scroll factor**, **file reading**, and **save/load** — plus a spatial grid if
+and only if a measurement asks for one.
+
+Five slices in, the engine has gained exactly two things: `View.h` and the
+mouse. Three of the five needed nothing at all.
 
 That is the whole list. Nothing about the ECS, the scene stack, the renderer's
 structure, the audio device or the collision system needs rebuilding to get
@@ -61,10 +65,10 @@ there, which is a reasonable verdict on the four games that produced them.
 no slice above is blocked on engine work — several are blocked on pictures.
 The realistic options, in the order I would try them:
 
-1. **Articulated polygon units.** `Polygon` already rotates around a Transform,
-   so a unit built from a few line segments can walk and swing with no art at
-   all. It costs nothing, it cannot look half-finished the way bad sprites do,
-   and it suits everything else about this project.
+1. **Articulated polygon units.** ← **taken, in slice 5.** `Polygon`'s points
+   are a plain vector, so a unit built from a few line segments can walk and
+   swing with no art at all. It cost nothing and needed no engine code. Whether
+   it *looks* right is still unanswered.
 2. **A CC0 asset pack** (Kenney, OpenGameArt). Free to use and redistribute,
    which the reference's art is not.
 3. **Draw it.** The engine loads PNGs and slices sheets already.
