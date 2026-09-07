@@ -21,6 +21,14 @@ CMakeFiles/
 CMakeUserPresets.json
 compile_commands.json
 
+# Reference material that must never enter git history: large binaries can't be
+# removed later without rewriting history, and third-party game packages aren't
+# ours to redistribute.
+*.apk
+*.ipa
+*.zip
+*.7z
+
 # OS junk
 Thumbs.db
 .DS_Store
