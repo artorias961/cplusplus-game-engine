@@ -44,7 +44,17 @@ jobs:
       # before failing. Running each suite twenty times costs a few seconds
       # and turns "it passed" into something worth believing.
       - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure --repeat until-fail:20
+        run: ctest --test-dir build -C Release --output-on-failure --repeat until-fail:20 -LE smoke
+
+      # The shipped binaries, started for half a second each on a runner with
+      # no display. Nothing else in the suite executes main.cpp, the real
+      # Engine::run, window creation or audio startup: a game that crashed on
+      # its first frame would pass everything above.
+      #
+      # Run once, not twenty times — starting a process is not the kind of
+      # test repetition finds flakes in.
+      - name: The games start
+        run: ctest --test-dir build -C Release --output-on-failure -L smoke
 
       # run.sh is the double-clickable launcher, and it is written on Windows
       # where it cannot be tried. Running it here for real — rather than just
@@ -81,7 +91,17 @@ jobs:
       # before failing. Running each suite twenty times costs a few seconds
       # and turns "it passed" into something worth believing.
       - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure --repeat until-fail:20
+        run: ctest --test-dir build -C Release --output-on-failure --repeat until-fail:20 -LE smoke
+
+      # The shipped binaries, started for half a second each on a runner with
+      # no display. Nothing else in the suite executes main.cpp, the real
+      # Engine::run, window creation or audio startup: a game that crashed on
+      # its first frame would pass everything above.
+      #
+      # Run once, not twenty times — starting a process is not the kind of
+      # test repetition finds flakes in.
+      - name: The games start
+        run: ctest --test-dir build -C Release --output-on-failure -L smoke
 
       # run.sh is the double-clickable launcher, and it is written on Windows
       # where it cannot be tried. Running it here for real — rather than just

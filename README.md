@@ -98,6 +98,7 @@ engine_project/
 ├── CHANGELOG.md        What v1.0 contains
 ├── run.bat             Double-click on Windows: build and play
 ├── run.sh              The same, for Linux and macOS
+├── manual_testing/     verify (do the checks pass) + mutate (would they notice?)
 ├── assets/
 │   ├── asteroids.png   Ship icon + rock, for the HUD and title screen
 │   └── lanebattle/units.txt   Lane Battle's roster and upgrades; edit, no rebuild
@@ -116,6 +117,7 @@ The build produces these targets, and the split is the point:
 | `engine_tests` | Asserts about the engine. Links `engine`. |
 | `asteroids_tests` / `breakout_tests` / `lanebattle_tests` | Asserts about each game's rules. |
 | `render_tests` | Draws real frames through SDL's `dummy` video driver and asserts on the pixels read back. No window, no GPU. |
+| `asteroids_starts` / `breakout_starts` / `lanebattle_starts` | Runs each shipped game for half a second headlessly and requires it to exit cleanly. The only tests that execute `main.cpp` and the real game loop. |
 
 Every game is shaped the same way — rules in a library, behind a three-line
 `main.cpp`. That split exists for one reason: a game whose logic lives inside

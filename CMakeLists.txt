@@ -103,6 +103,32 @@ add_test(NAME render_tests COMMAND render_tests)
 # headless behaviour CI does, rather than a window flashing up.
 set_tests_properties(render_tests PROPERTIES ENVIRONMENT "SDL_VIDEODRIVER=dummy")
 
+# --- Does the game actually start? ------------------------------------------
+#
+# Every game's RULES are tested by driving its scenes through tests/Harness.h,
+# but the harness reimplements the loop rather than using it. That left one
+# stretch of the project executed by nobody: main.cpp, the real Engine::run,
+# window creation, texture loading, audio startup and shutdown. A game that
+# crashed on its first frame, or failed to find its assets, would have passed
+# every test in the suite.
+#
+# These run the SHIPPED EXECUTABLE for half a second and require it to exit 0.
+# It is the shallowest possible test and it covers the deepest untested seam.
+#
+# Labelled `smoke` so CI can run them once rather than twenty times. The
+# repeated run exists to shake out flaky SIMULATION — a race in the rules, an
+# uninitialised value that only bites sometimes. Starting a process is not that
+# kind of test, and running it twenty times doubled the pipeline for nothing.
+#
+#   ctest -LE smoke --repeat until-fail:20    the flake hunt
+#   ctest -L  smoke                           the games start
+foreach(game asteroids breakout lanebattle)
+    add_test(NAME ${game}_starts COMMAND ${game})
+    set_tests_properties(${game}_starts PROPERTIES
+        LABELS "smoke"
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;TINY_ENGINE_MAX_FRAMES=30")
+endforeach()
+
 foreach(target engine asteroids_lib asteroids breakout_lib breakout
                 lanebattle_lib lanebattle engine_tests breakout_tests
                 asteroids_tests lanebattle_tests render_tests engine_bench)

@@ -32,3 +32,6 @@ compile_commands.json
 # OS junk
 Thumbs.db
 .DS_Store
+
+# Scratch build directories made by manual_testing/verify (archive check).
+_verify/

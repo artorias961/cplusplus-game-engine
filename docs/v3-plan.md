@@ -467,6 +467,53 @@ that exercises a code path is not the same as a test that would notice the path
 being wrong.** The only reliable way to tell the two apart is to break the code
 on purpose and watch.
 
+## And the games are started now, too
+
+Closing the renderer gap exposed a second one directly behind it. Every game's
+RULES are tested by driving its scenes through `tests/Harness.h` — but the
+harness reimplements the loop rather than using it. That left a stretch of the
+project executed by nobody at all: **`main.cpp`, the real `Engine::run`, window
+creation, texture loading, audio startup and shutdown**. A game that crashed on
+its first frame, or could not find its assets, would have passed every test in
+the suite.
+
+`TINY_ENGINE_MAX_FRAMES` closes it. Set it and the loop runs that many frames
+and exits; with `SDL_VIDEODRIVER=dummy` alongside, that happens on a machine
+with no display. Three ctest entries now start each shipped executable for half
+a second and require exit 0. It is the shallowest test in the project and it
+covers its deepest untested seam.
+
+It was proved by breaking the thing only it can see: deleting the
+software-renderer fallback in the `Engine` constructor, so the engine throws on
+any machine without an accelerated backend — which is every CI runner.
+
+    engine_tests      Passed        breakout_tests    Passed
+    asteroids_tests   Passed        lanebattle_tests  Passed
+    render_tests      Passed
+    asteroids_starts  EXCEPTION     breakout_starts   EXCEPTION
+    lanebattle_starts EXCEPTION
+
+Five suites green, three binaries dead. Note `render_tests` passing there:
+it skips deliberately when the Engine cannot be constructed, so that a machine
+which genuinely cannot render reports a skip rather than a failure. The price
+of that choice is that it cannot catch this, which is exactly why running the
+real binaries is worth its own test.
+
+They are labelled `smoke` so the pipeline runs them once rather than twenty
+times. The repeated run exists to shake out flaky *simulation*; starting a
+process is not that kind of test, and repeating it had doubled the pipeline
+from 94 seconds to 183 for no information. CI now does:
+
+    ctest -LE smoke --repeat until-fail:20     the flake hunt
+    ctest -L  smoke                            the games start
+
+### And CI itself was finally checked
+
+Every claim in these notes about Linux and macOS had been inference — this
+machine is Windows and nothing here had ever seen a pipeline result. The GitHub
+API says the last completed runs on `main` are **green on both platforms**, so
+the inference was sound and the hedging can stop.
+
 ## The open question, answered — and then answered again
 
 **Slice 2's verdict: it was not fun, and the reason was not the camera.**

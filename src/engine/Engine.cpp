@@ -344,11 +344,38 @@ void Engine::drawText(const std::string& text, int x, int y, int scale,
                         static_cast<int>(glyphRects_.size()));
 }
 
+// How many frames to run before quitting on our own, or 0 for "until the
+// player closes the window".
+//
+// This exists so the SHIPPED EXECUTABLES can be smoke-tested. Every game's
+// rules are driven headlessly by tests/Harness.h, but the harness deliberately
+// reimplements the loop — which means main.cpp, the real Engine::run, window
+// creation, asset loading and audio startup were the one stretch of this
+// project that nothing ever executed. A game that crashed on its first frame
+// would have passed every test in the suite.
+//
+// Set TINY_ENGINE_MAX_FRAMES=120 and the game plays two seconds and exits 0.
+// With SDL_VIDEODRIVER=dummy alongside it, that happens on a machine with no
+// display at all, which is what lets CI run it.
+namespace {
+int maxFramesFromEnvironment() {
+    const char* setting = SDL_getenv("TINY_ENGINE_MAX_FRAMES");
+    if (!setting) return 0;
+
+    const int frames = SDL_atoi(setting);
+    return frames > 0 ? frames : 0;
+}
+}  // namespace
+
 void Engine::run(World& world, const UpdateFn& onUpdate) {
     Uint64 previousTicks = SDL_GetPerformanceCounter();
     const Uint64 frequency = SDL_GetPerformanceFrequency();
 
+    const int maxFrames = maxFramesFromEnvironment();
+    int framesRun = 0;
+
     while (running_) {
+        if (maxFrames > 0 && framesRun++ >= maxFrames) break;
         // --- 1. Timing: how long did the last frame actually take? ---
         Uint64 currentTicks = SDL_GetPerformanceCounter();
         float dt = static_cast<float>(currentTicks - previousTicks) /
