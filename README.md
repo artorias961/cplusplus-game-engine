@@ -82,7 +82,7 @@ engine_project/
 │   └── engine_bench.cpp      Measures the naive parts; not a pass/fail test
 ├── .github/workflows/
 │   └── ci.yml          Builds and tests on Linux and macOS
-├── docs/               Screenshots used by this README
+├── docs/               Screenshots, and v3-plan.md (work in progress)
 ├── CHANGELOG.md        What v1.0 contains
 ├── run.bat             Double-click on Windows: build and play
 ├── run.sh              The same, for Linux and macOS
