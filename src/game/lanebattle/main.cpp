@@ -10,6 +10,8 @@
 
 #include "engine/ECS.h"
 #include "engine/Engine.h"
+#include <iostream>
+
 #include "engine/Scene.h"
 
 int main(int, char**) {
@@ -17,6 +19,18 @@ int main(int, char**) {
                               lanebattle::kWindowWidth,
                               lanebattle::kWindowHeight);
     engine::World world;
+
+    // Balance comes from a file if there is one, and from the compiled-in
+    // defaults if there is not. Said out loud on startup, because "why is this
+    // unit still expensive" has exactly two answers and one of them is that
+    // the file was never found.
+    if (lanebattle::loadBalance(lanebattle::kBalancePath)) {
+        std::cout << "Loaded roster from " << lanebattle::kBalancePath << " ("
+                  << lanebattle::unitKindCount() << " unit types)\n";
+    } else {
+        std::cout << "No " << lanebattle::kBalancePath
+                  << "; using the built-in roster.\n";
+    }
 
     lanebattle::setAudioDevice(&gameEngine.audio());
 

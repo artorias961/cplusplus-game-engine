@@ -13,6 +13,9 @@
 #include <cmath>
 #include <cstdio>
 
+#include <fstream>
+#include <string>
+
 #include "Harness.h"
 #include "LaneBattle.h"
 #include "engine/View.h"
@@ -32,7 +35,7 @@ constexpr int kSoldier = 1;
 constexpr int kArcher = 2;
 
 const lanebattle::UnitKind& stats(int kind) {
-    return lanebattle::kUnitKinds[kind];
+    return lanebattle::unitKind(kind);
 }
 
 int failures = 0;
@@ -51,7 +54,11 @@ struct Game {
     SceneStack scenes;
     harness::Harness driver;
 
-    Game() : scenes(), driver(world, scenes) {}
+    // The roster is global mutable state now that a file can change it, so
+    // every case starts from the compiled-in defaults. Without this, one test
+    // loading a file would quietly change the meaning of every test after it —
+    // and the failure would land somewhere else entirely.
+    Game() : scenes(), driver(world, scenes) { lanebattle::resetBalance(); }
 
     void startPlaying() {
         scenes.push(lanebattle::makeTitleScene());
@@ -324,7 +331,7 @@ void testTheEnemyMixesItsWave() {
     game.driver.step(60 * 8);
 
     int kindsSeen = 0;
-    for (int kind = 0; kind < lanebattle::kUnitKindCount; ++kind) {
+    for (int kind = 0; kind < lanebattle::unitKindCount(); ++kind) {
         if (lanebattle::countUnitsOfKind(game.world, false, kind) > 0) ++kindsSeen;
     }
     check(kindsSeen >= 2, "the enemy fields more than one kind of unit");
@@ -841,7 +848,7 @@ float buttonCenterY() {
 }
 
 void testButtonHitTesting() {
-    for (int kind = 0; kind < lanebattle::kUnitKindCount; ++kind) {
+    for (int kind = 0; kind < lanebattle::unitKindCount(); ++kind) {
         check(lanebattle::buttonAt(buttonCenterX(kind), buttonCenterY()) == kind,
               "the centre of a button is that button");
     }
@@ -866,7 +873,7 @@ void testClickingAButtonSendsItsUnit() {
     game.suppressEnemySpawns();
     game.session().gold = 10000.0f;
 
-    for (int kind = 0; kind < lanebattle::kUnitKindCount; ++kind) {
+    for (int kind = 0; kind < lanebattle::unitKindCount(); ++kind) {
         game.driver.clickAt(static_cast<int>(buttonCenterX(kind)),
                             static_cast<int>(buttonCenterY()));
         game.driver.step(2);
@@ -1299,6 +1306,195 @@ void testRestartingClearsTheScenery() {
           "and exactly as much after a restart — no more, no fewer");
 }
 
+// --- Data-driven balance (slice 7) -----------------------------------------
+
+std::string writeRoster(const char* name, const char* contents) {
+    // Written next to the test binary rather than into a temp directory: it
+    // needs no environment variable, it is the same place DataFile resolves
+    // relative paths against, and it is cleaned up with the build.
+    std::string path = name;
+    if (char* base = SDL_GetBasePath()) {
+        path = std::string(base) + name;
+        SDL_free(base);
+    }
+    std::ofstream out(path);
+    out << contents;
+    out.close();
+    return path;
+}
+
+// The defaults are what the game plays with when no file is found, which is
+// the normal case for a bare build directory. Every other test in this file
+// depends on them, so they are worth stating once.
+void testTheDefaultsStandWithoutAFile() {
+    lanebattle::resetBalance();
+    check(lanebattle::unitKindCount() == lanebattle::kDefaultUnitKindCount,
+          "the roster starts as the compiled-in defaults");
+
+    check(!lanebattle::loadBalance("no/such/file/units.txt"),
+          "a missing file reports failure");
+    check(lanebattle::unitKindCount() == lanebattle::kDefaultUnitKindCount,
+          "and changes nothing — a missing file is not an empty roster");
+    check(stats(kSoldier).cost == lanebattle::kDefaultUnitKinds[1].cost,
+          "the soldier still costs what the header says");
+}
+
+void testAFileOverridesTheDefaults() {
+    lanebattle::resetBalance();
+    const std::string path = writeRoster("lb_override.txt", R"(
+[unit]
+name = ARCHER
+cost = 40
+damage = 99
+)");
+
+    check(lanebattle::loadBalance(path), "the file loaded");
+    check(lanebattle::unitKindCount() == lanebattle::kDefaultUnitKindCount,
+          "overriding an existing name does not add a row");
+    check(stats(kArcher).cost == 40.0f, "the value in the file wins");
+    check(stats(kArcher).damage == 99.0f, "for every field it names");
+
+    // The point of per-field fallbacks: a file that changes one number leaves
+    // the rest of the row alone rather than zeroing it.
+    check(stats(kArcher).range == lanebattle::kDefaultUnitKinds[2].range,
+          "and a field the file does not mention keeps its old value");
+    check(stats(kSoldier).cost == lanebattle::kDefaultUnitKinds[1].cost,
+          "rows the file does not mention are untouched entirely");
+
+    // Every field has its own fallback, so every field needs its own case.
+    // Checking one of them proved nothing about the others: breaking the
+    // fallback on `cost` alone left this whole file passing, because no test
+    // had a row that named a unit without also naming its price.
+    lanebattle::resetBalance();
+    const std::string partial = writeRoster("lb_partial.txt", R"(
+[unit]
+name = SOLDIER
+speed = 111
+)");
+    check(lanebattle::loadBalance(partial), "a one-field file loads");
+    check(stats(kSoldier).speed == 111.0f, "the field it names changes");
+    check(stats(kSoldier).cost == lanebattle::kDefaultUnitKinds[1].cost,
+          "and the cost it does not name survives");
+    check(stats(kSoldier).health == lanebattle::kDefaultUnitKinds[1].health,
+          "as does the health");
+    check(stats(kSoldier).damage == lanebattle::kDefaultUnitKinds[1].damage,
+          "and the damage");
+    check(std::string(stats(kSoldier).name) == "SOLDIER",
+          "and it is still the same unit");
+
+    lanebattle::resetBalance();
+    check(stats(kSoldier).speed == lanebattle::kDefaultUnitKinds[1].speed,
+          "and resetting puts the defaults back");
+}
+
+// A data file that can only edit rows is a config file. Being able to add a
+// unit type without touching C++ is the actual point of the slice.
+void testAFileCanAddAUnitType() {
+    lanebattle::resetBalance();
+    const std::string path = writeRoster("lb_added.txt", R"(
+[unit]
+name = KNIGHT
+cost = 140
+health = 260
+damage = 22
+speed = 60
+)");
+
+    check(lanebattle::loadBalance(path), "the file loaded");
+    check(lanebattle::unitKindCount() == lanebattle::kDefaultUnitKindCount + 1,
+          "an unrecognised name adds a row rather than being ignored");
+
+    const int knight = lanebattle::kDefaultUnitKindCount;
+    check(std::string(stats(knight).name) == "KNIGHT", "under the name it gave");
+    check(stats(knight).health == 260.0f, "with the values it gave");
+
+    // Unspecified fields come from the soldier, so a half-written row still
+    // produces something that can walk and fight rather than a unit with no
+    // reach that stands still and dies.
+    check(stats(knight).range == lanebattle::kDefaultUnitKinds[1].range,
+          "and sensible defaults for everything it left out");
+    check(stats(knight).attackDelay > 0.0f, "including a usable attack delay");
+
+    lanebattle::resetBalance();
+}
+
+void testAddedUnitsAreReachableInGame() {
+    lanebattle::resetBalance();
+    const std::string path = writeRoster("lb_playable.txt", R"(
+[unit]
+name = KNIGHT
+cost = 20
+health = 200
+)");
+    check(lanebattle::loadBalance(path), "the file loaded");
+
+    // Deliberately NOT using Game, whose constructor resets the roster.
+    World world;
+    SceneStack scenes;
+    harness::Harness driver(world, scenes);
+    scenes.push(lanebattle::makePlayScene());
+    driver.step(2);
+
+    const int knight = lanebattle::kDefaultUnitKindCount;
+    const Entity spawned = lanebattle::spawnUnit(world, true, knight);
+    driver.step();
+
+    check(lanebattle::countUnitsOfKind(world, true, knight) == 1,
+          "a unit type that came from a file can be sent");
+    check(world.getComponent<Unit>(spawned)->health == 200.0f,
+          "and fights with the health the file gave it");
+    check(lanebattle::buttonAt(
+              lanebattle::buttonLeft(knight) + lanebattle::kButtonWidth / 2.0f,
+              lanebattle::kButtonY + 4.0f) == knight,
+          "and has a button on the spawn bar");
+
+    lanebattle::resetBalance();
+}
+
+// A roster longer than the bar is wide would otherwise draw buttons off the
+// side of the window, where they cannot be clicked and are not visible.
+void testTheSpawnBarStopsAtTheEdgeOfTheWindow() {
+    lanebattle::resetBalance();
+    std::string contents;
+    for (int extra = 0; extra < 12; ++extra) {
+        contents += "[unit]\nname = EXTRA" + std::to_string(extra) + "\n\n";
+    }
+    const std::string path = writeRoster("lb_many.txt", contents.c_str());
+    check(lanebattle::loadBalance(path), "a long roster loads");
+
+    check(lanebattle::unitKindCount() > lanebattle::kMaxVisibleButtons,
+          "there are more unit types than buttons that fit");
+    check(lanebattle::visibleButtonCount() == lanebattle::kMaxVisibleButtons,
+          "the bar shows as many as fit and no more");
+
+    const float pastTheEnd =
+        lanebattle::buttonLeft(lanebattle::kMaxVisibleButtons) + 4.0f;
+    check(lanebattle::buttonAt(pastTheEnd, lanebattle::kButtonY + 4.0f) == -1,
+          "and nothing is clickable past the last visible one");
+
+    lanebattle::resetBalance();
+}
+
+// The file the player actually receives, not just the parser that reads it.
+// Copied next to the test binary by CMake for exactly this.
+void testTheShippedRosterIsSane() {
+    lanebattle::resetBalance();
+    check(lanebattle::loadBalance(lanebattle::kBalancePath),
+          "the shipped roster file is where the game expects it");
+    check(lanebattle::unitKindCount() >= 3, "and holds at least the three kinds");
+
+    for (int kind = 0; kind < lanebattle::unitKindCount(); ++kind) {
+        const lanebattle::UnitKind& row = stats(kind);
+        check(row.cost > 0.0f && row.health > 0.0f && row.damage > 0.0f,
+              "every shipped unit costs something and can fight");
+        check(row.speed > 0.0f && row.range > 0.0f && row.attackDelay > 0.0f,
+              "and can move and reach and swing");
+        check(row.width > 0.0f && row.height > 0.0f, "and has a size");
+    }
+
+    lanebattle::resetBalance();
+}
+
 // --- Can the game actually be played? --------------------------------------
 
 // Plays a whole battle on a fixed composition, sending each unit as soon as it
@@ -1446,6 +1642,13 @@ int main() {
     testSceneryIsNotAValidTarget();
     testTheHudStillIgnoresTheCameraEntirely();
     testRestartingClearsTheScenery();
+
+    testTheDefaultsStandWithoutAFile();
+    testAFileOverridesTheDefaults();
+    testAFileCanAddAUnitType();
+    testAddedUnitsAreReachableInGame();
+    testTheSpawnBarStopsAtTheEdgeOfTheWindow();
+    testTheShippedRosterIsSane();
 
     testABattleCanBeWon();
     testOneUnitTypeIsNotEnough();

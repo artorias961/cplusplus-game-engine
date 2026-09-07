@@ -25,12 +25,13 @@ That's on purpose — an engine with only one game is a hypothesis, not an engin
 — and each needed something the last one didn't: Snake wanted fixed ticks and
 box collision, Asteroids wanted rotation and circles, Breakout wanted contact
 normals and sub-frame movement. Lane Battle has asked for very little across
-six slices, which is its own kind of result: a battlefield wider than its
+seven slices, which is its own kind of result: a battlefield wider than its
 window made world and screen coordinates differ for the first time, moving that
 rule out of the renderer into `View.h` where a test can reach it; a clickable
-spawn bar wanted a mouse; and scenery at a distance wanted a parallax factor,
+spawn bar wanted a mouse; scenery at a distance wanted a parallax factor,
 because `screenSpace` was a boolean with nothing between the world and the
-screen. Half its slices needed nothing at all.
+screen; and a roster worth rebalancing wanted a way to read a text file, which
+the engine had never had. Three of its seven slices needed nothing at all.
 
 It is **not** trying to be fast, complete, or production-ready. Storage uses
 `std::unordered_map` instead of packed arrays, there's no batching, no scene
@@ -49,8 +50,8 @@ an optimisation is worth doing.
 
 **The live tree is now growing a fourth game**, Lane Battle, and the engine
 grows only where that game demands it — the same rule that produced everything
-in v1.0. Six slices in, it has demanded three things: one new header, mouse
-input, and a parallax factor. Three of those six needed no engine code at all.
+in v1.0. Seven slices in, it has demanded four things: two small headers, mouse
+input, and a parallax factor. Three of those seven needed no engine code at all.
 `docs/v3-plan.md` has the running notes — including how measuring whole
 battles, rather than individual rules, found the game unwinnable twice before
 it was playable — and `docs/roadmap-cartoonwars.md` has what is left.
@@ -69,6 +70,7 @@ engine_project/
 │   ├── Systems.h       Movement and Lifetime (and includes Collision.h)
 │   ├── Collision.h     Overlap tests + contact normals, boxes and circles
 │   ├── Timing.h        TickTimer (variable frames -> fixed-length ticks)
+│   ├── DataFile.h      Reading balance tables out of a text file
 │   ├── View.h          World coordinates -> screen coordinates, given a Camera
 │   ├── Scene.h         Scene + SceneStack (menu / playing / paused / ...)
 │   ├── Font.h          A 5x7 bitmap font, built into the binary
@@ -96,7 +98,8 @@ engine_project/
 ├── run.bat             Double-click on Windows: build and play
 ├── run.sh              The same, for Linux and macOS
 ├── assets/
-│   └── asteroids.png   Ship icon + rock, for the HUD and title screen
+│   ├── asteroids.png   Ship icon + rock, for the HUD and title screen
+│   └── lanebattle/units.txt   Lane Battle's roster; edit it, no rebuild
 └── archive/
     ├── version_1/      Snake: the first engine, frozen
     └── version2/       This release (v1.0), frozen
@@ -725,6 +728,11 @@ soldier's without anything having to say so.
 Behind them are three bands of hills sliding past at 0.18, 0.45 and 0.72 of the
 camera's movement, and in front of them grass at 1.30 — faster than the ground,
 which is what sells depth in the other direction.
+
+The roster lives in `assets/lanebattle/units.txt`. Edit it and run the game —
+no compiler involved. It can change any stat of any unit and add whole new unit
+types; anything it leaves out keeps the value compiled into the header, and
+deleting the file entirely just puts everything back to those defaults.
 
 One thing worth knowing, because the game does not yet teach it: **no single
 unit type is a strategy.** An army of nothing but soldiers loses, an army of

@@ -23,6 +23,8 @@
 // ---------------------------------------------------------------------------
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "engine/Audio.h"
 #include "engine/Components.h"
@@ -88,14 +90,41 @@ struct UnitKind {
 //
 // These numbers are a starting point that was then measured rather than
 // argued about: see the matchup probe in the tests.
-constexpr UnitKind kUnitKinds[] = {
+// These are the DEFAULTS, not the roster. `assets/lanebattle/units.txt`
+// overrides any of them and may add more; a missing or broken file leaves
+// these exactly as they are, which is why the game still runs from a bare
+// build directory and why the tests are deterministic without touching a
+// filesystem. Read the live roster through `unitKind()` — never through this.
+constexpr UnitKind kDefaultUnitKinds[] = {
     // name       cost   hp    dmg   range  delay  speed   w      h     yours          theirs
     {"RUNNER",    35.0f, 60.0f,  8.0f,  30.0f, 0.45f, 150.0f, 16.0f, 26.0f, 150, 215, 255, 255, 175, 150},
     {"SOLDIER",   60.0f, 110.0f, 14.0f, 34.0f, 0.60f,  95.0f, 24.0f, 36.0f, 110, 190, 240, 235, 130, 110},
     {"ARCHER",    95.0f, 55.0f,  20.0f, 135.0f, 0.95f,  70.0f, 18.0f, 34.0f,  90, 140, 210, 200,  95, 130},
 };
-constexpr int kUnitKindCount =
-    static_cast<int>(sizeof(kUnitKinds) / sizeof(kUnitKinds[0]));
+constexpr int kDefaultUnitKindCount =
+    static_cast<int>(sizeof(kDefaultUnitKinds) / sizeof(kDefaultUnitKinds[0]));
+
+// The live roster. A file may override rows and append new ones, so both the
+// contents and the count are runtime values now.
+const std::vector<UnitKind>& unitKinds();
+const UnitKind& unitKind(int kind);  // clamped; never indexes off the end
+int unitKindCount();
+
+// Reads `path` (resolved against the executable) over the top of the roster.
+// Returns false if the file was not found, in which case nothing changed and
+// the defaults stand. Each `[unit]` section either updates the row whose name
+// it matches or appends a new one, and any field it omits keeps its previous
+// value — so a file that only wants to make archers cheaper says exactly that
+// and nothing else.
+bool loadBalance(const std::string& path);
+
+// Puts the roster back to the compiled-in defaults. Exists for the tests: the
+// roster is global mutable state, and a test that loads a file must not change
+// the meaning of the one that runs after it.
+void resetBalance();
+
+// The path the game loads at startup.
+constexpr const char* kBalancePath = "assets/lanebattle/units.txt";
 
 // The widest and tallest of them, for the few places that need a bound before
 // knowing which kind they are dealing with.
@@ -226,6 +255,18 @@ constexpr float kButtonX = 16.0f;
 constexpr float buttonLeft(int index) {
     return kButtonX + static_cast<float>(index) * (kButtonWidth + kButtonGap);
 }
+
+// How many buttons fit across the bottom before they run off the edge. The
+// roster's length is a runtime value now, so this is a real limit rather than
+// an arithmetic curiosity: a data file with ten unit types would otherwise
+// draw four of them into the void.
+constexpr int kMaxVisibleButtons =
+    static_cast<int>((static_cast<float>(kWindowWidth) - kButtonX + kButtonGap) /
+                     (kButtonWidth + kButtonGap));
+
+// The roster clamped to what fits. Buttons past this have no plate, no label
+// and no hit box — but their number keys still work, so nothing is unreachable.
+int visibleButtonCount();
 
 // Dragging the field scrolls the view, which is the genre's other mouse verb.
 // A few pixels of slop before a press counts as a drag, so a slightly shaky

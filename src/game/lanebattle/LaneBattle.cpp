@@ -26,6 +26,7 @@
 #include <string>
 #include <vector>
 
+#include "engine/DataFile.h"
 #include "engine/Font.h"
 #include "engine/Systems.h"
 
@@ -45,13 +46,9 @@ constexpr float kRightCastleX = kWorldWidth - kCastleMargin - kCastleWidth;
 constexpr float kLeftSpawnX = kLeftCastleX + kCastleWidth + 4.0f;
 constexpr float kRightSpawnX = kRightCastleX - kMaxUnitWidth - 4.0f;
 
-// Clamped so a bad index can never index off the end of the table. Every read
+// Clamped so a bad index can never index off the end of the roster. Every read
 // of a unit's stats goes through here.
-const UnitKind& kindOf(int kind) {
-    if (kind < 0) return kUnitKinds[0];
-    if (kind >= kUnitKindCount) return kUnitKinds[kUnitKindCount - 1];
-    return kUnitKinds[kind];
-}
+const UnitKind& kindOf(int kind) { return unitKind(kind); }
 
 const UnitKind& kindOf(World& world, Entity entity) {
     const Unit* unit = world.getComponent<Unit>(entity);
@@ -135,6 +132,14 @@ Entity createBackdrop(World& world) {
 
 // A unit's forward direction: +1 for the left side, -1 for the right.
 float facing(bool leftSide) { return leftSide ? 1.0f : -1.0f; }
+
+// A colour channel out of a data file, clamped rather than wrapped: 300 should
+// read as "as bright as it goes", not as 44.
+unsigned char channel(const DataSection& section, const char* key,
+                      unsigned char fallback) {
+    const float value = section.number(key, static_cast<float>(fallback));
+    return static_cast<unsigned char>(std::min(255.0f, std::max(0.0f, value)));
+}
 
 // The stick figure that goes over a unit's block. Drawn a shade darker than
 // the block so the limbs read against it.
@@ -304,6 +309,94 @@ void spawnShards(World& world, float x, float y, unsigned char r,
 
 }  // namespace
 
+// --- The roster ------------------------------------------------------------
+//
+// Global mutable state, which is worth calling out because this project has
+// almost none. It is here because the roster is genuinely one thing shared by
+// every part of the game, it is written once at startup and read everywhere
+// after, and the alternative — threading a roster reference through every
+// function that needs a unit's cost — would be worse to read for no gain.
+//
+// The cost of the choice is that tests must be able to put it back, hence
+// resetBalance(), which the test harness calls before every case.
+namespace {
+std::vector<UnitKind> gUnitKinds(std::begin(kDefaultUnitKinds),
+                                 std::end(kDefaultUnitKinds));
+
+// Names are matched case-sensitively and exactly. A file naming a unit that
+// does not exist is adding one, not misspelling one — there is no way to tell
+// the difference, so the friendlier reading wins.
+int indexOfName(const std::string& name) {
+    for (std::size_t index = 0; index < gUnitKinds.size(); ++index) {
+        if (name == gUnitKinds[index].name) return static_cast<int>(index);
+    }
+    return -1;
+}
+
+// Kept alive for the lifetime of the roster: UnitKind::name is a `const char*`
+// pointing either at a string literal in the defaults or at one of these.
+std::vector<std::unique_ptr<std::string>> gLoadedNames;
+}  // namespace
+
+const std::vector<UnitKind>& unitKinds() { return gUnitKinds; }
+
+const UnitKind& unitKind(int kind) {
+    if (kind < 0) return gUnitKinds.front();
+    if (static_cast<std::size_t>(kind) >= gUnitKinds.size()) {
+        return gUnitKinds.back();
+    }
+    return gUnitKinds[static_cast<std::size_t>(kind)];
+}
+
+int unitKindCount() { return static_cast<int>(gUnitKinds.size()); }
+
+void resetBalance() {
+    gUnitKinds.assign(std::begin(kDefaultUnitKinds), std::end(kDefaultUnitKinds));
+    gLoadedNames.clear();
+}
+
+bool loadBalance(const std::string& path) {
+    DataFile file;
+    if (!file.load(path)) return false;  // nothing found; defaults stand
+
+    for (const DataSection* section : file.all("unit")) {
+        const std::string name = section->text("name", "");
+        if (name.empty()) continue;  // a row with no name names nothing
+
+        int index = indexOfName(name);
+        if (index < 0) {
+            // A new kind. Its defaults are the soldier's, so a row that sets
+            // only a cost still produces something that can walk and fight
+            // rather than a unit with zero health that dies on arrival.
+            gLoadedNames.push_back(std::make_unique<std::string>(name));
+            UnitKind added = kDefaultUnitKinds[1];
+            added.name = gLoadedNames.back()->c_str();
+            gUnitKinds.push_back(added);
+            index = static_cast<int>(gUnitKinds.size()) - 1;
+        }
+
+        // Every field falls back to what the row already held, so a file may
+        // change one number and leave the rest alone.
+        UnitKind& kind = gUnitKinds[static_cast<std::size_t>(index)];
+        kind.cost = section->number("cost", kind.cost);
+        kind.health = section->number("health", kind.health);
+        kind.damage = section->number("damage", kind.damage);
+        kind.range = section->number("range", kind.range);
+        kind.attackDelay = section->number("attack_delay", kind.attackDelay);
+        kind.speed = section->number("speed", kind.speed);
+        kind.width = section->number("width", kind.width);
+        kind.height = section->number("height", kind.height);
+
+        kind.leftR = channel(*section, "left_r", kind.leftR);
+        kind.leftG = channel(*section, "left_g", kind.leftG);
+        kind.leftB = channel(*section, "left_b", kind.leftB);
+        kind.rightR = channel(*section, "right_r", kind.rightR);
+        kind.rightG = channel(*section, "right_g", kind.rightG);
+        kind.rightB = channel(*section, "right_b", kind.rightB);
+    }
+    return true;
+}
+
 // --- Queries ---------------------------------------------------------------
 
 Session* findSession(World& world) {
@@ -406,10 +499,14 @@ void animateUnits(World& world, float dt) {
     }
 }
 
+int visibleButtonCount() {
+    return std::min(unitKindCount(), kMaxVisibleButtons);
+}
+
 int buttonAt(float screenX, float screenY) {
     if (screenY < kButtonY || screenY > kButtonY + kButtonHeight) return -1;
 
-    for (int index = 0; index < kUnitKindCount; ++index) {
+    for (int index = 0; index < visibleButtonCount(); ++index) {
         const float left = buttonLeft(index);
         if (screenX >= left && screenX <= left + kButtonWidth) return index;
     }
@@ -834,7 +931,7 @@ private:
         // table row and one scancode rather than a change to any rule.
         static const SDL_Scancode keys[] = {SDL_SCANCODE_1, SDL_SCANCODE_2,
                                             SDL_SCANCODE_3, SDL_SCANCODE_4};
-        for (int kind = 0; kind < kUnitKindCount && kind < 4; ++kind) {
+        for (int kind = 0; kind < unitKindCount() && kind < 4; ++kind) {
             if (!input.isKeyDown(keys[kind])) continue;
             if (trySpawn(world, session, kind)) return;
         }
@@ -852,10 +949,10 @@ private:
     // Buys one unit if it can be afforded, and reports whether it did. The one
     // place gold is spent, so the keyboard and the mouse cannot drift apart.
     bool trySpawn(World& world, Session& session, int kind) {
-        if (kind < 0 || kind >= kUnitKindCount) return false;
-        if (session.gold < kUnitKinds[kind].cost) return false;
+        if (kind < 0 || kind >= unitKindCount()) return false;
+        if (session.gold < unitKind(kind).cost) return false;
 
-        session.gold -= kUnitKinds[kind].cost;
+        session.gold -= unitKind(kind).cost;
         session.spawnCooldown = kSpawnCooldown;
         spawnUnit(world, true, kind);
         return true;
@@ -882,9 +979,9 @@ private:
 
         const int kind = kEnemyComposition[session.enemyWaveIndex %
                                            kEnemyCompositionLength];
-        if (session.enemyGold < kUnitKinds[kind].cost) return;
+        if (session.enemyGold < unitKind(kind).cost) return;
 
-        session.enemyGold -= kUnitKinds[kind].cost;
+        session.enemyGold -= unitKind(kind).cost;
         session.enemySpawnTimer = kSpawnCooldown;
         session.enemyWaveIndex =
             (session.enemyWaveIndex + 1) % kEnemyCompositionLength;
@@ -899,7 +996,7 @@ private:
         for (int step = 0; step < kEnemyWaveSize; ++step) {
             const int index = (session.enemyWaveIndex + step) %
                               kEnemyCompositionLength;
-            total += kUnitKinds[kEnemyComposition[index]].cost;
+            total += unitKind(kEnemyComposition[index]).cost;
         }
         return total;
     }
@@ -1066,8 +1163,14 @@ private:
     // --- The spawn bar -----------------------------------------------------
 
     void buildSpawnBar(World& world) {
-        for (int kind = 0; kind < kUnitKindCount; ++kind) {
-            const UnitKind& stats = kUnitKinds[kind];
+        const int shown = visibleButtonCount();
+        buttonPlate_.assign(shown, kInvalidEntity);
+        buttonFill_.assign(shown, kInvalidEntity);
+        buttonName_.assign(shown, kInvalidEntity);
+        buttonCost_.assign(shown, kInvalidEntity);
+
+        for (int kind = 0; kind < shown; ++kind) {
+            const UnitKind& stats = unitKind(kind);
             const float left = buttonLeft(kind);
 
             // Three pieces per button: the plate, a fill that shrinks as the
@@ -1104,8 +1207,8 @@ private:
     }
 
     void refreshSpawnBar(World& world, const Session& session, int fielded) {
-        for (int kind = 0; kind < kUnitKindCount; ++kind) {
-            const UnitKind& stats = kUnitKinds[kind];
+        for (int kind = 0; kind < visibleButtonCount(); ++kind) {
+            const UnitKind& stats = unitKind(kind);
             const bool affordable = session.gold >= stats.cost &&
                                     fielded < kPopulationCap;
 
@@ -1238,10 +1341,11 @@ private:
     Entity cameraEntity_ = kInvalidEntity;
     Entity goldText_ = kInvalidEntity;
     Entity popText_ = kInvalidEntity;
-    Entity buttonPlate_[kUnitKindCount] = {};
-    Entity buttonFill_[kUnitKindCount] = {};
-    Entity buttonName_[kUnitKindCount] = {};
-    Entity buttonCost_[kUnitKindCount] = {};
+    // Sized at runtime: the roster's length is whatever the data file made it.
+    std::vector<Entity> buttonPlate_;
+    std::vector<Entity> buttonFill_;
+    std::vector<Entity> buttonName_;
+    std::vector<Entity> buttonCost_;
     Entity leftHealthText_ = kInvalidEntity;
     Entity rightHealthText_ = kInvalidEntity;
     Entity minimapLeftCastle_ = kInvalidEntity;

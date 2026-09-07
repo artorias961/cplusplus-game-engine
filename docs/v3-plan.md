@@ -191,6 +191,60 @@ targets resolves differently — deterministic within a build, not necessarily
 identical across platforms. Nothing depends on the tie-break, and CI runs the
 suite on Linux and macOS, which is what would catch it if something ever did.
 
+**Slice 7 is done**, ahead of when the roadmap said it should be. The roadmap's
+rule was "only worth doing once the constants genuinely hurt — around six unit
+types", and there are three. What changed the arithmetic is that slices 8 and 9
+are now definitely happening: stage tables are exactly the kind of data that
+belongs in a file, so building the loader now means slice 9 does not have to.
+
+**The engine gained `DataFile.h`** — sections of key/value pairs, read once at
+startup. It resolves paths against the executable, the same rule `TextureCache`
+already used for textures, so `assets/lanebattle/units.txt` means the same
+thing from a shell, an IDE or a double-click.
+
+Three properties were chosen deliberately:
+
+- **A missing or broken file is not fatal.** `load()` reports what happened and
+  every getter takes a fallback, so the compiled-in defaults stand and the game
+  runs from a bare build directory — the same way a missing PNG leaves a flat
+  coloured rectangle rather than a crash.
+- **Fallbacks are per field, not per row.** A file that only wants archers
+  cheaper says exactly that and nothing else; every other number keeps its
+  value.
+- **Sections repeat.** That is the whole reason not to use a flat key/value
+  file: a roster is a list of things with the same fields, and so is a set of
+  stages, which is what will want this next.
+
+Game-side, `kUnitKinds` became `kDefaultUnitKinds` — renamed so any stale use
+fails to compile rather than silently reading the wrong table — and the live
+roster is a `std::vector` behind `unitKind()`. **A file can add unit types, not
+just edit them**, which is the difference between a data file and a config
+file. That made the roster's length a runtime value, which in turn needed a
+cap on the spawn bar: twelve unit types would otherwise draw four buttons off
+the side of the window where nobody can click them.
+
+The roster is global mutable state, which this project otherwise has almost
+none of. The price is that tests must be able to put it back, so `resetBalance()`
+exists and the test harness calls it before every case. Without that, one test
+loading a file changes the meaning of every test after it, and the failure
+lands somewhere else entirely.
+
+### Two mutations survived, and both were real gaps
+
+- **Breaking the per-field fallback on `cost` left the whole suite passing.**
+  Every test that loaded a file named a unit *and* its price, so the fallback
+  was only ever proven for `range`. Each field has its own fallback and so
+  needs its own case; there is now a file that sets nothing but `speed`.
+- **Breaking comment-stripping left the whole suite passing.** Numbers hide it:
+  `strtof` stops at the `#` whether or not the comment was removed, so a broken
+  stripper still parses `12` out of `12 # a note`. It only shows on strings —
+  and `name` is a string, so a row reading `name = SOLDIER # the front line`
+  would define a unit called "SOLDIER # the front line" and silently stop
+  matching. There is a string case now.
+
+Both are the same lesson in different clothes: a test that exercises a code
+path is not the same as a test that would notice the path being wrong.
+
 ## The open question, answered — and then answered again
 
 **Slice 2's verdict: it was not fun, and the reason was not the camera.**

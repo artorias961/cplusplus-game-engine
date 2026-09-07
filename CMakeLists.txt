@@ -109,12 +109,19 @@ endforeach()
 # if the files are actually there, hence this step. (A multi-config generator
 # like Visual Studio puts the binary in Release/ or Debug/, which is exactly
 # why the destination is a generator expression and not a fixed path.)
-add_custom_command(TARGET asteroids POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_SOURCE_DIR}/assets
-            $<TARGET_FILE_DIR:asteroids>/assets
-    COMMENT "Copying assets next to the executable"
-)
+#
+# The test binaries get them too. That is not tidiness: lanebattle_tests loads
+# the shipped assets/lanebattle/units.txt and checks it parses into a sane
+# roster, so the data file the player actually gets is covered rather than
+# only the parser that reads it.
+foreach(target asteroids lanebattle lanebattle_tests)
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_SOURCE_DIR}/assets
+                $<TARGET_FILE_DIR:${target}>/assets
+        COMMENT "Copying assets next to ${target}"
+    )
+endforeach()
 
 # --- Find SDL2 -------------------------------------------------------------
 # SDL2 shows up two different ways depending on platform and how it was

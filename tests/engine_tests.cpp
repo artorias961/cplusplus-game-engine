@@ -24,11 +24,15 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <fstream>
 #include <string>
+#include <vector>
 
 #include "engine/Components.h"
 #include "engine/ECS.h"
 #include "engine/Font.h"
+#include "engine/DataFile.h"
 #include "engine/Input.h"
 #include "engine/Scene.h"
 #include "engine/Systems.h"
@@ -712,6 +716,139 @@ void testMouseInput() {
           "and does not affect the left one");
 }
 
+// --- Data files ------------------------------------------------------------
+//
+// The engine could load PNGs and nothing else, so every number that balanced a
+// game was a constexpr and changing one cost a recompile.
+//
+// These write real files and read them back, rather than testing a parser
+// against a string, because the failure modes worth catching are about files:
+// a missing one, a truncated one, a value that is not a number.
+
+// Writes `contents` to a temporary file and returns its path. Absolute, so
+// DataFile's executable-relative resolution leaves it alone.
+std::string writeTempFile(const char* name, const char* contents) {
+    // Written next to the test binary rather than into a temp directory: it
+    // needs no environment variable, it is the same place DataFile resolves
+    // relative paths against, and it is cleaned up with the build.
+    std::string path = name;
+    if (char* base = SDL_GetBasePath()) {
+        path = std::string(base) + name;
+        SDL_free(base);
+    }
+
+    std::ofstream out(path);
+    out << contents;
+    out.close();
+    return path;
+}
+
+void testDataFileParsing() {
+    const std::string path = writeTempFile("engine_datafile_test.txt", R"(
+# a comment, and a blank line above
+
+[unit]
+name = SOLDIER
+cost = 60
+health = 110.5
+
+[unit]
+name  =  ARCHER
+cost=95
+speed = not-a-number
+
+[tuning]
+gold_per_second = 14
+)");
+
+    DataFile file;
+    check(file.load(path), "a file that exists loads");
+    check(file.sectionCount() == 3, "three sections were found");
+
+    const std::vector<const DataSection*> units = file.all("unit");
+    check(units.size() == 2, "repeated sections are all kept, in order");
+    check(units[0]->text("name", "?") == "SOLDIER", "the first is the first");
+    check(units[1]->text("name", "?") == "ARCHER", "and the second the second");
+
+    check(nearly(units[0]->number("cost", 0.0f), 60.0f), "integers parse");
+    check(nearly(units[0]->number("health", 0.0f), 110.5f), "so do decimals");
+
+    // Whitespace around keys, values and the equals sign is all noise.
+    check(nearly(units[1]->number("cost", 0.0f), 95.0f),
+          "no spaces around the equals is fine");
+    check(units[1]->text("name", "?") == "ARCHER",
+          "and extra spaces are trimmed off both sides");
+
+    // The three ways a lookup can fail all land on the fallback rather than
+    // throwing, which is what lets a partial file be useful.
+    check(nearly(units[0]->number("speed", 42.0f), 42.0f),
+          "a missing key falls back");
+    check(nearly(units[1]->number("speed", 42.0f), 42.0f),
+          "and so does a value that is not a number");
+    check(units[0]->text("nothing", "fallback") == "fallback",
+          "and a missing string falls back too");
+
+    check(file.first("tuning") != nullptr, "a section can be looked up by name");
+    check(file.first("nonexistent") == nullptr,
+          "and one that is not there is null, not a crash");
+    check(units[0]->has("cost") && !units[0]->has("speed"),
+          "has() reports what is actually present");
+}
+
+// A missing file is the normal case for a game run from a bare build
+// directory, and it must leave the caller's defaults untouched rather than
+// zeroing them.
+void testMissingDataFileIsNotFatal() {
+    DataFile file;
+    check(!file.load("definitely/not/a/real/path/units.txt"),
+          "a missing file reports failure");
+    check(file.sectionCount() == 0, "and yields nothing");
+    check(file.first("unit") == nullptr, "with no sections to find");
+
+    const DataSection* absent = file.first("unit");
+    check(absent == nullptr, "so every lookup is a null check away from safe");
+}
+
+void testDataFileEdgeCases() {
+    const std::string path = writeTempFile("engine_datafile_odd.txt", R"(
+orphan = 7
+[empty]
+[values]
+# just a comment
+trailing = 12   # comment after a value
+labelled = SOLDIER # the front line
+= 5
+noequals
+)");
+
+    DataFile file;
+    check(file.load(path), "an odd file still loads");
+
+    // A key before any [section] would otherwise be dropped in silence.
+    const DataSection* orphans = file.first("");
+    check(orphans != nullptr && nearly(orphans->number("orphan", 0.0f), 7.0f),
+          "a key before any section still lands somewhere");
+
+    const DataSection* empty = file.first("empty");
+    check(empty != nullptr && !empty->has("anything"),
+          "a section with no keys is a section with no keys");
+
+    const DataSection* values = file.first("values");
+    check(values != nullptr, "the section after it is still found");
+    check(nearly(values->number("trailing", 0.0f), 12.0f),
+          "a comment after a value does not become part of it");
+
+    // Numbers hide this bug: strtof stops at the '#' whether or not the
+    // comment was stripped, so a broken stripper still parses 12 correctly.
+    // Strings are where it shows, and a name is a string — a roster row
+    // reading `name = SOLDIER # the front line` would otherwise define a unit
+    // called "SOLDIER # the front line" and silently stop matching.
+    check(values->text("labelled", "?") == "SOLDIER",
+          "a comment after a STRING value is stripped too");
+    check(!values->has(""), "a line with no key on the left is ignored");
+    check(!values->has("noequals"), "and a line with no equals sign is too");
+}
+
 int main() {
     std::printf("engine tests\n");
 
@@ -736,6 +873,9 @@ int main() {
     testParallax();
     testViewRoundTrip();
     testMouseInput();
+    testDataFileParsing();
+    testMissingDataFileIsNotFatal();
+    testDataFileEdgeCases();
 
     if (failures == 0) {
         std::printf("all %d checks passed\n", checks);
