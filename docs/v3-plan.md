@@ -26,13 +26,21 @@ Slice 2 added a fifth, which is really a sharper version of the fourth:
 
 ## Where it is
 
-**Slice 1 is done**: `src/game/lanebattle/`. Two castles, gold income, `A`
+One section per slice, in the order they were built. Each says what shipped,
+what it pulled out of the engine, and — usually the useful part — what
+measuring it revealed that was not planned.
+
+### Slice 1
+
+**Done**: `src/game/lanebattle/`. Two castles, gold income, `A`
 spends it to send a unit, units march and stop to fight when an enemy is in
 reach, deaths throw debris, breaking a castle wins. Title / pause / game-over /
 restart. It needed **no new engine code at all**, which was the point of
 building it first.
 
-**Slice 2 is done**: the battlefield is now `kWorldWidth = 2400` — two and a
+### Slice 2
+
+**Done**: the battlefield is now `kWorldWidth = 2400` — two and a
 half screens — and the camera follows your front line, easing towards it,
 clamped to the ends of the world. `LEFT`/`RIGHT` take the view off the leash to
 scout and hand it back about a second after you let go. A screen-space minimap
@@ -51,7 +59,9 @@ Before this game, no world was ever bigger than its window. Asteroids moved the
 camera a few pixels for screen shake and that was the entire exercise the
 renderer's camera path had ever had.
 
-**Slice 3 is done**: three unit types in a table (`kUnitKinds`), keys `1`-`3`,
+### Slice 3
+
+**Done**: three unit types in a table (`kUnitKinds`), keys `1`-`3`,
 a population cap of 10, units that queue rather than standing inside one
 another, an opponent that banks for a wave and cycles a composition, and gold
 paid for kills. It needed **no new engine code**, which is the second time a
@@ -73,7 +83,9 @@ rather than by design:
   pixel and fights as a single enormous unit.
 
 
-**Slice 4 is done**: a clickable spawn bar along the bottom — one button per
+### Slice 4
+
+**Done**: a clickable spawn bar along the bottom — one button per
 row of the roster, showing name, cost, whether you can currently afford it, and
 the shared cooldown draining left to right — plus drag-the-field to scroll. The
 number keys still work and always will; they are faster once you know the
@@ -103,7 +115,9 @@ both were easy to get wrong:
   "the last button whose left edge you are past" silently makes the gaps part
   of the button to their left.
 
-**Slice 5 is done**, but not the way the roadmap predicted, and the difference
+### Slice 5
+
+**Done**, but not the way the roadmap predicted, and the difference
 is the whole point of it.
 
 The plan said slice 5 would pull an `Animation` component and `Sprite.flip` out
@@ -143,7 +157,9 @@ What this slice cannot tell you: whether any of it looks right. There is no
 window in a test. Every other slice has been measurable; this one is the first
 that genuinely needs eyes.
 
-**Slice 6 is done**, and it is the first slice since 2 to pull a real feature
+### Slice 6
+
+**Done**, and it is the first slice since 2 to pull a real feature
 out of the engine.
 
 Three bands of scenery behind the fighting and one in front of it, each sliding
@@ -167,7 +183,7 @@ meant "apply the whole camera", the new `0.0f` means "apply none of it". So
 `parallax` is a fourth parameter with a default instead. A signature that
 quietly inverts its callers is worse than one with an extra argument.
 
-### The regression this slice caused, and what it actually revealed
+#### The regression this slice caused, and what it actually revealed
 
 Adding fifty hills and tufts made the test suite 60% slower — 2.6s to 4.2s.
 The cause was not the drawing. `findTargetAhead` and `blockedByFriendly` walked
@@ -191,7 +207,9 @@ targets resolves differently — deterministic within a build, not necessarily
 identical across platforms. Nothing depends on the tie-break, and CI runs the
 suite on Linux and macOS, which is what would catch it if something ever did.
 
-**Slice 7 is done**, ahead of when the roadmap said it should be. The roadmap's
+### Slice 7
+
+**Done**, ahead of when the roadmap said it should be. The roadmap's
 rule was "only worth doing once the constants genuinely hurt — around six unit
 types", and there are three. What changed the arithmetic is that slices 8 and 9
 are now definitely happening: stage tables are exactly the kind of data that
@@ -229,7 +247,7 @@ exists and the test harness calls it before every case. Without that, one test
 loading a file changes the meaning of every test after it, and the failure
 lands somewhere else entirely.
 
-### Two mutations survived, and both were real gaps
+#### Two mutations survived, and both were real gaps
 
 - **Breaking the per-field fallback on `cost` left the whole suite passing.**
   Every test that loaded a file named a unit *and* its price, so the fallback
@@ -245,7 +263,9 @@ lands somewhere else entirely.
 Both are the same lesson in different clothes: a test that exercises a code
 path is not the same as a test that would notice the path being wrong.
 
-**Slice 8 is done**: a castle cannon you aim by clicking the field, and three
+### Slice 8
+
+**Done**: a castle cannon you aim by clicking the field, and three
 in-battle upgrades — INCOME, WALLS, SUPPLY — with geometrically rising costs.
 Both sides have both. It needed **no engine code**: a shell is Transform +
 Velocity + Polygon, gravity is one line the game applies itself, and the blast
@@ -271,7 +291,7 @@ so a click always lands where it was clicked. Firing at a fixed speed and
 letting gravity decide would be less code and a worse game — aiming would
 become a feel to learn instead of a decision to make.
 
-### The cannon broke the game, and measuring said so precisely
+#### The cannon broke the game, and measuring said so precisely
 
 The first version was free, on a cooldown, permanent, and — for the opponent —
 perfectly aimed. A mixed army that had won in 195 seconds now **lost** in 247.
@@ -302,7 +322,7 @@ After that, measured across strategies: mixed armies win, an income upgrade
 makes you win *faster* (195s to 138s), and mono-type armies lose while the
 opponent snowballs upgrades against them (it finished one such game on 5/5/4).
 
-### A quieter bug in the same area
+#### A quieter bug in the same area
 
 With shots costing gold, the opponent stopped upgrading entirely — 0/0/0 across
 a four-hundred-second game. Its cannon reserved gold for its next wave (about
@@ -311,7 +331,7 @@ so the cheaper commitment always won the race and every surplus went down the
 barrel. It lost at full health, which looked like balance and was an ordering
 mistake. It now shells only out of what is left once both are covered.
 
-### Six of seven mutations caught, and the survivor was the important one
+#### Six of seven mutations caught, and the survivor was the important one
 
 Setting the cannon's reach ten times too far left every test passing. The range
 test stood a unit at 1600 and aimed at where it *stood* — but a soldier walks
@@ -320,7 +340,9 @@ or not the shot could reach. The test was measuring the lead error, not the
 clamp. It now aims with lead, so the only thing that stops the shell is the
 range it was supposed to be testing.
 
-## An audit before slice 9
+## Between slices: an audit, and closing the last untested gaps
+
+### The audit
 
 Eight slices in, a pass over the whole thing looking for what was broken or
 slow. The headline is that **nothing needed optimising**, and that is a
@@ -401,7 +423,7 @@ Two things were looked at and deliberately not changed:
   `return` the compiler requires, and it is commented as such rather than left
   looking covered.
 
-## The renderer is tested now
+### The renderer is tested now
 
 The audit ended by admitting one thing could not be verified: rendering. There
 is no window in a test, so for four games the part that decides what a player
@@ -438,7 +460,7 @@ Thirty-two checks now pin things nothing could previously state:
 - entities with a drawable but no `Transform` are skipped rather than
   dereferenced.
 
-### The tests were then attacked, and two rounds were needed
+#### The tests were then attacked, and two rounds were needed
 
 Six deliberate breaks of the renderer:
 
@@ -467,7 +489,7 @@ that exercises a code path is not the same as a test that would notice the path
 being wrong.** The only reliable way to tell the two apart is to break the code
 on purpose and watch.
 
-## And the games are started now, too
+### And the games are started now, too
 
 Closing the renderer gap exposed a second one directly behind it. Every game's
 RULES are tested by driving its scenes through `tests/Harness.h` — but the
@@ -507,14 +529,17 @@ from 94 seconds to 183 for no information. CI now does:
     ctest -LE smoke --repeat until-fail:20     the flake hunt
     ctest -L  smoke                            the games start
 
-### And CI itself was finally checked
+#### And CI itself was finally checked
 
 Every claim in these notes about Linux and macOS had been inference — this
 machine is Windows and nothing here had ever seen a pipeline result. The GitHub
 API says the last completed runs on `main` are **green on both platforms**, so
 the inference was sound and the hedging can stop.
 
-## The open question, answered — and then answered again
+## How the design was found: the balance history
+
+The slice notes above say what was built. This says how the game stopped being
+unplayable, which took three goes and was never once found by a unit test.
 
 **Slice 2's verdict: it was not fun, and the reason was not the camera.**
 Simulating four minutes of play with the obvious strategy — spend the moment

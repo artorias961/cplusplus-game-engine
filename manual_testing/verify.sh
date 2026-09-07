@@ -59,10 +59,35 @@ binary_path() {
     fi
 }
 
+# SDL2 comes from the system package manager on Linux and macOS, and from
+# vcpkg on Windows — and this script runs under Git Bash there, so it has to
+# know about both. run.sh gets away without this by being the Linux/macOS twin
+# of run.bat; this one does not, because `clean` deletes the build folder and
+# reconfigures from nothing.
+#
+# Found the hard way: `verify.sh all` on Windows wiped a working build and then
+# could not find SDL2, which is exactly the kind of thing the clean check
+# exists to catch. It caught it in this script first.
+toolchain_args() {
+    local candidate=""
+    if [ -n "${VCPKG_ROOT:-}" ] && \
+       [ -f "$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" ]; then
+        candidate="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+    elif [ -f "/c/vcpkg/scripts/buildsystems/vcpkg.cmake" ]; then
+        candidate="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+    fi
+
+    if [ -n "$candidate" ]; then
+        echo "-DCMAKE_TOOLCHAIN_FILE=$candidate"
+    fi
+}
+
 configure_if_needed() {
     if [ ! -f build/CMakeCache.txt ]; then
         echo "Configuring..."
-        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release || exit 1
+        # Unquoted on purpose: it is either one argument or none at all.
+        # shellcheck disable=SC2046
+        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release $(toolchain_args) || exit 1
     fi
 }
 
@@ -146,8 +171,9 @@ do_archive() {
 
         echo
         echo "--- $name"
+        # shellcheck disable=SC2046
         if cmake -S "$version" -B "${version}_verify" -DCMAKE_BUILD_TYPE=Release \
-            >/dev/null 2>&1 && \
+            $(toolchain_args) >/dev/null 2>&1 && \
            cmake --build "${version}_verify" --config Release >/dev/null 2>&1; then
             echo "  OK: $name builds"
         else
