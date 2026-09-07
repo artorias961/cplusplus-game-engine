@@ -583,6 +583,56 @@ stopped being a decision and become a button you press when it lights up.
   slot the bar can ever draw and checks none of them is read as the hero.
 
 
+### Slice 11
+
+**Done**: three spells — METEOR, HEAL and RAGE — cast from **mana**, which is
+its own pool and refills on its own. **No engine code**: the area queries the
+roadmap predicted turned out to be a distance check the game could write in
+five lines, and `Collision.h` was not needed either.
+
+Mana rather than gold, deliberately. Gold is already fought over by units,
+in-battle upgrades and cannon shots; a fourth claimant would have made every
+spell a decision about whether to have an army. Mana buys nothing else, so a
+spell is never a sacrifice — the only question is which and when.
+
+Two of them are aimed. Arming one takes over the next click on the field, the
+same click that otherwise fires the cannon, so one mouse button now serves
+four verbs: drag the view, fire the cannon, cast a spell, press a panel.
+
+#### One rule replaced two bugs
+
+That click had a test naming the panels it must not fall through: the spawn bar
+and the upgrade panel, and nothing else. So **clicking the hero button also
+fired the cannon**, and **clicking a spell row armed the spell and instantly
+cast it into the panel** — arming and casting in one press.
+
+Both were the same mistake, made twice, because every new panel was another
+chance to forget. There is one `isOverUi()` question now, asked in one place.
+Adding a panel means adding it there, once.
+
+#### And the finding that matters more than the slice
+
+Measured across spell policies, every one of them won, and the spells made no
+difference to any outcome. The reason is not the spells:
+
+    the last stage, by what the player uses
+      army only            LOST
+      army + hero at 20s   WON
+      army + 2 income      WON
+
+**The hero alone now wins the capstone.** The difficulty curve was measured in
+slice 9, before the hero and the spells existed, and two power sources have
+been added on top of it since. The stages are not broken — they are simply
+tuned for a player who has neither.
+
+The design guards still pass because they measure a hero-less, spell-less
+player, which is exactly the blind spot: a test that fixes the strategy cannot
+notice the strategy getting stronger.
+
+**The campaign wants one re-tuning pass**, and it is worth doing AFTER slice 12
+rather than now — flying units are another power shift, and tuning the curve
+twice would waste the first attempt.
+
 ## Between slices: an audit, and closing the last untested gaps
 
 ### The audit

@@ -245,6 +245,59 @@ constexpr float kCannonRange = 420.0f;
 constexpr float kCannonFlightTime = 0.85f;
 constexpr float kCannonGravity = 900.0f;  // pixels per second per second
 
+// --- Spells ----------------------------------------------------------------
+//
+// Cast from MANA, which is its own pool and refills on its own — deliberately
+// not from gold.
+//
+// Gold is already fought over by units, in-battle upgrades and cannon shots,
+// and a fourth claimant would have made every spell a decision about whether
+// to have an army. Mana cannot buy anything else, so a spell is never a
+// sacrifice; the only question is which one and when, which is the question
+// worth asking.
+//
+// Two of them are aimed and one is not. Arming an aimed spell takes over the
+// next click on the field — the same click that otherwise fires the cannon —
+// which is why the cannon and the spells share one input and one rule about
+// who gets it.
+enum class Spell { Meteor, Heal, Rage, Count };
+constexpr int kSpellCount = static_cast<int>(Spell::Count);
+
+struct SpellKind {
+    const char* name;
+    const char* hint;
+    float manaCost;
+    float radius;    // the area it covers; ignored when it is not aimed
+    float power;     // damage, healing, or a damage multiplier
+    float duration;  // seconds, for the ones that last
+    bool aimed;
+};
+
+constexpr SpellKind kDefaultSpells[] = {
+    {"METEOR", "Z",  55.0f, 120.0f, 70.0f, 0.0f, true},
+    {"HEAL",   "X",  40.0f, 140.0f, 80.0f, 0.0f, true},
+    {"RAGE",   "C",  70.0f,   0.0f,  1.6f, 8.0f, false},
+};
+
+const SpellKind& spellKind(int spell);
+
+constexpr float kMaxMana = 100.0f;
+constexpr float kManaPerSecond = 5.5f;
+constexpr float kStartingMana = 40.0f;
+
+// Where the spell buttons are, and which one is under a screen position.
+constexpr float kSpellX = 690.0f;
+constexpr float kSpellY = 214.0f;
+constexpr float kSpellWidth = 254.0f;
+constexpr float kSpellHeight = 30.0f;
+constexpr float kSpellGap = 6.0f;
+
+constexpr float spellTop(int index) {
+    return kSpellY + static_cast<float>(index) * (kSpellHeight + kSpellGap);
+}
+
+int spellAt(float screenX, float screenY);
+
 // --- In-battle upgrades ----------------------------------------------------
 //
 // Three things to spend gold on that are not units, so a full population cap
@@ -687,6 +740,12 @@ struct Session {
     bool pressPending = false;
     float pressX = 0.0f;
     float pressY = 0.0f;
+
+    // Mana, and the spell waiting for a click. -1 means nothing is armed and
+    // a click on the field fires the cannon as it always did.
+    float mana = kStartingMana;
+    int armedSpell = -1;
+    float rageSeconds = 0.0f;
 
     float cannonCooldown = 0.0f;
     float enemyCannonCooldown = kCannonCooldown;  // it does not open fire instantly

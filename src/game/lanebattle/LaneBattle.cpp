@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -571,6 +572,22 @@ bool loadCampaign(Campaign& campaign) {
         digits = false;
     }
     return true;
+}
+
+const SpellKind& spellKind(int spell) {
+    if (spell < 0) return kDefaultSpells[0];
+    if (spell >= kSpellCount) return kDefaultSpells[kSpellCount - 1];
+    return kDefaultSpells[spell];
+}
+
+int spellAt(float screenX, float screenY) {
+    if (screenX < kSpellX || screenX > kSpellX + kSpellWidth) return -1;
+
+    for (int index = 0; index < kSpellCount; ++index) {
+        const float top = spellTop(index);
+        if (screenY >= top && screenY <= top + kSpellHeight) return index;
+    }
+    return -1;
 }
 
 int perkAt(float screenX, float screenY) {
@@ -1122,6 +1139,7 @@ public:
         buildSpawnBar(world);
         buildHeroButton(world);
         buildUpgradePanel(world);
+        buildSpellPanel(world);
 
         cannonText_ = createText(world, "", 16, 112, 2, 220, 200, 140, kHudLayer);
         hud_.push_back(cannonText_);
@@ -1214,6 +1232,7 @@ public:
         // After the dead are gone, so the camera never chases a corpse for a
         // frame, and after the fight, so the minimap shows this frame's front
         // line rather than last frame's.
+        updateSpells(world, *session, input, dt);
         updateCannonballs(world, dt);
         animateUnits(world, dt);
         updateCamera(world, *session, input, dt);
@@ -1674,6 +1693,11 @@ private:
             if (team->leftSide) {
                 damage *= damageScale_;
                 if (world.hasComponent<Hero>(attacker)) damage *= heroDamageScale_;
+
+                // RAGE is temporary and applies to everything you own,
+                // including the hero — which is what makes casting it while
+                // the hero is out worth more than casting it any other time.
+                if (session.rageSeconds > 0.0f) damage *= spellKind(2).power;
             }
 
             if (Unit* victim = world.getComponent<Unit>(target)) {
@@ -1751,6 +1775,111 @@ private:
             world.destroyLater(entity);
             if (unit->figure != kInvalidEntity) world.destroyLater(unit->figure);
         }
+    }
+
+    // --- Spells ------------------------------------------------------------
+
+    void updateSpells(World& world, Session& session, InputManager& input,
+                      float dt) {
+        session.mana = std::min(kMaxMana, session.mana + kManaPerSecond * dt);
+        session.rageSeconds = std::max(0.0f, session.rageSeconds - dt);
+
+        static const SDL_Scancode keys[] = {SDL_SCANCODE_Z, SDL_SCANCODE_X,
+                                            SDL_SCANCODE_C};
+        for (int spell = 0; spell < kSpellCount; ++spell) {
+            if (input.wasKeyPressed(keys[spell])) selectSpell(world, session, spell);
+        }
+
+        if (input.wasMousePressed()) {
+            const int clicked = spellAt(static_cast<float>(input.mouseX()),
+                                        static_cast<float>(input.mouseY()));
+            if (clicked >= 0) selectSpell(world, session, clicked);
+        }
+
+        // Right-click, or pressing the armed spell again, puts it away. An
+        // armed spell steals the next click from the cannon, so there has to
+        // be a way out that is not "cast it somewhere useless".
+        if (input.wasMousePressed(SDL_BUTTON_RIGHT)) session.armedSpell = -1;
+    }
+
+    // Arms an aimed spell, or casts an unaimed one on the spot.
+    void selectSpell(World& world, Session& session, int spell) {
+        if (spell < 0 || spell >= kSpellCount) return;
+
+        // An unaimed spell goes straight to castSpell, which is the ONE place
+        // mana is checked and spent. Checking here as well was harmless and
+        // useless: it made the real guard unreachable, so breaking it changed
+        // nothing any test could see.
+        if (!spellKind(spell).aimed) {
+            castSpell(world, session, spell, 0.0f, 0.0f);
+            return;
+        }
+
+        // Arming is gated separately, because arming something you cannot pay
+        // for would take the next click and then do nothing with it.
+        if (session.mana < spellKind(spell).manaCost) return;
+        session.armedSpell = (session.armedSpell == spell) ? -1 : spell;
+    }
+
+    void castSpell(World& world, Session& session, int spell, float worldX,
+                   float worldY) {
+        const SpellKind& kind = spellKind(spell);
+        if (session.mana < kind.manaCost) return;
+
+        session.mana -= kind.manaCost;
+        session.armedSpell = -1;
+
+        switch (static_cast<Spell>(spell)) {
+            case Spell::Meteor: castMeteor(world, kind, worldX, worldY); break;
+            case Spell::Heal:   castHeal(world, kind, worldX, worldY);   break;
+            case Spell::Rage:   session.rageSeconds = kind.duration;     break;
+            default: break;
+        }
+
+        if (audioDevice) {
+            audioDevice->play(Waveform::Sine, 300.0f + 90.0f * spell, 0.30f, 0.18f);
+        }
+    }
+
+    // Both aimed spells ask the same question — which units are within a
+    // radius of this point — and differ only in what they do to the answer.
+    void forUnitsNear(World& world, bool leftSide, float x, float y,
+                      float radius, const std::function<void(Unit&)>& action) {
+        for (auto& [entity, unit] : world.view<Unit>()) {
+            Team* team = world.getComponent<Team>(entity);
+            Transform* at = world.getComponent<Transform>(entity);
+            if (!team || !at || team->leftSide != leftSide) continue;
+
+            const UnitKind& stats = kindOf(unit.kind);
+            const float dx = (at->x + stats.width / 2.0f) - x;
+            const float dy = (at->y + stats.height / 2.0f) - y;
+            if (dx * dx + dy * dy > radius * radius) continue;
+
+            action(unit);
+        }
+    }
+
+    void castMeteor(World& world, const SpellKind& kind, float x, float y) {
+        const float power = kind.power;
+        forUnitsNear(world, false, x, y, kind.radius,
+                     [power](Unit& unit) { unit.health -= power; });
+
+        for (int piece = 0; piece < 3; ++piece) {
+            spawnShards(world, x + static_cast<float>(piece - 1) * 30.0f, y,
+                        255, 180, 90);
+        }
+    }
+
+    // Healing is capped at what the unit started with: a heal that overfilled
+    // would make a wounded veteran better than a fresh one, and turn the spell
+    // into a permanent stat upgrade you cast repeatedly.
+    void castHeal(World& world, const SpellKind& kind, float x, float y) {
+        const float power = kind.power;
+        forUnitsNear(world, true, x, y, kind.radius, [power](Unit& unit) {
+            unit.health = std::min(unit.health + power, kindOf(unit.kind).health);
+        });
+
+        spawnShards(world, x, y, 150, 255, 190);
     }
 
     // --- The cannon --------------------------------------------------------
@@ -1861,6 +1990,18 @@ private:
         fireCannon(world, false, from, cannonY(), target, kGroundY - 10.0f);
     }
 
+    // Is this screen position on any panel that takes a click?
+    //
+    // One place, so a new panel is added here once rather than remembered in
+    // every place that asks. Both bugs this replaced were of exactly that
+    // shape: a panel added, and one of the two questions about it forgotten.
+    static bool isOverUi(float screenX, float screenY) {
+        return buttonAt(screenX, screenY) >= 0 ||
+               upgradeAt(screenX, screenY) >= 0 ||
+               spellAt(screenX, screenY) >= 0 ||
+               heroButtonHit(screenX, screenY);
+    }
+
     // --- The view ----------------------------------------------------------
 
     // Where the camera wants to be: your front line, centred, and never past
@@ -1885,13 +2026,17 @@ private:
         const float mouseX = static_cast<float>(input.mouseX());
         const float mouseY = static_cast<float>(input.mouseY());
 
-        // One button, two verbs. A press on the field is undecided: move more
-        // than a few pixels and it is a camera drag, release without moving
-        // and it is a cannon shot. A press that lands on a UI element is
-        // neither — that one belongs to the button underneath it, or every
-        // click on the spawn bar would also nudge the camera.
-        if (input.wasMousePressed() && buttonAt(mouseX, mouseY) < 0 &&
-            upgradeAt(mouseX, mouseY) < 0) {
+        // One button, several verbs. A press on the field is undecided: move
+        // more than a few pixels and it is a camera drag, release without
+        // moving and it is a cannon shot — or a spell, if one is armed.
+        //
+        // A press that lands on a UI element is none of those. That test used
+        // to name the spawn bar and the upgrade panel and nothing else, which
+        // meant clicking the hero button also fired the cannon, and clicking a
+        // spell row armed the spell AND immediately cast it into the panel.
+        // Every new panel was one more chance to forget; asking one question
+        // is what stops the next one being forgotten too.
+        if (input.wasMousePressed() && !isOverUi(mouseX, mouseY)) {
             session.pressPending = true;
             session.dragging = false;
             session.dragStartX = mouseX;
@@ -1922,8 +2067,17 @@ private:
         }
 
         if (input.wasMouseReleased() && session.pressPending) {
-            if (!session.dragging) fireAt(world, session, session.pressX,
-                                          session.pressY);
+            if (!session.dragging) {
+                // An armed spell takes the click. The cannon only fires when
+                // nothing else has claimed it, which is what lets one button
+                // serve three verbs without a modifier key.
+                if (session.armedSpell >= 0) {
+                    castSpell(world, session, session.armedSpell, session.pressX,
+                              session.pressY);
+                } else {
+                    fireAt(world, session, session.pressX, session.pressY);
+                }
+            }
             session.pressPending = false;
             session.dragging = false;
         }
@@ -2098,6 +2252,63 @@ private:
         }
     }
 
+    // --- The spell panel ---------------------------------------------------
+
+    void buildSpellPanel(World& world) {
+        manaPlate_ = makeScreenRect(world, kSpellX, kSpellY - 26.0f, kSpellWidth,
+                                    16.0f, 30, 34, 50, kHudLayer);
+        manaFill_ = makeScreenRect(world, kSpellX, kSpellY - 26.0f, kSpellWidth,
+                                   16.0f, 90, 130, 220, kHudLayer);
+        hud_.push_back(manaPlate_);
+        hud_.push_back(manaFill_);
+
+        for (int spell = 0; spell < kSpellCount; ++spell) {
+            const float top = spellTop(spell);
+            spellPlate_[spell] = makeScreenRect(world, kSpellX, top, kSpellWidth,
+                                                kSpellHeight, 34, 38, 52,
+                                                kHudLayer);
+            spellText_[spell] =
+                createText(world, "", static_cast<int>(kSpellX) + 8,
+                           static_cast<int>(top) + 8, 2, 190, 200, 230,
+                           kHudLayer);
+            world.getComponent<Text>(spellText_[spell])->screenSpace = true;
+
+            hud_.push_back(spellPlate_[spell]);
+            hud_.push_back(spellText_[spell]);
+        }
+    }
+
+    void refreshSpellPanel(World& world, const Session& session) {
+        if (Sprite* fill = world.getComponent<Sprite>(manaFill_)) {
+            fill->width =
+                static_cast<int>(kSpellWidth * (session.mana / kMaxMana));
+        }
+
+        for (int spell = 0; spell < kSpellCount; ++spell) {
+            const SpellKind& kind = spellKind(spell);
+            const bool affordable = session.mana >= kind.manaCost;
+            const bool armed = session.armedSpell == spell;
+            const bool active = spell == static_cast<int>(Spell::Rage) &&
+                                session.rageSeconds > 0.0f;
+
+            if (Text* text = world.getComponent<Text>(spellText_[spell])) {
+                text->value = std::string(kind.hint) + " " + kind.name + "  " +
+                              std::to_string(static_cast<int>(kind.manaCost));
+                if (armed) text->value += "  AIM";
+                if (active) text->value += "  ON";
+
+                text->r = affordable ? (armed ? 255 : 190) : 95;
+                text->g = affordable ? (armed ? 235 : 200) : 95;
+                text->b = affordable ? (armed ? 150 : 230) : 110;
+            }
+            if (Sprite* plate = world.getComponent<Sprite>(spellPlate_[spell])) {
+                plate->r = armed ? 70 : (affordable ? 44 : 28);
+                plate->g = armed ? 62 : (affordable ? 50 : 32);
+                plate->b = armed ? 40 : (affordable ? 68 : 40);
+            }
+        }
+    }
+
     // --- The upgrade panel -------------------------------------------------
 
     void buildUpgradePanel(World& world) {
@@ -2222,6 +2433,7 @@ private:
         refreshSpawnBar(world, session, fielded);
         refreshUpgradePanel(world, session);
         refreshHeroButton(world, session);
+        refreshSpellPanel(world, session);
 
         if (Text* text = world.getComponent<Text>(cannonText_)) {
             const bool ready = session.cannonCooldown <= 0.0f &&
@@ -2273,6 +2485,10 @@ private:
     Entity leftHealthText_ = kInvalidEntity;
     Entity rightHealthText_ = kInvalidEntity;
     Entity cannonText_ = kInvalidEntity;
+    Entity manaPlate_ = kInvalidEntity;
+    Entity manaFill_ = kInvalidEntity;
+    Entity spellPlate_[kSpellCount] = {};
+    Entity spellText_[kSpellCount] = {};
     Entity heroPlate_ = kInvalidEntity;
     Entity heroText_ = kInvalidEntity;
     Entity heroHint_ = kInvalidEntity;

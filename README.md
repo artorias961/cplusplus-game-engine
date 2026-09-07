@@ -731,6 +731,8 @@ behind is surrounded and killed for nothing.
 | Drag the field | Scroll the view |
 | Left / Right | Look up and down the field; lets go after a moment |
 | Click an upgrade | Buy INCOME, WALLS or SUPPLY; each costs more than the last |
+| Z / X / C | METEOR, HEAL, RAGE — cast from mana. The first two arm, then you click where |
+| Right-click | Put an armed spell away again |
 | H, or the hero button | Summon your hero — **once per battle** |
 | Enter | On the stage list, plays the furthest battle you have reached |
 

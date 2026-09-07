@@ -2761,10 +2761,18 @@ void testTheHeroButtonSaysWhichOfTheThreeStatesItIsIn() {
     game.startPlaying();
     game.suppressEnemySpawns();
 
+    game.session().gold = 5000.0f;
     game.driver.clickAt(static_cast<int>(lanebattle::kHeroButtonX) + 10,
                         static_cast<int>(lanebattle::kButtonY) + 10);
     game.driver.step(3);
     check(countHeroes(game.world) == 1, "clicking it summons the hero");
+
+    // And ONLY summons the hero. Every panel has to be excluded from the
+    // field's press handling as well as hit-tested for itself, and forgetting
+    // the second half is how clicking a button also fired the cannon through
+    // it. Checking the summon alone would not have noticed.
+    check(lanebattle::countCannonballs(game.world) == 0,
+          "and does not fire the cannon through the button");
 }
 
 // The enemy never fields a hero, however a stage is written. One per battle is
@@ -2924,6 +2932,259 @@ void testWhenYouSpendTheHeroDecidesWhetherItWasWorthIt() {
     timed.startStage(last);
     check(playWithHero(timed, 20) == 1,
           "but won if it is held until there is a line for it to fight behind");
+}
+
+// --- Spells (slice 11) -----------------------------------------------------
+//
+// Cast from mana, which is its own pool and refills on its own. Gold is
+// already fought over by units, upgrades and cannon shots; a fourth claimant
+// would have made every spell a decision about whether to have an army.
+
+constexpr int kMeteor = static_cast<int>(lanebattle::Spell::Meteor);
+constexpr int kHeal = static_cast<int>(lanebattle::Spell::Heal);
+constexpr int kRage = static_cast<int>(lanebattle::Spell::Rage);
+
+void testManaRefillsOnItsOwn() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const float before = game.session().mana;
+    game.driver.step(60);
+    const float earned = game.session().mana - before;
+
+    check(std::fabs(earned - lanebattle::kManaPerSecond) < 0.5f,
+          "mana refills at its stated rate");
+
+    game.driver.step(60 * 60);
+    check(game.session().mana <= lanebattle::kMaxMana + 0.01f,
+          "and stops at the top rather than growing forever");
+
+    // Spending mana must not touch gold. That separation is the whole reason
+    // spells have their own pool.
+    const float gold = game.session().gold;
+    game.driver.tap(SDL_SCANCODE_C);   // RAGE, which is cast on the spot
+    game.driver.step(2);
+    check(game.session().rageSeconds > 0.0f, "RAGE was cast");
+    check(std::fabs(game.session().gold - gold) < 1.0f,
+          "and cost no gold whatsoever");
+}
+
+void testAnUnaffordableSpellDoesNothing() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().mana = 1.0f;
+
+    game.driver.tap(SDL_SCANCODE_C);
+    game.driver.step(2);
+    check(game.session().rageSeconds == 0.0f,
+          "a spell you cannot afford is not cast");
+
+    game.driver.tap(SDL_SCANCODE_Z);
+    game.driver.step(2);
+    check(game.session().armedSpell < 0,
+          "and an aimed one you cannot afford does not even arm");
+}
+
+// An aimed spell takes over the next click on the field — the same click that
+// otherwise fires the cannon. One button, three verbs, and exactly one rule
+// about who gets it.
+void testAnArmedSpellTakesTheClickFromTheCannon() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().mana = lanebattle::kMaxMana;
+    game.session().gold = 5000.0f;
+
+    // Nothing armed: the click fires the cannon, as it always did.
+    game.driver.clickAt(screenXFor(game, 300.0f), kFieldClickY);
+    game.driver.step(kFireFrames);
+    check(lanebattle::countCannonballs(game.world) == 1,
+          "with no spell armed a click still fires the cannon");
+
+    // Armed: the click casts instead, and no shell is fired.
+    game.driver.step(60 * 4);   // let the cannon come off cooldown
+    game.driver.tap(SDL_SCANCODE_Z);
+    game.driver.step(2);
+    check(game.session().armedSpell == kMeteor, "Z arms the meteor");
+
+    const int shellsBefore = lanebattle::countCannonballs(game.world);
+    const float manaBefore = game.session().mana;
+    game.driver.clickAt(screenXFor(game, 700.0f), kFieldClickY);
+    game.driver.step(kFireFrames);
+
+    check(lanebattle::countCannonballs(game.world) <= shellsBefore,
+          "an armed spell takes the click, so the cannon does not fire");
+    check(game.session().mana < manaBefore, "the spell was cast");
+    check(game.session().armedSpell < 0, "and disarms itself after casting");
+}
+
+void testArmingCanBeCancelled() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().mana = lanebattle::kMaxMana;
+
+    game.driver.tap(SDL_SCANCODE_Z);
+    game.driver.step(2);
+    check(game.session().armedSpell == kMeteor, "the meteor is armed");
+
+    // Pressing it again puts it away, so an accidental arm is not a trap that
+    // forces you to spend it somewhere useless.
+    game.driver.tap(SDL_SCANCODE_Z);
+    game.driver.step(2);
+    check(game.session().armedSpell < 0, "pressing it again disarms it");
+
+    game.driver.tap(SDL_SCANCODE_Z);
+    game.driver.step(2);
+    game.driver.moveMouse(400, kFieldClickY);
+    game.driver.pressMouse(SDL_BUTTON_RIGHT);
+    game.driver.step(2);
+    game.driver.releaseMouse(SDL_BUTTON_RIGHT);
+    check(game.session().armedSpell < 0, "and so does a right-click");
+}
+
+void testTheMeteorDamagesEnemiesInItsArea() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().mana = lanebattle::kMaxMana;
+
+    const Entity victim = lanebattle::spawnUnit(game.world, false, kSoldier);
+    const Entity friendly = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const Entity distant = lanebattle::spawnUnit(game.world, false, kSoldier);
+    game.world.getComponent<Transform>(victim)->x = 700.0f;
+    game.world.getComponent<Transform>(friendly)->x = 700.0f;
+    game.world.getComponent<Transform>(distant)->x = 1400.0f;
+    game.world.getComponent<Unit>(victim)->health = 100000.0f;
+    game.world.getComponent<Unit>(friendly)->health = 100000.0f;
+
+    game.driver.tap(SDL_SCANCODE_Z);
+    game.driver.step(2);
+    game.driver.clickAt(screenXFor(game, 712.0f), kFieldClickY);
+    game.driver.step(kFireFrames);
+
+    // A spell lands the instant it is cast, unlike a shell that has to fly.
+    check(game.world.getComponent<Unit>(victim)->health < 100000.0f,
+          "the meteor damages an enemy in its area");
+    check(game.world.getComponent<Unit>(friendly)->health == 100000.0f,
+          "and never your own units, however close they are standing");
+    check(std::fabs(game.world.getComponent<Unit>(distant)->health -
+                    stats(kSoldier).health) < 0.01f,
+          "and nothing outside the area at all");
+}
+
+void testHealRestoresYourUnitsButNotBeyondFull() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().mana = lanebattle::kMaxMana;
+
+    const Entity wounded = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const Entity healthy = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const Entity enemy = lanebattle::spawnUnit(game.world, false, kSoldier);
+    game.world.getComponent<Transform>(wounded)->x = 700.0f;
+    game.world.getComponent<Transform>(healthy)->x = 700.0f;
+    game.world.getComponent<Transform>(enemy)->x = 700.0f;
+    game.world.getComponent<Unit>(wounded)->health = 20.0f;
+    game.world.getComponent<Unit>(enemy)->health = 20.0f;
+
+    game.driver.tap(SDL_SCANCODE_X);
+    game.driver.step(2);
+    game.driver.clickAt(screenXFor(game, 712.0f), kFieldClickY);
+    game.driver.step(kFireFrames);
+
+    check(game.world.getComponent<Unit>(wounded)->health > 20.0f,
+          "HEAL restores a wounded unit");
+
+    // Capped at what the unit started with. An overfilling heal would make a
+    // veteran better than a fresh soldier and turn the spell into a permanent
+    // stat upgrade you cast over and over.
+    check(game.world.getComponent<Unit>(healthy)->health <=
+              stats(kSoldier).health + 0.01f,
+          "and never past full");
+    check(game.world.getComponent<Unit>(enemy)->health <= 20.0f,
+          "and never heals the opponent");
+}
+
+void testRageIsTemporaryAndOnlyYours() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().mana = lanebattle::kMaxMana;
+
+    const Entity mine = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const Entity theirs = lanebattle::spawnUnit(game.world, false, kSoldier);
+    game.world.getComponent<Transform>(mine)->x = 500.0f;
+    game.world.getComponent<Transform>(theirs)->x = 520.0f;
+    game.world.getComponent<Unit>(mine)->health = 100000.0f;
+    game.world.getComponent<Unit>(theirs)->health = 100000.0f;
+
+    game.driver.tap(SDL_SCANCODE_C);
+    game.driver.step(2);
+    check(game.session().rageSeconds > 0.0f, "RAGE lasts a while");
+
+    // Health reset AFTER casting, then stepped past one attack delay.
+    //
+    // Measuring straight after the cast measured the blow that landed on the
+    // frame BEFORE it — the fight runs before spells in the frame, so the
+    // first hit is always an unraged one. That is correct behaviour and it
+    // made the test read a normal hit and call it a failure.
+    game.world.getComponent<Unit>(mine)->health = 100000.0f;
+    game.world.getComponent<Unit>(theirs)->health = 100000.0f;
+    game.driver.step(static_cast<int>(stats(kSoldier).attackDelay * 60.0f) + 4);
+
+    const float dealt = 100000.0f - game.world.getComponent<Unit>(theirs)->health;
+    const float taken = 100000.0f - game.world.getComponent<Unit>(mine)->health;
+    check(dealt > stats(kSoldier).damage * 1.3f, "your units hit harder under it");
+    check(taken <= stats(kSoldier).damage + 0.01f, "and theirs do not");
+
+    // And it runs out.
+    game.driver.step(static_cast<int>(lanebattle::spellKind(kRage).duration * 60.0f) + 10);
+    check(game.session().rageSeconds == 0.0f, "it wears off");
+
+    game.world.getComponent<Unit>(theirs)->health = 100000.0f;
+    game.driver.step(static_cast<int>(stats(kSoldier).attackDelay * 60.0f) + 4);
+    const float after = 100000.0f - game.world.getComponent<Unit>(theirs)->health;
+    check(after <= stats(kSoldier).damage * 1.05f,
+          "and your units go back to hitting for what the roster says");
+}
+
+void testSpellHitTesting() {
+    for (int spell = 0; spell < lanebattle::kSpellCount; ++spell) {
+        check(lanebattle::spellAt(lanebattle::kSpellX + 10.0f,
+                                  lanebattle::spellTop(spell) + 8.0f) == spell,
+              "each spell row is its own button");
+    }
+    check(lanebattle::spellAt(300.0f, lanebattle::spellTop(0) + 8.0f) == -1,
+          "and the battlefield beside the panel is not one");
+
+    // The spell panel must not sit on anything else that takes a click.
+    for (int spell = 0; spell < lanebattle::kSpellCount; ++spell) {
+        const float y = lanebattle::spellTop(spell) + 8.0f;
+        check(lanebattle::upgradeAt(lanebattle::kSpellX + 10.0f, y) == -1,
+              "and no spell row is also an upgrade row");
+        check(lanebattle::buttonAt(lanebattle::kSpellX + 10.0f, y) == -1,
+              "nor a spawn-bar slot");
+        check(!lanebattle::heroButtonHit(lanebattle::kSpellX + 10.0f, y),
+              "nor the hero button");
+    }
+}
+
+void testClickingASpellPanelRowArmsIt() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().mana = lanebattle::kMaxMana;
+
+    game.driver.clickAt(static_cast<int>(lanebattle::kSpellX + 10),
+                        static_cast<int>(lanebattle::spellTop(kMeteor) + 8));
+    game.driver.step(3);
+    check(game.session().armedSpell == kMeteor,
+          "clicking a spell row arms it, and does not cast it into the panel");
+    check(lanebattle::countCannonballs(game.world) == 0,
+          "and does not fire the cannon through the panel either");
 }
 
 // --- Can the game actually be played? --------------------------------------
@@ -3343,6 +3604,16 @@ int main() {
     testStagesCannotFieldHeroes();
     testTheChampionPerkStrengthensTheHero();
     testWhenYouSpendTheHeroDecidesWhetherItWasWorthIt();
+
+    testManaRefillsOnItsOwn();
+    testAnUnaffordableSpellDoesNothing();
+    testAnArmedSpellTakesTheClickFromTheCannon();
+    testArmingCanBeCancelled();
+    testTheMeteorDamagesEnemiesInItsArea();
+    testHealRestoresYourUnitsButNotBeyondFull();
+    testRageIsTemporaryAndOnlyYours();
+    testSpellHitTesting();
+    testClickingASpellPanelRowArmsIt();
 
     testABattleCanBeWon();
     testOneUnitTypeIsNotEnough();
