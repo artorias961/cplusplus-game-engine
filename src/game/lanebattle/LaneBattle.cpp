@@ -428,6 +428,13 @@ bool loadBalance(const std::string& path) {
         if (name.empty()) continue;  // a row with no name names nothing
 
         int index = indexOfName(name);
+        if (index < 0 && gUnitKinds.size() >= static_cast<std::size_t>(kMaxUnitKinds)) {
+            // The roster is full. Each side stores one cooldown timer per kind
+            // on its Session, so the ceiling is real rather than arbitrary —
+            // and silently growing past it would corrupt nothing visibly, just
+            // stop the extra units from ever being spawnable.
+            continue;
+        }
         if (index < 0) {
             // A new kind. Its defaults are the soldier's, so a row that sets
             // only a cost still produces something that can walk and fight
@@ -448,6 +455,7 @@ bool loadBalance(const std::string& path) {
         kind.range = section->number("range", kind.range);
         kind.attackDelay = section->number("attack_delay", kind.attackDelay);
         kind.speed = section->number("speed", kind.speed);
+        kind.cooldown = section->number("cooldown", kind.cooldown);
         kind.width = section->number("width", kind.width);
         kind.height = section->number("height", kind.height);
 
@@ -1145,8 +1153,11 @@ private:
 
     void handlePlayerSpawning(World& world, Session& session,
                               InputManager& input, float dt) {
-        session.spawnCooldown -= dt;
-        if (session.spawnCooldown > 0.0f) return;
+        // Every kind's timer runs down every frame, whether or not anything is
+        // sent — a cooldown that only ticked while you were pressing buttons
+        // would punish you for waiting.
+        tickCooldowns(session.spawnCooldowns, dt);
+
         if (countUnits(world, true) >= populationCapFor(session, true)) return;
 
         // One key per row of the table, so adding a fourth unit type is a
@@ -1172,12 +1183,26 @@ private:
     // place gold is spent, so the keyboard and the mouse cannot drift apart.
     bool trySpawn(World& world, Session& session, int kind) {
         if (kind < 0 || kind >= unitKindCount()) return false;
+        if (kind >= kMaxUnitKinds) return false;
+        if (session.spawnCooldowns[kind] > 0.0f) return false;
         if (session.gold < unitKind(kind).cost) return false;
 
         session.gold -= unitKind(kind).cost;
-        session.spawnCooldown = kSpawnCooldown;
+        session.spawnCooldowns[kind] = cooldownFor(kind);
         spawnUnit(world, true, kind);
         return true;
+    }
+
+    static void tickCooldowns(float* cooldowns, float dt) {
+        for (int kind = 0; kind < kMaxUnitKinds; ++kind) {
+            if (cooldowns[kind] > 0.0f) cooldowns[kind] -= dt;
+        }
+    }
+
+    // Floored, so a data file setting a cooldown of zero cannot turn one held
+    // key into an army in a single frame.
+    static float cooldownFor(int kind) {
+        return std::max(kMinSpawnCooldown, unitKind(kind).cooldown);
     }
 
     // The opponent, playing by the same rules from the same purse.
@@ -1187,7 +1212,11 @@ private:
     // two front lines mirror each other and nothing ever moves. Now that both
     // sides bank, the player has to beat it on composition instead.
     void handleEnemySpawning(World& world, Session& session, float dt) {
-        session.enemySpawnTimer -= dt;
+        // The opponent lives under the same per-kind cooldowns. Symmetry here
+        // has been load-bearing three times now: an opponent that could pour a
+        // whole purse into one unit type while the player could not would be
+        // playing a different game, and a better one.
+        tickCooldowns(session.enemySpawnCooldowns, dt);
 
         if (session.enemyWaveRemaining <= 0) {
             if (session.enemyGold >= waveCost(session)) {
@@ -1196,19 +1225,32 @@ private:
             return;
         }
 
-        if (session.enemySpawnTimer > 0.0f) return;
         if (countUnits(world, false) >= populationCapFor(session, false)) return;
 
-        const int kind = kEnemyComposition[session.enemyWaveIndex %
-                                           kEnemyCompositionLength];
-        if (session.enemyGold < unitKind(kind).cost) return;
+        // Reads FORWARD through the composition for something it can actually
+        // send, rather than waiting on whatever came next.
+        //
+        // Taking only the next entry looked right and throttled the opponent
+        // badly: its cycle opens with two soldiers, so the second one sat
+        // waiting out the first one's cooldown instead of sending the archer
+        // behind it. Per-kind cooldowns only reward you for diversifying if
+        // you are allowed to diversify.
+        for (int step = 0; step < kEnemyCompositionLength; ++step) {
+            const int index =
+                (session.enemyWaveIndex + step) % kEnemyCompositionLength;
+            const int kind = kEnemyComposition[index];
 
-        session.enemyGold -= unitKind(kind).cost;
-        session.enemySpawnTimer = kSpawnCooldown;
-        session.enemyWaveIndex =
-            (session.enemyWaveIndex + 1) % kEnemyCompositionLength;
-        --session.enemyWaveRemaining;
-        spawnUnit(world, false, kind);
+            if (kind >= kMaxUnitKinds) continue;
+            if (session.enemySpawnCooldowns[kind] > 0.0f) continue;
+            if (session.enemyGold < unitKind(kind).cost) continue;
+
+            session.enemyGold -= unitKind(kind).cost;
+            session.enemySpawnCooldowns[kind] = cooldownFor(kind);
+            session.enemyWaveIndex = (index + 1) % kEnemyCompositionLength;
+            --session.enemyWaveRemaining;
+            spawnUnit(world, false, kind);
+            return;
+        }
     }
 
     // What the next whole wave costs, reading forward through the cycle from
@@ -1578,12 +1620,16 @@ private:
                 plate->b = affordable ? 64 : 40;
             }
 
-            // The fill is the shared spawn cooldown draining left to right,
-            // so the bar shows *when* you can send as well as *what*.
+            // The fill is THIS kind.s own cooldown draining left to right, so
+            // the bar shows when you can send each unit rather than one
+            // shared timer that told you nothing about which button to press.
             if (Sprite* fill = world.getComponent<Sprite>(buttonFill_[kind])) {
-                const float remaining =
-                    std::max(0.0f, session.spawnCooldown) / kSpawnCooldown;
-                fill->width = static_cast<int>(kButtonWidth * (1.0f - remaining));
+                const float total = std::max(kMinSpawnCooldown, stats.cooldown);
+                const float left = kind < kMaxUnitKinds
+                                       ? std::max(0.0f, session.spawnCooldowns[kind])
+                                       : 0.0f;
+                fill->width =
+                    static_cast<int>(kButtonWidth * (1.0f - left / total));
             }
         }
     }

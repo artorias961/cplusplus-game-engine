@@ -13,6 +13,10 @@
 #     name = ARCHER
 #     cost = 80
 #
+# Each unit has its OWN cooldown, so a full purse cannot be poured into one
+# type: spending it means sending something else. That is what makes the
+# button bar a decision rather than a shop.
+#
 # Balance, in one paragraph: RUNNER is the best damage per gold and dies to
 # anything. SOLDIER beats a runner one-to-one and loses to two. ARCHER
 # outranges both and cannot survive being reached, so it is worth having only
@@ -28,6 +32,7 @@ damage       = 8
 range        = 30
 attack_delay = 0.45
 speed        = 150
+cooldown     = 1.1
 width        = 16
 height       = 26
 left_r       = 150
@@ -45,6 +50,7 @@ damage       = 14
 range        = 34
 attack_delay = 0.60
 speed        = 95
+cooldown     = 1.9
 width        = 24
 height       = 36
 left_r       = 110
@@ -62,6 +68,7 @@ damage       = 20
 range        = 135
 attack_delay = 0.95
 speed        = 70
+cooldown     = 3.0
 width        = 18
 height       = 34
 left_r       = 90

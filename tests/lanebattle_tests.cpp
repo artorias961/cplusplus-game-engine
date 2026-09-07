@@ -50,6 +50,21 @@ void check(bool condition, const char* what) {
     }
 }
 
+std::string writeRoster(const char* name, const char* contents) {
+    // Written next to the test binary rather than into a temp directory: it
+    // needs no environment variable, it is the same place DataFile resolves
+    // relative paths against, and it is cleaned up with the build.
+    std::string path = name;
+    if (char* base = SDL_GetBasePath()) {
+        path = std::string(base) + name;
+        SDL_free(base);
+    }
+    std::ofstream out(path);
+    out << contents;
+    out.close();
+    return path;
+}
+
 struct Game {
     World world;
     SceneStack scenes;
@@ -70,6 +85,25 @@ struct Game {
 
     Session& session() { return *lanebattle::findSession(world); }
 
+    // Every unit kind put on a cooldown long enough to outlast any test. Each
+    // side has its own timer per kind now, so "stop the opponent producing" is
+    // a loop rather than one field.
+    void stopEnemyProduction() {
+        for (int kind = 0; kind < lanebattle::kMaxUnitKinds; ++kind) {
+            session().enemySpawnCooldowns[kind] = 1.0e9f;
+        }
+    }
+    void allowEnemyProduction() {
+        for (int kind = 0; kind < lanebattle::kMaxUnitKinds; ++kind) {
+            session().enemySpawnCooldowns[kind] = 0.0f;
+        }
+    }
+    void clearPlayerCooldowns() {
+        for (int kind = 0; kind < lanebattle::kMaxUnitKinds; ++kind) {
+            session().spawnCooldowns[kind] = 0.0f;
+        }
+    }
+
     float cameraX() {
         Camera* camera = lanebattle::findCamera(world);
         return camera ? camera->x : -1.0f;
@@ -88,7 +122,7 @@ struct Game {
     // it has banked for one, so a test that runs for a few seconds finds
     // strangers wandering into the fight it carefully arranged.
     void suppressEnemySpawns() {
-        session().enemySpawnTimer = 1.0e9f;
+        stopEnemyProduction();
         // And its cannon. A test that walks units up the field for long enough
         // used to be safe; now anything that strays within range of the enemy
         // castle gets shelled, which is correct behaviour and a nuisance in a
@@ -313,7 +347,7 @@ void testTheEnemyBanksBeforeSpending() {
     // Enough for one unit but not for a wave: it should sit on the money.
     game.session().enemyGold = stats(kSoldier).cost + 5.0f;
     game.session().enemyWaveRemaining = 0;
-    game.session().enemySpawnTimer = 0.0f;
+    game.allowEnemyProduction();
 
     const int before = lanebattle::countUnits(game.world, false);
     game.driver.step(3);
@@ -353,7 +387,7 @@ void testTheEnemyPaysForItsUnits() {
     // Hand it a purse big enough for a wave and an open cooldown, then watch
     // the money actually leave the purse.
     game.session().enemyGold = 10000.0f;
-    game.session().enemySpawnTimer = 0.0f;
+    game.allowEnemyProduction();
 
     const int fieldedBefore = lanebattle::countUnits(game.world, false);
     const float before = game.session().enemyGold;
@@ -379,7 +413,7 @@ void testTheEconomiesAreSymmetric() {
     game.startPlaying();
 
     // Nobody spends: hold the enemy's cooldown open and press nothing.
-    game.session().enemySpawnTimer = 1.0e9f;
+    game.stopEnemyProduction();
     const float playerBefore = game.session().gold;
     const float enemyBefore = game.session().enemyGold;
 
@@ -696,18 +730,29 @@ void testThePopulationCapHolds() {
     game.suppressEnemySpawns();
     game.session().gold = 100000.0f;
 
-    // Long enough to fill the cap several times over at one spawn per
-    // cooldown, but not so long that the first runners cross the field and
-    // start a fight at the far castle — which would end the battle and stop
-    // the spawning this is trying to measure.
+    // Filled directly rather than by holding a key.
+    //
+    // Waiting out a spawn cooldown per unit used to work, and stopped when
+    // each kind got its own: ten runners at 1.1 seconds each is eleven
+    // seconds, by which time the first of them has walked most of the way
+    // across the field and started a fight that ends the battle. Placing them
+    // makes this a test about the cap rather than about timing.
+    for (int filled = 0; filled < lanebattle::kPopulationCap; ++filled) {
+        lanebattle::spawnUnit(game.world, true, kRunner);
+    }
+    game.driver.step();
+    check(lanebattle::countUnits(game.world, true) == lanebattle::kPopulationCap,
+          "the field can be filled to the cap");
+
+    // Now the cap, not the purse and not a cooldown, is the only thing in the
+    // way — so a press that would otherwise succeed must do nothing.
+    game.clearPlayerCooldowns();
     game.driver.hold(SDL_SCANCODE_1);
-    game.driver.step(400);
+    game.driver.step(4);
     game.driver.release(SDL_SCANCODE_1);
 
     check(lanebattle::countUnits(game.world, true) <= lanebattle::kPopulationCap,
           "you can never field more than the cap");
-    check(lanebattle::countUnits(game.world, true) == lanebattle::kPopulationCap,
-          "and with money and time you reach it");
 
     // A slot freed by a death is a slot you get back.
     for (Entity entity : game.world.entities()) {
@@ -878,6 +923,159 @@ void testKillsPayGold() {
     check(game.session().enemyGold - enemyBefore >
               stats(kSoldier).cost * lanebattle::kKillRewardFraction * 0.9f,
           "and it is the other side that gets paid when you lose one");
+}
+
+// --- Per-unit cooldowns ----------------------------------------------------
+//
+// The mechanic the reference game has and a single shared timer does not.
+// With one shared cooldown the only limit on spending was gold, so a banked
+// purse went entirely into whichever unit was best and composition was a
+// preference. Per-kind timers mean a large purse CANNOT be spent on one type.
+
+void testEachKindHasItsOwnCooldown() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = 10000.0f;
+
+    game.driver.tap(SDL_SCANCODE_2);   // a soldier
+    game.driver.step(2);
+    check(lanebattle::countUnitsOfKind(game.world, true, kSoldier) == 1,
+          "the soldier went out");
+
+    // The archer's button is untouched by the soldier's cooldown. This is the
+    // whole mechanic: with a shared timer, this second send is impossible.
+    game.driver.tap(SDL_SCANCODE_3);
+    game.driver.step(2);
+    check(lanebattle::countUnitsOfKind(game.world, true, kArcher) == 1,
+          "and an archer can follow it immediately");
+
+    // But a second soldier cannot, until the soldier's own timer runs out.
+    game.driver.tap(SDL_SCANCODE_2);
+    game.driver.step(2);
+    check(lanebattle::countUnitsOfKind(game.world, true, kSoldier) == 1,
+          "while a second soldier has to wait for the soldier's cooldown");
+}
+
+void testACooldownRunsOutAndTheUnitReturns() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = 10000.0f;
+
+    game.driver.tap(SDL_SCANCODE_2);
+    game.driver.step(2);
+    check(game.session().spawnCooldowns[kSoldier] > 0.0f,
+          "sending a soldier starts the soldier's timer");
+
+    // Long enough for that kind's own cooldown, and no longer.
+    const int frames = static_cast<int>(stats(kSoldier).cooldown * 60.0f) + 4;
+    game.driver.step(frames);
+
+    game.driver.tap(SDL_SCANCODE_2);
+    game.driver.step(2);
+    check(lanebattle::countUnitsOfKind(game.world, true, kSoldier) == 2,
+          "and once it has run out the button works again");
+}
+
+// The cooldown is a column of the roster table, so a data file retunes it
+// exactly as it retunes cost or speed.
+void testCooldownsComeFromTheTable() {
+    lanebattle::resetBalance();
+    const std::string path = writeRoster("lb_cooldown.txt", R"(
+[unit]
+name     = SOLDIER
+cooldown = 0.5
+)");
+    check(lanebattle::loadBalance(path), "the file loaded");
+    check(lanebattle::unitKind(kSoldier).cooldown == 0.5f,
+          "a file can retune how fast a unit recharges");
+
+    World world;
+    SceneStack scenes;
+    harness::Harness driver(world, scenes);
+    scenes.push(lanebattle::makePlayScene());
+    driver.step(2);
+
+    Session* session = lanebattle::findSession(world);
+    session->gold = 10000.0f;
+
+    driver.tap(SDL_SCANCODE_2);
+    driver.step(2);
+    driver.step(36);  // 0.6s: past the retuned cooldown, well short of 1.9
+    driver.tap(SDL_SCANCODE_2);
+    driver.step(2);
+
+    check(lanebattle::countUnitsOfKind(world, true, kSoldier) == 2,
+          "and the game plays by the file's number, not the compiled one");
+
+    lanebattle::resetBalance();
+}
+
+// A file setting a cooldown of zero would otherwise turn one held key into an
+// army in a single frame.
+void testThereIsAFloorUnderEveryCooldown() {
+    lanebattle::resetBalance();
+    const std::string path = writeRoster("lb_zerocool.txt", R"(
+[unit]
+name     = SOLDIER
+cooldown = 0
+)");
+    check(lanebattle::loadBalance(path), "the file loaded");
+
+    World world;
+    SceneStack scenes;
+    harness::Harness driver(world, scenes);
+    scenes.push(lanebattle::makePlayScene());
+    driver.step(2);
+
+    Session* session = lanebattle::findSession(world);
+    session->gold = 100000.0f;
+
+    driver.hold(SDL_SCANCODE_2);
+    driver.step(10);   // a sixth of a second
+    driver.release(SDL_SCANCODE_2);
+
+    check(lanebattle::countUnitsOfKind(world, true, kSoldier) <= 1,
+          "a cooldown of zero is still floored at the minimum gap");
+
+    lanebattle::resetBalance();
+}
+
+// Symmetry, for the fourth time. An opponent that could pour a whole purse
+// into one unit type while the player could not would be playing a different
+// and better game.
+void testTheEnemyObeysCooldownsToo() {
+    Game game;
+    game.startPlaying();
+    game.session().enemyGold = 1000000.0f;
+    game.allowEnemyProduction();
+
+    // Half a second. However rich it is, it cannot field more than one of each
+    // kind in that time, so the total is bounded by the number of kinds.
+    game.driver.step(30);
+
+    for (int kind = 0; kind < lanebattle::unitKindCount(); ++kind) {
+        check(lanebattle::countUnitsOfKind(game.world, false, kind) <= 1,
+              "an infinitely rich opponent still sends one of each per cooldown");
+    }
+}
+
+// The roster's ceiling is real: each side stores one timer per kind on its
+// Session, so a file cannot grow it without bound.
+void testTheRosterHasACeiling() {
+    lanebattle::resetBalance();
+    std::string contents;
+    for (int extra = 0; extra < 40; ++extra) {
+        contents += "[unit]\nname = SPARE" + std::to_string(extra) + "\n\n";
+    }
+    const std::string path = writeRoster("lb_toomany.txt", contents.c_str());
+    check(lanebattle::loadBalance(path), "a very long roster loads");
+
+    check(lanebattle::unitKindCount() == lanebattle::kMaxUnitKinds,
+          "and stops at the ceiling rather than growing without bound");
+
+    lanebattle::resetBalance();
 }
 
 // --- The spawn bar (slice 4) -----------------------------------------------
@@ -1194,7 +1392,7 @@ void testNoFiguresLeakAcrossABattle() {
     game.startPlaying();
 
     for (int frame = 0; frame < 60 * 60; ++frame) {
-        if (game.session().spawnCooldown <= 0.0f) {
+        if (game.session().spawnCooldowns[kSoldier] <= 0.0f) {
             game.driver.tap(SDL_SCANCODE_2);
         }
         game.driver.step();
@@ -1356,20 +1554,6 @@ void testRestartingClearsTheScenery() {
 
 // --- Data-driven balance (slice 7) -----------------------------------------
 
-std::string writeRoster(const char* name, const char* contents) {
-    // Written next to the test binary rather than into a temp directory: it
-    // needs no environment variable, it is the same place DataFile resolves
-    // relative paths against, and it is cleaned up with the build.
-    std::string path = name;
-    if (char* base = SDL_GetBasePath()) {
-        path = std::string(base) + name;
-        SDL_free(base);
-    }
-    std::ofstream out(path);
-    out << contents;
-    out.close();
-    return path;
-}
 
 // The defaults are what the game plays with when no file is found, which is
 // the normal case for a bare build directory. Every other test in this file
@@ -1776,7 +1960,7 @@ void testClickingTheUiDoesNotFire() {
 void testTheEnemyCastleShootsBack() {
     Game game;
     game.startPlaying();
-    game.session().enemySpawnTimer = 1.0e9f;   // no units, but leave its gun on
+    game.stopEnemyProduction();   // no units, but leave its gun on
     game.session().enemyGold = 100000.0f;
     game.session().enemyCannonCooldown = 0.0f;
 
@@ -2022,12 +2206,20 @@ int playBattle(Game& game, const int* cycle, int cycleLength) {
             game.driver.release(holding);
             holding = SDL_SCANCODE_UNKNOWN;
         }
-        const int kind = cycle[index % cycleLength];
-        if (game.session().spawnCooldown <= 0.0f &&
-            game.session().gold >= stats(kind).cost) {
+        // Reads forward through the composition for something sendable rather
+        // than waiting on whatever came next. Taking only the next entry means
+        // a cycle of {soldier, soldier, archer} spends most of its time
+        // waiting out the soldier's own cooldown — which is a bad player, not
+        // a bad game, and would have been measured as the latter.
+        for (int step = 0; step < cycleLength; ++step) {
+            const int kind = cycle[(index + step) % cycleLength];
+            if (game.session().spawnCooldowns[kind] > 0.0f) continue;
+            if (game.session().gold < stats(kind).cost) continue;
+
             holding = keys[kind];
             game.driver.hold(holding);
-            index = (index + 1) % cycleLength;
+            index = (index + step + 1) % cycleLength;
+            break;
         }
         game.driver.step();
         if (game.session().gameOver) return game.session().playerWon ? 1 : -1;
@@ -2132,6 +2324,13 @@ int main() {
     testArchersOutrangeSoldiers();
     testTargetTiesGoToTheLowerEntityId();
     testKillsPayGold();
+
+    testEachKindHasItsOwnCooldown();
+    testACooldownRunsOutAndTheUnitReturns();
+    testCooldownsComeFromTheTable();
+    testThereIsAFloorUnderEveryCooldown();
+    testTheEnemyObeysCooldownsToo();
+    testTheRosterHasACeiling();
 
     testButtonHitTesting();
     testClickingAButtonSendsItsUnit();

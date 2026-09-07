@@ -75,11 +75,32 @@ struct UnitKind {
     float range;         // how close before it stops to fight
     float attackDelay;   // seconds between blows
     float speed;         // pixels per second
+
+    // How long THIS kind's button is unavailable after sending one. Each kind
+    // has its own, which is what the genre does and is not the small detail it
+    // looks like.
+    //
+    // With a single shared cooldown the only limit on spending was gold, so a
+    // banked purse went entirely into whichever unit was best and composition
+    // was a preference rather than a constraint. Per-kind timers mean a large
+    // purse CANNOT be spent on one type: to use it you have to send something
+    // else, which is the whole point of having more than one.
+    //
+    // They mostly do not bind at base income — a soldier takes four seconds to
+    // afford and two to recharge — and start mattering exactly when the player
+    // has money to burn, which is when the interesting decision exists.
+    float cooldown;
+
     float width;
     float height;
     unsigned char leftR, leftG, leftB;     // your colours
     unsigned char rightR, rightG, rightB;  // theirs
 };
+
+// The roster's hard ceiling. A data file may add unit types, but each side
+// needs one cooldown timer per kind stored on the Session, and an unbounded
+// component is a worse thing to own than a documented limit.
+constexpr int kMaxUnitKinds = 16;
 
 // The three roles the genre is built on, and the shape of each:
 //
@@ -96,10 +117,10 @@ struct UnitKind {
 // build directory and why the tests are deterministic without touching a
 // filesystem. Read the live roster through `unitKind()` — never through this.
 constexpr UnitKind kDefaultUnitKinds[] = {
-    // name       cost   hp    dmg   range  delay  speed   w      h     yours          theirs
-    {"RUNNER",    35.0f, 60.0f,  8.0f,  30.0f, 0.45f, 150.0f, 16.0f, 26.0f, 150, 215, 255, 255, 175, 150},
-    {"SOLDIER",   60.0f, 110.0f, 14.0f, 34.0f, 0.60f,  95.0f, 24.0f, 36.0f, 110, 190, 240, 235, 130, 110},
-    {"ARCHER",    95.0f, 55.0f,  20.0f, 135.0f, 0.95f,  70.0f, 18.0f, 34.0f,  90, 140, 210, 200,  95, 130},
+    // name      cost   hp     dmg   range  delay  speed  cool   w      h     yours          theirs
+    {"RUNNER",   35.0f, 60.0f,  8.0f,  30.0f, 0.45f, 150.0f, 1.1f, 16.0f, 26.0f, 150, 215, 255, 255, 175, 150},
+    {"SOLDIER",  60.0f, 110.0f, 14.0f, 34.0f, 0.60f,  95.0f, 1.9f, 24.0f, 36.0f, 110, 190, 240, 235, 130, 110},
+    {"ARCHER",   95.0f, 55.0f,  20.0f, 135.0f, 0.95f,  70.0f, 3.0f, 18.0f, 34.0f,  90, 140, 210, 200,  95, 130},
 };
 constexpr int kDefaultUnitKindCount =
     static_cast<int>(sizeof(kDefaultUnitKinds) / sizeof(kDefaultUnitKinds[0]));
@@ -133,7 +154,9 @@ constexpr float kMaxUnitWidth = 24.0f;
 
 constexpr float kStartingGold = 150.0f;
 constexpr float kGoldPerSecond = 14.0f;
-constexpr float kSpawnCooldown = 0.35f;      // stops one keypress spawning ten
+// The floor under every unit's own cooldown, so one keypress can never become
+// an army even if a data file sets a cooldown of zero.
+constexpr float kMinSpawnCooldown = 0.35f;
 
 // Killing something pays, as a fraction of what it cost its owner.
 //
@@ -462,8 +485,11 @@ struct Session {
     bool gameOver = false;
     bool playerWon = false;
 
-    float spawnCooldown = 0.0f;
-    float enemySpawnTimer = 0.0f;
+    // One timer per unit kind, per side. This is what makes a button bar a
+    // decision: a full purse cannot be poured into a single type, so spending
+    // it means sending something else.
+    float spawnCooldowns[kMaxUnitKinds] = {};
+    float enemySpawnCooldowns[kMaxUnitKinds] = {};
 
     // Where the opponent is in its composition cycle, and how much of the
     // current wave it still owes. Zero means it is banking for the next one.

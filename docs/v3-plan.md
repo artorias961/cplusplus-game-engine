@@ -340,6 +340,51 @@ or not the shot could reach. The test was measuring the lead error, not the
 clamp. It now aims with lead, so the only thing that stops the shell is the
 range it was supposed to be testing.
 
+### Per-unit cooldowns (parity with the reference)
+
+Not a roadmap slice — a mechanic the reference game has that this one did not,
+found by comparing the two rather than by building the next thing.
+
+Every unit kind now has **its own** cooldown, per side, instead of one shared
+0.35-second gap. The button fill shows that kind's timer rather than a global
+one, and `cooldown` is a column of the roster table like every other number.
+
+It looks like a detail and is not. With a single shared timer the only limit on
+spending was gold, so a banked purse went entirely into whichever unit was
+best, and composition was a preference. Per-kind timers mean a large purse
+**cannot** be spent on one type — using it means sending something else. They
+barely bind at base income (a soldier takes four seconds to afford and two to
+recharge) and start mattering exactly when the player has money to burn, which
+is when a decision is worth having.
+
+Measured across compositions afterwards:
+
+| Strategy | Result |
+| --- | --- |
+| Soldiers with archers behind | **Wins** |
+| Soldier-heavy plus archers | **Wins** |
+| All three kinds in even rotation | **Loses** |
+| Any single kind | **Loses** |
+
+The design guard still holds — no one unit type is a strategy — and there is a
+new distinction underneath it: the *ratio* matters, not just the mix. An even
+three-way split loses where a soldier-heavy line with archers wins, because a
+population cap makes quality per slot beat gold efficiency. Runners are
+currently a rush unit rather than a mainstay; whether that is right is a
+balance question, and balance is a text file now.
+
+#### The same bug, twice, in two places
+
+Both the opponent and the test helper that plays a battle took only the NEXT
+entry in their composition — so a cycle opening with two soldiers spent most of
+its time waiting out the first soldier's cooldown instead of sending the archer
+behind it. Both now read forward for something they can actually send.
+
+The player-side version is the more interesting of the two: left alone, it
+would have measured a bad *player* and reported it as a bad *game*. The first
+run after the change said the mixed strategy no longer won, which looked like a
+balance regression and was a helper that had stopped playing properly.
+
 ## Between slices: an audit, and closing the last untested gaps
 
 ### The audit

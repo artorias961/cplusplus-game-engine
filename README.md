@@ -706,9 +706,9 @@ ball. Missing the ball costs one of three lives.
 | Input | Action |
 | --- | --- |
 | Click the bar | Send that unit |
-| 1 | Send a **runner** — 35 gold, fast and fragile |
-| 2 | Send a **soldier** — 60 gold, the front line |
-| 3 | Send an **archer** — 95 gold, outranges everything, dies to anything |
+| 1 | Send a **runner** — 35 gold, 1.1s cooldown, fast and fragile |
+| 2 | Send a **soldier** — 60 gold, 1.9s cooldown, the front line |
+| 3 | Send an **archer** — 95 gold, 3.0s cooldown, outranges everything |
 | Click the field | Fire the castle cannon there — 30 gold, reaches 420px |
 | Drag the field | Scroll the view |
 | Left / Right | Look up and down the field; lets go after a moment |
@@ -752,6 +752,11 @@ rather than a way to shell the enemy from home — and each shot costs gold you
 could have spent on a unit. The first version was free and reached 780, which
 made every match a stalemate: free defensive damage that never runs out means
 neither side can ever cross the approach to a castle.
+
+Each unit has its OWN cooldown, so a full purse cannot be poured into one
+type — spending it means sending something else. That is what makes the bar a
+decision rather than a shop, and it is why the ratio you send matters and not
+just the mix.
 
 One thing worth knowing, because the game does not yet teach it: **no single
 unit type is a strategy.** An army of nothing but soldiers loses, an army of
