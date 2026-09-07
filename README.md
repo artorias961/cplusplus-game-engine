@@ -25,13 +25,13 @@ That's on purpose — an engine with only one game is a hypothesis, not an engin
 — and each needed something the last one didn't: Snake wanted fixed ticks and
 box collision, Asteroids wanted rotation and circles, Breakout wanted contact
 normals and sub-frame movement. Lane Battle has asked for very little across
-seven slices, which is its own kind of result: a battlefield wider than its
+eight slices, which is its own kind of result: a battlefield wider than its
 window made world and screen coordinates differ for the first time, moving that
 rule out of the renderer into `View.h` where a test can reach it; a clickable
 spawn bar wanted a mouse; scenery at a distance wanted a parallax factor,
 because `screenSpace` was a boolean with nothing between the world and the
 screen; and a roster worth rebalancing wanted a way to read a text file, which
-the engine had never had. Three of its seven slices needed nothing at all.
+the engine had never had. Half its slices have needed nothing at all.
 
 It is **not** trying to be fast, complete, or production-ready. Storage uses
 `std::unordered_map` instead of packed arrays, there's no batching, no scene
@@ -50,8 +50,8 @@ an optimisation is worth doing.
 
 **The live tree is now growing a fourth game**, Lane Battle, and the engine
 grows only where that game demands it — the same rule that produced everything
-in v1.0. Seven slices in, it has demanded four things: two small headers, mouse
-input, and a parallax factor. Three of those seven needed no engine code at all.
+in v1.0. Eight slices in, it has demanded four things: two small headers, mouse
+input, and a parallax factor. Half of those eight needed no engine code at all.
 `docs/v3-plan.md` has the running notes — including how measuring whole
 battles, rather than individual rules, found the game unwinnable twice before
 it was playable — and `docs/roadmap-cartoonwars.md` has what is left.
@@ -705,8 +705,10 @@ ball. Missing the ball costs one of three lives.
 | 1 | Send a **runner** — 35 gold, fast and fragile |
 | 2 | Send a **soldier** — 60 gold, the front line |
 | 3 | Send an **archer** — 95 gold, outranges everything, dies to anything |
+| Click the field | Fire the castle cannon there — 30 gold, reaches 420px |
 | Drag the field | Scroll the view |
 | Left / Right | Look up and down the field; lets go after a moment |
+| Click an upgrade | Buy INCOME, WALLS or SUPPLY; each costs more than the last |
 
 Gold accrues on its own, and killing something pays you a share of what it cost
 its owner. Units march right, stop when an enemy is in reach, and fight until
@@ -733,6 +735,12 @@ The roster lives in `assets/lanebattle/units.txt`. Edit it and run the game —
 no compiler involved. It can change any stat of any unit and add whole new unit
 types; anything it leaves out keeps the value compiled into the header, and
 deleting the file entirely just puts everything back to those defaults.
+
+The cannon only reaches 420 pixels from your own castle, so it is a defence
+rather than a way to shell the enemy from home — and each shot costs gold you
+could have spent on a unit. The first version was free and reached 780, which
+made every match a stalemate: free defensive damage that never runs out means
+neither side can ever cross the approach to a castle.
 
 One thing worth knowing, because the game does not yet teach it: **no single
 unit type is a strategy.** An army of nothing but soldiers loses, an army of

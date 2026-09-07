@@ -151,7 +151,78 @@ constexpr float kSpawnCooldown = 0.35f;      // stops one keypress spawning ten
 // units. That loop is what lets skill decide a battle instead of arithmetic.
 constexpr float kKillRewardFraction = 0.45f;
 
-// How many units one side may have on the field at once.
+// --- The castle cannon -----------------------------------------------------
+//
+// Until now there was nothing to do between spending decisions but watch. The
+// cannon is the genre's answer: a slow, aimed shot that rewards paying
+// attention to where the fighting actually is.
+//
+// Aiming is a click on the field, which is the first thing in this project to
+// need `screenToWorld`. That inverse was written in slice 4 and had no caller
+// at all — the spawn bar is screen-space, so it hit-tests against the cursor
+// directly. A shot is different: the click is in window pixels and the ground
+// it lands on is up to a screen and a half away.
+//
+// A click that turns into a drag is not a shot. Press, move more than a few
+// pixels, and it is a camera drag; press and release in about the same place
+// and it is a shot. That is the standard tap-versus-drag rule and it is what
+// lets one button do both without a modifier key.
+// A shot COSTS GOLD, which is the whole reason this is a decision rather than
+// a wall.
+//
+// The first version was free, on a cooldown, permanent and perfectly aimed —
+// and measuring it showed the consequence immediately: a mixed army that won
+// in 195 seconds lost in 247, and taking the cannon's damage away restored the
+// old result exactly. Free defensive damage that never runs out makes the last
+// stretch in front of a castle a killing field nobody can cross, so defending
+// beats attacking for both sides and every game ends 800-800.
+//
+// Charging for it turns "how much damage does the cannon do" into "how much
+// damage per gold", which is a number that can be compared against a unit and
+// therefore balanced. A side that shells constantly fields a smaller army,
+// which is exactly the trade that should exist.
+constexpr float kCannonCost = 30.0f;
+constexpr float kCannonDamage = 26.0f;
+constexpr float kCannonBlastRadius = 46.0f;
+constexpr float kCannonCooldown = 3.2f;   // seconds between shots
+
+// Deliberately less than half the distance to the middle: the cannon defends
+// the approach to your own castle, it does not contest the field. At 780 it
+// covered a third of the world from each end and there was nowhere safe left.
+constexpr float kCannonRange = 420.0f;
+constexpr float kCannonFlightTime = 0.85f;
+constexpr float kCannonGravity = 900.0f;  // pixels per second per second
+
+// --- In-battle upgrades ----------------------------------------------------
+//
+// Three things to spend gold on that are not units, so a full population cap
+// stops being a reason to sit idle. Costs rise geometrically, which is what
+// stops the right answer being "buy everything immediately".
+//
+// Both sides buy them. That symmetry has been load-bearing twice already: an
+// opponent with a different economy made slice 1 unwinnable, and an opponent
+// with no strategy made slice 3 a mirror. An opponent that cannot upgrade
+// would lose every long game by construction.
+enum class Upgrade { Income, Walls, Supply, Count };
+constexpr int kUpgradeCount = static_cast<int>(Upgrade::Count);
+
+struct UpgradeKind {
+    const char* name;
+    float baseCost;
+    float costGrowth;  // multiplied in per level already bought
+};
+
+constexpr UpgradeKind kDefaultUpgrades[] = {
+    {"INCOME", 120.0f, 1.65f},
+    {"WALLS",  150.0f, 1.70f},
+    {"SUPPLY", 200.0f, 1.85f},
+};
+
+constexpr float kIncomePerLevel = 4.0f;      // extra gold per second
+constexpr float kWallsPerLevel = 260.0f;     // extra castle health, healed on purchase
+constexpr int kSupplyPerLevel = 3;           // extra population slots
+
+// How many units one side may have on the field at once, before SUPPLY.
 //
 // This is the answer to "why isn't sending more always right?", and without it
 // there is no answer: measuring slice 2 showed that banking two units' worth
@@ -366,6 +437,15 @@ struct Castle {
 // disappearance. Uses Lifetime to clean itself up.
 struct Shard {};
 
+// A shot in the air. It carries which side fired it so a cannonball cannot
+// kill its own army, and where it is aimed so it knows when it has arrived —
+// a fixed flight time is simpler and more accurate than watching for the
+// ground, and it means a click always lands exactly where it was clicked.
+struct Cannonball {
+    bool leftSide = true;
+    float timeLeft = kCannonFlightTime;
+};
+
 // The whole battle's state, on one entity — the singleton-component pattern
 // used by the other games, which is what lets a test read the gold without
 // the scene exposing anything.
@@ -393,6 +473,18 @@ struct Session {
     bool dragging = false;
     float dragStartX = 0.0f;
     float dragStartCameraX = 0.0f;
+
+    // A press that has not yet decided whether it is a drag or a shot.
+    bool pressPending = false;
+    float pressX = 0.0f;
+    float pressY = 0.0f;
+
+    float cannonCooldown = 0.0f;
+    float enemyCannonCooldown = kCannonCooldown;  // it does not open fire instantly
+
+    // How many of each upgrade each side has bought.
+    int upgrades[kUpgradeCount] = {};
+    int enemyUpgrades[kUpgradeCount] = {};
 };
 
 // --- Queries (used by the game and by its tests) ---------------------------
@@ -419,6 +511,35 @@ int countFigures(engine::World& world);
 // Advances every unit's walk cycle and attack swing and rebuilds its figure,
 // then sweeps away figures whose owner has died. Called once per frame.
 void animateUnits(engine::World& world, float dt);
+
+// --- Upgrades (used by the game and by its tests) --------------------------
+
+// What the next level of `upgrade` costs a side that has already bought
+// `owned` of them. Geometric, so the fifth costs far more than the first.
+float upgradeCost(int upgrade, int owned);
+
+// The values a side actually plays with, once its upgrades are counted.
+float goldPerSecondFor(const Session& session, bool leftSide);
+int populationCapFor(const Session& session, bool leftSide);
+float castleMaxHealthFor(const Session& session, bool leftSide);
+
+// Where the upgrade buttons are, and which one is under a screen position
+// (-1 for none). Exposed for the same reason `buttonAt` is: a test that clicks
+// one should not have to re-derive the layout.
+constexpr float kUpgradeX = 690.0f;
+constexpr float kUpgradeY = 84.0f;
+constexpr float kUpgradeWidth = 254.0f;
+constexpr float kUpgradeHeight = 30.0f;
+constexpr float kUpgradeGap = 6.0f;
+
+constexpr float upgradeTop(int index) {
+    return kUpgradeY + static_cast<float>(index) * (kUpgradeHeight + kUpgradeGap);
+}
+
+int upgradeAt(float screenX, float screenY);
+
+// How many cannonballs are in the air. For tests; nothing else needs it.
+int countCannonballs(engine::World& world);
 
 // Which spawn-bar button is under this screen position, or -1 for none.
 // Exposed because it is the rule the UI is built on, and a test should be able

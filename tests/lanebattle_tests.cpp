@@ -88,6 +88,11 @@ struct Game {
     // strangers wandering into the fight it carefully arranged.
     void suppressEnemySpawns() {
         session().enemySpawnTimer = 1.0e9f;
+        // And its cannon. A test that walks units up the field for long enough
+        // used to be safe; now anything that strays within range of the enemy
+        // castle gets shelled, which is correct behaviour and a nuisance in a
+        // test that was arranging something else.
+        session().enemyCannonCooldown = 1.0e9f;
         for (Entity entity : world.entities()) {
             if (world.hasComponent<Unit>(entity)) world.destroyLater(entity);
         }
@@ -690,8 +695,12 @@ void testThePopulationCapHolds() {
     game.suppressEnemySpawns();
     game.session().gold = 100000.0f;
 
+    // Long enough to fill the cap several times over at one spawn per
+    // cooldown, but not so long that the first runners cross the field and
+    // start a fight at the far castle — which would end the battle and stop
+    // the spawning this is trying to measure.
     game.driver.hold(SDL_SCANCODE_1);
-    game.driver.step(60 * 20);  // far more presses than the cap allows
+    game.driver.step(400);
     game.driver.release(SDL_SCANCODE_1);
 
     check(lanebattle::countUnits(game.world, true) <= lanebattle::kPopulationCap,
@@ -1495,6 +1504,408 @@ void testTheShippedRosterIsSane() {
     lanebattle::resetBalance();
 }
 
+// --- The castle cannon (slice 8) -------------------------------------------
+
+// Turns a world position into the screen position that would be clicked to
+// aim at it. The camera is the only thing between them, which is exactly what
+// screenToWorld undoes inside the game.
+int screenXFor(Game& game, float worldX) {
+    return static_cast<int>(worldX - game.cameraX());
+}
+constexpr int kFieldClickY = 410;  // on the ground, clear of every UI element
+
+// A click is press-then-release, and the shot goes off on the release — the
+// same edge that stops a held mouse button emptying the purse. So firing takes
+// two frames, not one, and a test that steps once sees nothing.
+constexpr int kFireFrames = 2;
+
+// How many frames a shell is in the air, plus a little slack for it to land.
+const int kFlightFrames =
+    static_cast<int>(lanebattle::kCannonFlightTime * 60.0f) + 4;
+
+// Where a unit will be by the time a shell arrives.
+//
+// Aiming at where a unit *is* misses it: the flight takes most of a second and
+// a soldier covers eighty pixels in that time, which is well outside the blast.
+// That is realistic, and it is also the mistake these tests made first time —
+// they aimed at the start position and concluded the cannon did no damage.
+float leadTarget(float startX, int kind, bool leftSide) {
+    const float direction = leftSide ? 1.0f : -1.0f;
+    return startX + direction * stats(kind).speed * lanebattle::kCannonFlightTime;
+}
+
+void testClickingTheFieldFiresTheCannon() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = 500.0f;
+
+    const float before = game.session().gold;
+    game.driver.clickAt(screenXFor(game, 300.0f), kFieldClickY);
+    game.driver.step(2);
+
+    check(lanebattle::countCannonballs(game.world) == 1,
+          "a click on the field puts a shot in the air");
+    check(std::fabs((before - game.session().gold) - lanebattle::kCannonCost) < 2.0f,
+          "and it costs what a shot costs");
+
+    // The cooldown is what stops the cannon being the whole game.
+    game.driver.clickAt(screenXFor(game, 320.0f), kFieldClickY);
+    game.driver.step(2);
+    check(lanebattle::countCannonballs(game.world) <= 1,
+          "a second click during the cooldown fires nothing");
+}
+
+void testAnEmptyPurseFiresNothing() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = lanebattle::kCannonCost - 5.0f;
+
+    game.driver.clickAt(screenXFor(game, 300.0f), kFieldClickY);
+    game.driver.step(2);
+    check(lanebattle::countCannonballs(game.world) == 0,
+          "a cannon you cannot afford does not fire");
+}
+
+// A shot lands exactly where it was aimed, because the launch velocity is
+// solved for the flight time rather than guessed. If that arithmetic is wrong,
+// aiming becomes a feel to learn instead of a decision to make.
+void testAShotLandsWhereItWasAimed() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = 500.0f;
+
+    const float aimAt = 380.0f;
+    game.driver.clickAt(screenXFor(game, aimAt), kFieldClickY);
+    game.driver.step(kFireFrames);
+
+    Entity shot = kInvalidEntity;
+    for (Entity entity : game.world.entities()) {
+        if (game.world.hasComponent<lanebattle::Cannonball>(entity)) shot = entity;
+    }
+    check(shot != kInvalidEntity, "the shot exists");
+
+    // Stopped a couple of frames short of landing, so it is still in the air
+    // and can be measured before it destroys itself.
+    game.driver.step(static_cast<int>(lanebattle::kCannonFlightTime * 60.0f) - 1);
+
+    const Transform* at = game.world.getComponent<Transform>(shot);
+    check(at != nullptr, "and is still airborne just before it lands");
+    if (at) {
+        check(std::fabs(at->x - aimAt) < 12.0f,
+              "arriving within a few pixels of where it was aimed");
+    }
+}
+
+// Each scenario gets its own battle with exactly one unit in it. Putting an
+// enemy and a friendly side by side would have them fighting each other, and
+// then "did the cannon hurt it" cannot be told apart from "did the soldier".
+void testAShotDamagesEnemiesAndSparesFriends() {
+    {
+        Game game;
+        game.startPlaying();
+        game.suppressEnemySpawns();
+        game.session().gold = 500.0f;
+
+        // Inside the cannon.s reach: it fires from x=65 and reaches 420, so a
+        // target past 485 is clamped short and the shell lands nowhere near it.
+        // That is correct behaviour and it is what this test got wrong first
+        // time, by standing the victim at 800.
+        const Entity victim = lanebattle::spawnUnit(game.world, false, kSoldier);
+        game.world.getComponent<Transform>(victim)->x = 400.0f;
+
+        game.driver.clickAt(
+            screenXFor(game, leadTarget(400.0f, kSoldier, false) + 12.0f),
+            kFieldClickY);
+        game.driver.step(kFireFrames + kFlightFrames);
+
+        check(game.world.getComponent<Unit>(victim) != nullptr &&
+                  game.world.getComponent<Unit>(victim)->health <
+                      stats(kSoldier).health,
+              "a shot damages an enemy inside the blast");
+        check(lanebattle::countCannonballs(game.world) == 0,
+              "and the shot is gone once it has landed");
+    }
+    {
+        Game game;
+        game.startPlaying();
+        game.suppressEnemySpawns();
+        game.session().gold = 500.0f;
+
+        const Entity friendly = lanebattle::spawnUnit(game.world, true, kSoldier);
+        game.world.getComponent<Transform>(friendly)->x = 300.0f;
+
+        game.driver.clickAt(
+            screenXFor(game, leadTarget(300.0f, kSoldier, true) + 12.0f),
+            kFieldClickY);
+        game.driver.step(kFireFrames + kFlightFrames);
+
+        check(std::fabs(game.world.getComponent<Unit>(friendly)->health -
+                        stats(kSoldier).health) < 0.01f,
+              "and never damages your own army, however precisely it is aimed");
+    }
+    {
+        Game game;
+        game.startPlaying();
+        game.suppressEnemySpawns();
+        game.session().gold = 500.0f;
+
+        const Entity distant = lanebattle::spawnUnit(game.world, false, kSoldier);
+        game.world.getComponent<Transform>(distant)->x = 400.0f;
+
+        // Aimed 200 pixels short of it: well outside a 46-pixel blast.
+        game.driver.clickAt(screenXFor(game, 150.0f), kFieldClickY);
+        game.driver.step(kFireFrames + kFlightFrames);
+
+        check(std::fabs(game.world.getComponent<Unit>(distant)->health -
+                        stats(kSoldier).health) < 0.01f,
+              "and does not reach an enemy outside the blast");
+    }
+}
+
+// Range is what keeps the cannon a defence rather than a way to contest the
+// whole field. The first version reached 780 pixels, which covered a third of
+// the world from each end, and measuring it showed the result: a mixed army
+// that won in 195 seconds lost in 247, and every good strategy drew 800-800.
+void testTheCannonCannotReachAcrossTheField() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = 500.0f;
+
+    const Entity faraway = lanebattle::spawnUnit(game.world, false, kSoldier);
+    game.world.getComponent<Transform>(faraway)->x = 1600.0f;
+
+    // Aimed WITH lead, so this is a shot that would land squarely on it if the
+    // cannon could reach. Aiming at where it currently stands misses by the
+    // width of its walk regardless of range, which made an earlier version of
+    // this test pass even with the reach set ten times too far — it was
+    // measuring the lead error, not the clamp.
+    game.driver.clickAt(
+        screenXFor(game, leadTarget(1600.0f, kSoldier, false) + 12.0f),
+        kFieldClickY);
+    game.driver.step(kFireFrames + kFlightFrames);
+
+    check(std::fabs(game.world.getComponent<Unit>(faraway)->health -
+                    stats(kSoldier).health) < 0.01f,
+          "a click beyond the cannon's reach cannot hit what it pointed at");
+}
+
+// One button, two verbs. A press that moves is a camera drag and must not also
+// fire, or scrolling the field would empty the purse.
+void testDraggingDoesNotFire() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = 500.0f;
+
+    game.driver.moveMouse(600, kFieldClickY);
+    game.driver.pressMouse();
+    game.driver.step();
+    game.driver.moveMouse(300, kFieldClickY);
+    game.driver.step();
+    game.driver.releaseMouse();
+    game.driver.step(2);
+
+    check(lanebattle::countCannonballs(game.world) == 0,
+          "a drag scrolls the view and fires nothing");
+    check(game.session().gold >= 490.0f, "and costs nothing");
+}
+
+void testClickingTheUiDoesNotFire() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = 500.0f;
+
+    game.driver.clickAt(static_cast<int>(buttonCenterX(kSoldier)),
+                        static_cast<int>(buttonCenterY()));
+    game.driver.step(2);
+    check(lanebattle::countCannonballs(game.world) == 0,
+          "clicking the spawn bar sends a unit, not a shell");
+
+    game.driver.step(30);
+    game.driver.clickAt(static_cast<int>(lanebattle::kUpgradeX + 10),
+                        static_cast<int>(lanebattle::upgradeTop(0) + 8));
+    game.driver.step(2);
+    check(lanebattle::countCannonballs(game.world) == 0,
+          "and clicking an upgrade buys it, not a shell");
+}
+
+void testTheEnemyCastleShootsBack() {
+    Game game;
+    game.startPlaying();
+    game.session().enemySpawnTimer = 1.0e9f;   // no units, but leave its gun on
+    game.session().enemyGold = 100000.0f;
+    game.session().enemyCannonCooldown = 0.0f;
+
+    // A unit right up against the enemy castle is what its cannon is for.
+    const Entity attacker = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const Entity enemyCastle = lanebattle::findCastle(game.world, false);
+    // Close enough that it stops to hit the castle. A unit still walking
+    // would be somewhere else by the time the shell arrived, and this is
+    // about whether the gun fires at all, not about leading a target.
+    game.world.getComponent<Transform>(attacker)->x =
+        game.world.getComponent<Transform>(enemyCastle)->x - 50.0f;
+
+    game.driver.step(kFlightFrames + 6);
+
+    check(game.world.getComponent<Unit>(attacker) == nullptr ||
+              game.world.getComponent<Unit>(attacker)->health <
+                  stats(kSoldier).health,
+          "the enemy castle shells whatever walks up to it");
+}
+
+void testCannonballsDoNotSurviveARestart() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = 500.0f;
+
+    game.driver.clickAt(screenXFor(game, 300.0f), kFieldClickY);
+    game.driver.step(kFireFrames);
+    check(lanebattle::countCannonballs(game.world) == 1, "a shot is in the air");
+
+    const Entity myCastle = lanebattle::findCastle(game.world, true);
+    game.world.getComponent<Castle>(myCastle)->health = 0.0f;
+    game.session().gameOver = true;
+    game.driver.step(3);
+    game.driver.tap(SDL_SCANCODE_R);
+    game.driver.step(4);
+
+    check(lanebattle::countCannonballs(game.world) == 0,
+          "and does not survive into the next battle");
+}
+
+// --- In-battle upgrades (slice 8) ------------------------------------------
+
+void testUpgradeCostsRise() {
+    for (int index = 0; index < lanebattle::kUpgradeCount; ++index) {
+        const float first = lanebattle::upgradeCost(index, 0);
+        const float second = lanebattle::upgradeCost(index, 1);
+        const float fifth = lanebattle::upgradeCost(index, 4);
+        check(first > 0.0f, "the first level costs something");
+        check(second > first, "the second costs more than the first");
+        check(fifth > second * 1.5f,
+              "and the fifth costs enough that buying everything is not free");
+    }
+}
+
+void testClickingAnUpgradeBuysIt() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = 5000.0f;
+
+    const int income = static_cast<int>(lanebattle::Upgrade::Income);
+    const float cost = lanebattle::upgradeCost(income, 0);
+    const float before = game.session().gold;
+
+    game.driver.clickAt(static_cast<int>(lanebattle::kUpgradeX + 10),
+                        static_cast<int>(lanebattle::upgradeTop(income) + 8));
+    game.driver.step(2);
+
+    check(game.session().upgrades[income] == 1, "the upgrade was bought");
+    check(std::fabs((before - game.session().gold) - cost) < 3.0f,
+          "and charged at its listed price");
+}
+
+void testAnUnaffordableUpgradeDoesNothing() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = 10.0f;
+
+    game.driver.clickAt(static_cast<int>(lanebattle::kUpgradeX + 10),
+                        static_cast<int>(lanebattle::upgradeTop(0) + 8));
+    game.driver.step(2);
+
+    check(game.session().upgrades[0] == 0, "an upgrade you cannot afford is not bought");
+    check(game.session().gold > 0.0f, "and takes no money");
+}
+
+void testUpgradeHitTesting() {
+    for (int index = 0; index < lanebattle::kUpgradeCount; ++index) {
+        check(lanebattle::upgradeAt(lanebattle::kUpgradeX + 10.0f,
+                                    lanebattle::upgradeTop(index) + 8.0f) == index,
+              "each upgrade row is its own button");
+    }
+    check(lanebattle::upgradeAt(400.0f, lanebattle::upgradeTop(0) + 8.0f) == -1,
+          "the field to the left of the panel is not a button");
+    check(lanebattle::upgradeAt(lanebattle::kUpgradeX + 10.0f, 400.0f) == -1,
+          "and neither is the field below it");
+}
+
+void testIncomeSupplyAndWallsAllDoSomething() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const Session& session = game.session();
+    const float baseIncome = lanebattle::goldPerSecondFor(session, true);
+    const int baseCap = lanebattle::populationCapFor(session, true);
+    const float baseWalls = lanebattle::castleMaxHealthFor(session, true);
+
+    game.session().upgrades[static_cast<int>(lanebattle::Upgrade::Income)] = 1;
+    check(lanebattle::goldPerSecondFor(session, true) > baseIncome,
+          "INCOME raises the rate gold arrives at");
+
+    game.session().upgrades[static_cast<int>(lanebattle::Upgrade::Supply)] = 1;
+    check(lanebattle::populationCapFor(session, true) > baseCap,
+          "SUPPLY raises how many units you may field");
+
+    game.session().upgrades[static_cast<int>(lanebattle::Upgrade::Walls)] = 1;
+    check(lanebattle::castleMaxHealthFor(session, true) > baseWalls,
+          "WALLS raises how much punishment your castle takes");
+
+    // And each side reads its own levels, which is the kind of thing that goes
+    // wrong silently and made slice 1 unwinnable.
+    check(lanebattle::goldPerSecondFor(session, false) == baseIncome,
+          "your upgrades do not enrich the opponent");
+    check(lanebattle::populationCapFor(session, false) == baseCap,
+          "nor raise its cap");
+}
+
+// WALLS is the one upgrade whose effect is a level rather than a rate. Raising
+// the maximum is worth nothing to a castle that is already damaged, so the
+// stonework has to be healed on at the moment it is bought.
+void testBuyingWallsHealsTheCastle() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = 5000.0f;
+
+    const Entity castle = lanebattle::findCastle(game.world, true);
+    game.world.getComponent<Castle>(castle)->health = 200.0f;
+
+    const int walls = static_cast<int>(lanebattle::Upgrade::Walls);
+    game.driver.clickAt(static_cast<int>(lanebattle::kUpgradeX + 10),
+                        static_cast<int>(lanebattle::upgradeTop(walls) + 8));
+    game.driver.step(2);
+
+    check(game.session().upgrades[walls] == 1, "WALLS was bought");
+    check(game.castleHealth(true) > 400.0f,
+          "and the new stonework is standing rather than merely permitted");
+}
+
+// An opponent that cannot upgrade loses every long game by construction — the
+// same shape of asymmetry that made slice 1 unwinnable.
+void testTheEnemyUpgradesToo() {
+    Game game;
+    game.startPlaying();
+    game.session().enemyGold = 100000.0f;
+
+    game.driver.step(60 * 5);
+
+    int total = 0;
+    for (int index = 0; index < lanebattle::kUpgradeCount; ++index) {
+        total += game.session().enemyUpgrades[index];
+    }
+    check(total > 0, "the opponent buys upgrades of its own");
+}
+
 // --- Can the game actually be played? --------------------------------------
 
 // Plays a whole battle on a fixed composition, sending each unit as soon as it
@@ -1649,6 +2060,24 @@ int main() {
     testAddedUnitsAreReachableInGame();
     testTheSpawnBarStopsAtTheEdgeOfTheWindow();
     testTheShippedRosterIsSane();
+
+    testClickingTheFieldFiresTheCannon();
+    testAnEmptyPurseFiresNothing();
+    testAShotLandsWhereItWasAimed();
+    testAShotDamagesEnemiesAndSparesFriends();
+    testTheCannonCannotReachAcrossTheField();
+    testDraggingDoesNotFire();
+    testClickingTheUiDoesNotFire();
+    testTheEnemyCastleShootsBack();
+    testCannonballsDoNotSurviveARestart();
+
+    testUpgradeCostsRise();
+    testClickingAnUpgradeBuysIt();
+    testAnUnaffordableUpgradeDoesNothing();
+    testUpgradeHitTesting();
+    testIncomeSupplyAndWallsAllDoSomething();
+    testBuyingWallsHealsTheCastle();
+    testTheEnemyUpgradesToo();
 
     testABattleCanBeWon();
     testOneUnitTypeIsNotEnough();

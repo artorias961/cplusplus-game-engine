@@ -29,6 +29,7 @@
 #include "engine/DataFile.h"
 #include "engine/Font.h"
 #include "engine/Systems.h"
+#include "engine/View.h"
 
 using namespace engine;
 
@@ -280,6 +281,54 @@ bool blockedByFriendly(World& world, Entity mover, bool leftSide, float moverX,
     return false;
 }
 
+// --- The cannon ------------------------------------------------------------
+
+// Launches a shot that will land on (targetX, targetY) in exactly
+// kCannonFlightTime seconds.
+//
+// The velocity is solved rather than guessed, which is why a click always
+// lands where it was clicked:
+//
+//     x(T) = x0 + vx*T                 ->  vx = (x1 - x0) / T
+//     y(T) = y0 + vy*T + g*T*T/2       ->  vy = (y1 - y0)/T - g*T/2
+//
+// Firing at a fixed speed and letting gravity decide where it lands would be
+// less code and a worse game: aiming would be a feel you have to learn instead
+// of a decision you get to make, and the interesting choice here is *where* to
+// shoot, not whether you can hit it.
+Entity fireCannon(World& world, bool leftSide, float fromX, float fromY,
+                  float targetX, float targetY) {
+    const float flight = kCannonFlightTime;
+
+    Entity shot = world.createEntity();
+    world.addComponent(shot, Transform{fromX, fromY, 0.0f});
+    world.addComponent(shot, Velocity{
+        (targetX - fromX) / flight,
+        (targetY - fromY) / flight - kCannonGravity * flight / 2.0f,
+    });
+    world.addComponent(shot, AngularVelocity{7.0f});
+
+    Polygon ball;
+    ball.points = {Vec2{-4.0f, -4.0f}, Vec2{4.0f, -4.0f}, Vec2{4.0f, 4.0f},
+                   Vec2{-4.0f, 4.0f}};
+    ball.closed = true;
+    if (leftSide) {
+        ball.r = 190; ball.g = 220; ball.b = 255;
+    } else {
+        ball.r = 255; ball.g = 190; ball.b = 170;
+    }
+    ball.layer = kFieldLayer;
+    world.addComponent(shot, ball);
+
+    Cannonball payload;
+    payload.leftSide = leftSide;
+    payload.timeLeft = flight;
+    world.addComponent(shot, payload);
+
+    if (audioDevice) audioDevice->play(Waveform::Square, 90.0f, 0.10f, 0.16f);
+    return shot;
+}
+
 void spawnShards(World& world, float x, float y, unsigned char r,
                  unsigned char g, unsigned char b) {
     // Six pieces thrown out of a dying unit. Polygon + Velocity + Lifetime,
@@ -499,6 +548,60 @@ void animateUnits(World& world, float dt) {
     }
 }
 
+// --- Upgrades --------------------------------------------------------------
+
+float upgradeCost(int upgrade, int owned) {
+    if (upgrade < 0 || upgrade >= kUpgradeCount) return 0.0f;
+    const UpgradeKind& kind = kDefaultUpgrades[upgrade];
+
+    float cost = kind.baseCost;
+    for (int level = 0; level < owned; ++level) cost *= kind.costGrowth;
+    return cost;
+}
+
+namespace {
+// The upgrade counts belonging to one side. Both sides buy from the same
+// table, so everything below reads whichever array applies rather than being
+// written twice with the words swapped — which is how slice 1's asymmetry bug
+// happened in the first place.
+const int* upgradesOf(const Session& session, bool leftSide) {
+    return leftSide ? session.upgrades : session.enemyUpgrades;
+}
+}  // namespace
+
+float goldPerSecondFor(const Session& session, bool leftSide) {
+    const int levels = upgradesOf(session, leftSide)[static_cast<int>(Upgrade::Income)];
+    return kGoldPerSecond + kIncomePerLevel * static_cast<float>(levels);
+}
+
+int populationCapFor(const Session& session, bool leftSide) {
+    const int levels = upgradesOf(session, leftSide)[static_cast<int>(Upgrade::Supply)];
+    return kPopulationCap + kSupplyPerLevel * levels;
+}
+
+float castleMaxHealthFor(const Session& session, bool leftSide) {
+    const int levels = upgradesOf(session, leftSide)[static_cast<int>(Upgrade::Walls)];
+    return kCastleHealth + kWallsPerLevel * static_cast<float>(levels);
+}
+
+int upgradeAt(float screenX, float screenY) {
+    if (screenX < kUpgradeX || screenX > kUpgradeX + kUpgradeWidth) return -1;
+
+    for (int index = 0; index < kUpgradeCount; ++index) {
+        const float top = upgradeTop(index);
+        if (screenY >= top && screenY <= top + kUpgradeHeight) return index;
+    }
+    return -1;
+}
+
+int countCannonballs(World& world) {
+    int count = 0;
+    for (Entity entity : world.entities()) {
+        if (world.hasComponent<Cannonball>(entity)) ++count;
+    }
+    return count;
+}
+
 int visibleButtonCount() {
     return std::min(unitKindCount(), kMaxVisibleButtons);
 }
@@ -680,6 +783,10 @@ public:
         hud_.push_back(popText_);
 
         buildSpawnBar(world);
+        buildUpgradePanel(world);
+
+        cannonText_ = createText(world, "", 16, 112, 2, 220, 200, 140, kHudLayer);
+        hud_.push_back(cannonText_);
 
         hud_.push_back(createText(world, "DRAG OR ARROWS TO LOOK - P PAUSES",
                                   static_cast<int>(kButtonX),
@@ -732,14 +839,19 @@ public:
             return;
         }
 
+        session->cannonCooldown = std::max(0.0f, session->cannonCooldown - dt);
+
         earnGold(*session, dt);
+        handleUpgrades(world, *session, input);
         handleSpawning(world, *session, input, dt);
+        updateEnemyCannon(world, *session, dt);
         fight(world, *session, dt);
         removeTheDead(world, *session);
 
         // After the dead are gone, so the camera never chases a corpse for a
         // frame, and after the fight, so the minimap shows this frame's front
         // line rather than last frame's.
+        updateCannonballs(world, dt);
         animateUnits(world, dt);
         updateCamera(world, *session, input, dt);
         refreshHud(world, *session);
@@ -902,6 +1014,7 @@ private:
             // there would be nothing left to sweep them.
             if (world.hasComponent<Unit>(entity) ||
                 world.hasComponent<Shard>(entity) ||
+                world.hasComponent<Cannonball>(entity) ||
                 world.hasComponent<Figure>(entity)) {
                 world.destroyLater(entity);
             }
@@ -911,8 +1024,72 @@ private:
     }
 
     static void earnGold(Session& session, float dt) {
-        session.gold += kGoldPerSecond * dt;
-        session.enemyGold += kGoldPerSecond * kEnemyIncomeMultiplier * dt;
+        session.gold += goldPerSecondFor(session, true) * dt;
+        session.enemyGold +=
+            goldPerSecondFor(session, false) * kEnemyIncomeMultiplier * dt;
+    }
+
+    // --- Upgrades ----------------------------------------------------------
+
+    void handleUpgrades(World& world, Session& session, InputManager& input) {
+        if (input.wasMousePressed()) {
+            const int index = upgradeAt(static_cast<float>(input.mouseX()),
+                                        static_cast<float>(input.mouseY()));
+            if (index >= 0) buyUpgrade(world, session, true, index);
+        }
+
+        // The opponent buys too, and has to: an enemy that cannot upgrade
+        // loses every long game by construction, which is the same shape of
+        // asymmetry that made slice 1 unwinnable and slice 3 a mirror.
+        //
+        // Its rule is "buy when you can afford it and still field your next
+        // wave", which keeps it spending on units first — the mistake a human
+        // makes here is over-investing, and an opponent that made it would be
+        // free to beat.
+        const int cheapest = cheapestUpgradeFor(session, false);
+        if (cheapest >= 0 &&
+            session.enemyGold >=
+                upgradeCost(cheapest, session.enemyUpgrades[cheapest]) +
+                    waveCost(session)) {
+            buyUpgrade(world, session, false, cheapest);
+        }
+    }
+
+    static int cheapestUpgradeFor(const Session& session, bool leftSide) {
+        const int* owned = leftSide ? session.upgrades : session.enemyUpgrades;
+        int best = -1;
+        float bestCost = 0.0f;
+        for (int index = 0; index < kUpgradeCount; ++index) {
+            const float cost = upgradeCost(index, owned[index]);
+            if (best < 0 || cost < bestCost) {
+                best = index;
+                bestCost = cost;
+            }
+        }
+        return best;
+    }
+
+    void buyUpgrade(World& world, Session& session, bool leftSide, int index) {
+        int* owned = leftSide ? session.upgrades : session.enemyUpgrades;
+        float& purse = leftSide ? session.gold : session.enemyGold;
+
+        const float cost = upgradeCost(index, owned[index]);
+        if (purse < cost) return;
+
+        purse -= cost;
+        ++owned[index];
+
+        // WALLS is the one upgrade with an immediate effect rather than a
+        // rate: raising the maximum is worth nothing to a castle that is
+        // already damaged, so the new stonework is healed on straight away.
+        if (index == static_cast<int>(Upgrade::Walls)) {
+            const Entity castle = findCastle(world, leftSide);
+            if (Castle* health = world.getComponent<Castle>(castle)) {
+                health->health += kWallsPerLevel;
+            }
+        }
+
+        if (audioDevice) audioDevice->play(Waveform::Sine, 520.0f, 0.10f, 0.14f);
     }
 
     void handleSpawning(World& world, Session& session, InputManager& input,
@@ -925,7 +1102,7 @@ private:
                               InputManager& input, float dt) {
         session.spawnCooldown -= dt;
         if (session.spawnCooldown > 0.0f) return;
-        if (countUnits(world, true) >= kPopulationCap) return;
+        if (countUnits(world, true) >= populationCapFor(session, true)) return;
 
         // One key per row of the table, so adding a fourth unit type is a
         // table row and one scancode rather than a change to any rule.
@@ -975,7 +1152,7 @@ private:
         }
 
         if (session.enemySpawnTimer > 0.0f) return;
-        if (countUnits(world, false) >= kPopulationCap) return;
+        if (countUnits(world, false) >= populationCapFor(session, false)) return;
 
         const int kind = kEnemyComposition[session.enemyWaveIndex %
                                            kEnemyCompositionLength];
@@ -1087,6 +1264,114 @@ private:
         }
     }
 
+    // --- The cannon --------------------------------------------------------
+
+    // Gravity, and arrival. MovementSystem already applies the velocity; this
+    // only bends it downward and decides when the shot has got where it was
+    // aimed. Arrival is by clock rather than by position, because the launch
+    // was solved for exactly this time — checking "has it reached the ground"
+    // instead would mean a shot aimed at a hill never lands.
+    void updateCannonballs(World& world, float dt) {
+        std::vector<Entity> landed;
+
+        for (auto& [entity, shot] : world.view<Cannonball>()) {
+            Velocity* velocity = world.getComponent<Velocity>(entity);
+            if (velocity) velocity->dy += kCannonGravity * dt;
+
+            shot.timeLeft -= dt;
+            if (shot.timeLeft <= 0.0f) landed.push_back(entity);
+        }
+
+        // Gathered first: exploding creates shards and queues deaths, neither
+        // of which belongs in the middle of iterating the pool.
+        for (Entity entity : landed) explode(world, entity);
+    }
+
+    void explode(World& world, Entity shot) {
+        const Cannonball* payload = world.getComponent<Cannonball>(shot);
+        const Transform* at = world.getComponent<Transform>(shot);
+        if (!payload || !at) return;
+
+        const bool firedByLeft = payload->leftSide;
+        const float blastX = at->x;
+        const float blastY = at->y;
+
+        for (auto& [entity, unit] : world.view<Unit>()) {
+            Team* team = world.getComponent<Team>(entity);
+            Transform* unitAt = world.getComponent<Transform>(entity);
+            if (!team || !unitAt) continue;
+            if (team->leftSide == firedByLeft) continue;  // never your own army
+
+            const UnitKind& stats = kindOf(unit.kind);
+            const float dx = (unitAt->x + stats.width / 2.0f) - blastX;
+            const float dy = (unitAt->y + stats.height / 2.0f) - blastY;
+            if (dx * dx + dy * dy > kCannonBlastRadius * kCannonBlastRadius) {
+                continue;
+            }
+            unit.health -= kCannonDamage;
+        }
+
+        spawnShards(world, blastX, blastY, 250, 210, 140);
+        if (audioDevice) audioDevice->play(Waveform::Noise, 0.0f, 0.22f, 0.20f);
+        world.destroyLater(shot);
+    }
+
+    // Where a side's cannon sits: the top of its own castle.
+    static float cannonX(bool leftSide) {
+        return (leftSide ? kLeftCastleX : kRightCastleX) + kCastleWidth / 2.0f;
+    }
+    static float cannonY() { return kGroundY - kCastleHeight; }
+
+    // Clamped to the cannon's reach, so a click at the far end of the field
+    // drops the shot at the edge of range rather than doing nothing. Silently
+    // ignoring an out-of-range click reads as a broken button.
+    void fireAt(World& world, Session& session, float worldX, float worldY) {
+        if (session.cannonCooldown > 0.0f) return;
+        if (session.gold < kCannonCost) return;
+
+        const float from = cannonX(true);
+        const float reach = std::min(std::max(worldX - from, -kCannonRange),
+                                     kCannonRange);
+        session.gold -= kCannonCost;
+        session.cannonCooldown = kCannonCooldown;
+        fireCannon(world, true, from, cannonY(), from + reach,
+                   std::min(worldY, kGroundY));
+    }
+
+    // The enemy's cannon needs no aiming: it drops shots on wherever your
+    // advance has reached, which is the same information the minimap shows you
+    // and is exactly what a competent player would aim at.
+    void updateEnemyCannon(World& world, Session& session, float dt) {
+        session.enemyCannonCooldown -= dt;
+        if (session.enemyCannonCooldown > 0.0f) return;
+
+        const float from = cannonX(false);
+        const float target = frontLineX(world, true);
+        if (std::fabs(target - from) > kCannonRange) return;  // out of reach; wait
+
+        // It shells only out of true surplus: after its next wave AND its next
+        // upgrade are both covered.
+        //
+        // Reserving for the wave alone was not enough, and the failure was
+        // quiet. A shot plus a wave came to about 200 gold and an upgrade plus
+        // a wave to about 290, so the cheaper commitment always won the race
+        // and the opponent never upgraded once in a four-hundred-second game.
+        // It shelled away every surplus it ever had and stayed poor for the
+        // whole match — losing at full health, which looked like balance and
+        // was actually an ordering mistake.
+        const int nextUpgrade = cheapestUpgradeFor(session, false);
+        const float reserve =
+            waveCost(session) +
+            (nextUpgrade >= 0
+                 ? upgradeCost(nextUpgrade, session.enemyUpgrades[nextUpgrade])
+                 : 0.0f);
+        if (session.enemyGold < kCannonCost + reserve) return;
+
+        session.enemyGold -= kCannonCost;
+        session.enemyCannonCooldown = kCannonCooldown;
+        fireCannon(world, false, from, cannonY(), target, kGroundY - 10.0f);
+    }
+
     // --- The view ----------------------------------------------------------
 
     // Where the camera wants to be: your front line, centred, and never past
@@ -1108,30 +1393,50 @@ private:
         Camera* camera = world.getComponent<Camera>(cameraEntity_);
         if (!camera) return;
 
-        // A drag on the field scrolls the view. Starting one over the spawn
-        // bar is not a drag — that press belongs to the button underneath it,
-        // or every click on a button would also nudge the camera.
-        if (input.wasMousePressed() &&
-            buttonAt(static_cast<float>(input.mouseX()),
-                     static_cast<float>(input.mouseY())) < 0) {
-            session.dragging = true;
-            session.dragStartX = static_cast<float>(input.mouseX());
-            session.dragStartCameraX = camera->x;
-        }
-        if (!input.isMouseDown()) session.dragging = false;
+        const float mouseX = static_cast<float>(input.mouseX());
+        const float mouseY = static_cast<float>(input.mouseY());
 
-        if (session.dragging) {
+        // One button, two verbs. A press on the field is undecided: move more
+        // than a few pixels and it is a camera drag, release without moving
+        // and it is a cannon shot. A press that lands on a UI element is
+        // neither — that one belongs to the button underneath it, or every
+        // click on the spawn bar would also nudge the camera.
+        if (input.wasMousePressed() && buttonAt(mouseX, mouseY) < 0 &&
+            upgradeAt(mouseX, mouseY) < 0) {
+            session.pressPending = true;
+            session.dragging = false;
+            session.dragStartX = mouseX;
+            session.dragStartCameraX = camera->x;
+
+            // Converted to world coordinates NOW, while the camera is still
+            // where it was when the player took aim. Converting on release
+            // instead would use whatever the camera had drifted to in the
+            // meantime, and a held press drifts because following keeps
+            // running underneath it.
+            session.pressX = screenToWorldX(*camera, mouseX);
+            session.pressY = screenToWorldY(*camera, mouseY);
+        }
+
+        if (session.pressPending && input.isMouseDown()) {
             // The field follows the cursor: drag left and the world moves
             // left under your finger, which means the camera moves right.
-            const float moved =
-                static_cast<float>(input.mouseX()) - session.dragStartX;
-            if (std::fabs(moved) >= kDragThreshold) {
+            const float moved = mouseX - session.dragStartX;
+            if (std::fabs(moved) >= kDragThreshold) session.dragging = true;
+
+            if (session.dragging) {
                 camera->x = session.dragStartCameraX - moved;
                 session.freeLookSeconds = kFreeLookHold;
                 camera->x = std::min(std::max(camera->x, 0.0f), kCameraMaxX);
                 camera->y = 0.0f;
                 return;
             }
+        }
+
+        if (input.wasMouseReleased() && session.pressPending) {
+            if (!session.dragging) fireAt(world, session, session.pressX,
+                                          session.pressY);
+            session.pressPending = false;
+            session.dragging = false;
         }
 
         const bool left = input.isKeyDown(SDL_SCANCODE_LEFT);
@@ -1238,6 +1543,47 @@ private:
         }
     }
 
+    // --- The upgrade panel -------------------------------------------------
+
+    void buildUpgradePanel(World& world) {
+        for (int index = 0; index < kUpgradeCount; ++index) {
+            const float top = upgradeTop(index);
+            upgradePlate_[index] =
+                makeScreenRect(world, kUpgradeX, top, kUpgradeWidth,
+                               kUpgradeHeight, 34, 38, 48, kHudLayer);
+            upgradeText_[index] =
+                createText(world, "", static_cast<int>(kUpgradeX) + 8,
+                           static_cast<int>(top) + 8, 2, 200, 200, 215,
+                           kHudLayer);
+            world.getComponent<Text>(upgradeText_[index])->screenSpace = true;
+
+            hud_.push_back(upgradePlate_[index]);
+            hud_.push_back(upgradeText_[index]);
+        }
+    }
+
+    void refreshUpgradePanel(World& world, const Session& session) {
+        for (int index = 0; index < kUpgradeCount; ++index) {
+            const int owned = session.upgrades[index];
+            const float cost = upgradeCost(index, owned);
+            const bool affordable = session.gold >= cost;
+
+            if (Text* text = world.getComponent<Text>(upgradeText_[index])) {
+                text->value = std::string(kDefaultUpgrades[index].name) + " " +
+                              std::to_string(owned) + "  " +
+                              std::to_string(static_cast<int>(cost));
+                text->r = affordable ? 210 : 95;
+                text->g = affordable ? 210 : 95;
+                text->b = affordable ? 225 : 110;
+            }
+            if (Sprite* plate = world.getComponent<Sprite>(upgradePlate_[index])) {
+                plate->r = affordable ? 44 : 28;
+                plate->g = affordable ? 50 : 32;
+                plate->b = affordable ? 64 : 40;
+            }
+        }
+    }
+
     // --- The minimap -------------------------------------------------------
 
     void buildMinimap(World& world) {
@@ -1319,6 +1665,20 @@ private:
         // Dim whatever you cannot currently buy, so affordability is readable
         // without doing arithmetic against the gold counter.
         refreshSpawnBar(world, session, fielded);
+        refreshUpgradePanel(world, session);
+
+        if (Text* text = world.getComponent<Text>(cannonText_)) {
+            const bool ready = session.cannonCooldown <= 0.0f &&
+                              session.gold >= kCannonCost;
+            text->value =
+                ready ? "CANNON READY - CLICK THE FIELD - " +
+                            std::to_string(static_cast<int>(kCannonCost)) + "G"
+                      : "CANNON " + std::to_string(
+                                        static_cast<int>(session.cannonCooldown) + 1);
+            text->r = ready ? 220 : 110;
+            text->g = ready ? 200 : 110;
+            text->b = ready ? 140 : 125;
+        }
 
         updateHealthText(world, leftHealthText_, "YOU  ", true);
         updateHealthText(world, rightHealthText_, "ENEMY ", false);
@@ -1348,6 +1708,9 @@ private:
     std::vector<Entity> buttonCost_;
     Entity leftHealthText_ = kInvalidEntity;
     Entity rightHealthText_ = kInvalidEntity;
+    Entity cannonText_ = kInvalidEntity;
+    Entity upgradePlate_[kUpgradeCount] = {};
+    Entity upgradeText_[kUpgradeCount] = {};
     Entity minimapLeftCastle_ = kInvalidEntity;
     Entity minimapRightCastle_ = kInvalidEntity;
     Entity minimapLeftFront_ = kInvalidEntity;

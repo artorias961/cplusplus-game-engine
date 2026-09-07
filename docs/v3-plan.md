@@ -245,6 +245,81 @@ lands somewhere else entirely.
 Both are the same lesson in different clothes: a test that exercises a code
 path is not the same as a test that would notice the path being wrong.
 
+**Slice 8 is done**: a castle cannon you aim by clicking the field, and three
+in-battle upgrades — INCOME, WALLS, SUPPLY — with geometrically rising costs.
+Both sides have both. It needed **no engine code**: a shell is Transform +
+Velocity + Polygon, gravity is one line the game applies itself, and the blast
+is a distance check.
+
+It is the first thing to use `screenToWorldX`, which was written in slice 4 and
+had no caller at all until now — the spawn bar is screen-space, so it
+hit-tests against the cursor directly. A shot is different: the click is in
+window pixels and the ground it lands on is up to a screen and a half away.
+
+One button does two things. A press that moves more than a few pixels is a
+camera drag; a press released in about the same place is a shot. The aim point
+is converted to world coordinates at PRESS time, not on release, because the
+camera keeps following underneath a held button and would otherwise have
+drifted by the time the shot went off.
+
+The launch velocity is solved rather than guessed:
+
+    vx = (x1 - x0) / T
+    vy = (y1 - y0) / T - g*T/2
+
+so a click always lands where it was clicked. Firing at a fixed speed and
+letting gravity decide would be less code and a worse game — aiming would
+become a feel to learn instead of a decision to make.
+
+### The cannon broke the game, and measuring said so precisely
+
+The first version was free, on a cooldown, permanent, and — for the opponent —
+perfectly aimed. A mixed army that had won in 195 seconds now **lost** in 247.
+Every good strategy drew 800-800 with both castles untouched.
+
+Four variants isolated it in one run:
+
+| Variant | Result |
+| --- | --- |
+| As built | **LOST** at 247s |
+| Cannon range set to 0 (nobody's gun reaches) | **WON** at 195s |
+| Cannon damage set to 0 | **WON** at 194s |
+| Upgrades priced out of reach, cannons left on | **LOST** at 247s |
+
+So it was the cannon alone; upgrades were innocent. The reason is structural
+rather than numerical: **free defensive damage that never runs out makes the
+approach to a castle a killing field nobody can cross**, so defending beats
+attacking for both sides and the front line parks in the middle forever.
+
+Two changes fixed it. A shot now **costs 30 gold**, which turns "how much
+damage does the cannon do" into "how much damage per gold" — a number that can
+be compared against a unit and therefore balanced, and which means a side that
+shells constantly fields a smaller army. And its **reach dropped from 780 to
+420**, less than half the distance to the middle, so it defends the approach to
+your own castle rather than contesting the field.
+
+After that, measured across strategies: mixed armies win, an income upgrade
+makes you win *faster* (195s to 138s), and mono-type armies lose while the
+opponent snowballs upgrades against them (it finished one such game on 5/5/4).
+
+### A quieter bug in the same area
+
+With shots costing gold, the opponent stopped upgrading entirely — 0/0/0 across
+a four-hundred-second game. Its cannon reserved gold for its next wave (about
+200) while its upgrade rule reserved for a wave *and* the upgrade (about 290),
+so the cheaper commitment always won the race and every surplus went down the
+barrel. It lost at full health, which looked like balance and was an ordering
+mistake. It now shells only out of what is left once both are covered.
+
+### Six of seven mutations caught, and the survivor was the important one
+
+Setting the cannon's reach ten times too far left every test passing. The range
+test stood a unit at 1600 and aimed at where it *stood* — but a soldier walks
+eighty pixels during the shell's flight, so it stepped out of the blast whether
+or not the shot could reach. The test was measuring the lead error, not the
+clamp. It now aims with lead, so the only thing that stops the shell is the
+range it was supposed to be testing.
+
 ## The open question, answered — and then answered again
 
 **Slice 2's verdict: it was not fun, and the reason was not the camera.**
