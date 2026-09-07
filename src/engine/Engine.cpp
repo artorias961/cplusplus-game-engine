@@ -8,6 +8,7 @@
 
 #include "engine/Font.h"
 #include "engine/Systems.h"
+#include "engine/View.h"
 
 namespace engine {
 
@@ -110,11 +111,9 @@ void Engine::render(World& world) {
 
     // Where the view is. The first Camera in the world wins; with none, the
     // view sits at the origin and world space and screen space coincide.
-    float cameraX = 0.0f;
-    float cameraY = 0.0f;
+    Camera camera;
     for (auto& entry : world.view<Camera>()) {
-        cameraX = entry.second.x;
-        cameraY = entry.second.y;
+        camera = entry.second;
         break;
     }
 
@@ -157,13 +156,13 @@ void Engine::render(World& world) {
     for (const DrawItem& item : drawList_) {
         switch (item.kind) {
             case DrawKind::SpriteKind:
-                drawSprite(world, item.entity, cameraX, cameraY);
+                drawSprite(world, item.entity, camera);
                 break;
             case DrawKind::PolygonKind:
-                drawPolygon(world, item.entity, cameraX, cameraY);
+                drawPolygon(world, item.entity, camera);
                 break;
             case DrawKind::TextKind:
-                drawTextComponent(world, item.entity, cameraX, cameraY);
+                drawTextComponent(world, item.entity, camera);
                 break;
         }
     }
@@ -171,17 +170,13 @@ void Engine::render(World& world) {
     SDL_RenderPresent(renderer_);
 }
 
-void Engine::drawSprite(World& world, Entity entity, float cameraX,
-                        float cameraY) {
+void Engine::drawSprite(World& world, Entity entity, const Camera& camera) {
     const Sprite& sprite = *world.getComponent<Sprite>(entity);
     const Transform& transform = *world.getComponent<Transform>(entity);
 
-    const float offsetX = sprite.screenSpace ? 0.0f : cameraX;
-    const float offsetY = sprite.screenSpace ? 0.0f : cameraY;
-
     SDL_Rect rect{
-        static_cast<int>(transform.x - offsetX),
-        static_cast<int>(transform.y - offsetY),
+        static_cast<int>(viewToScreenX(camera, transform.x, sprite.screenSpace)),
+        static_cast<int>(viewToScreenY(camera, transform.y, sprite.screenSpace)),
         sprite.width,
         sprite.height,
     };
@@ -228,14 +223,15 @@ void Engine::drawSprite(World& world, Entity entity, float cameraX,
 //
 // cos and sin are computed once per entity rather than once per point, because
 // they only depend on the angle.
-void Engine::drawPolygon(World& world, Entity entity, float cameraX,
-                         float cameraY) {
+void Engine::drawPolygon(World& world, Entity entity, const Camera& camera) {
     const Polygon& polygon = *world.getComponent<Polygon>(entity);
     const Transform& transform = *world.getComponent<Transform>(entity);
     if (polygon.points.size() < 2) return;
 
-    const float offsetX = polygon.screenSpace ? 0.0f : cameraX;
-    const float offsetY = polygon.screenSpace ? 0.0f : cameraY;
+    const float originX =
+        viewToScreenX(camera, transform.x, polygon.screenSpace);
+    const float originY =
+        viewToScreenY(camera, transform.y, polygon.screenSpace);
 
     const float cosA = std::cos(transform.rotation);
     const float sinA = std::sin(transform.rotation);
@@ -244,8 +240,8 @@ void Engine::drawPolygon(World& world, Entity entity, float cameraX,
     polygonPoints_.reserve(polygon.points.size() + 1);
     for (const Vec2& point : polygon.points) {
         polygonPoints_.push_back(SDL_FPoint{
-            transform.x - offsetX + point.x * cosA - point.y * sinA,
-            transform.y - offsetY + point.x * sinA + point.y * cosA,
+            originX + point.x * cosA - point.y * sinA,
+            originY + point.x * sinA + point.y * cosA,
         });
     }
     // A closed shape just repeats its first point, so the last segment joins
@@ -258,17 +254,16 @@ void Engine::drawPolygon(World& world, Entity entity, float cameraX,
                          static_cast<int>(polygonPoints_.size()));
 }
 
-void Engine::drawTextComponent(World& world, Entity entity, float cameraX,
-                               float cameraY) {
+void Engine::drawTextComponent(World& world, Entity entity,
+                               const Camera& camera) {
     const Text& text = *world.getComponent<Text>(entity);
     const Transform& transform = *world.getComponent<Transform>(entity);
 
-    const float offsetX = text.screenSpace ? 0.0f : cameraX;
-    const float offsetY = text.screenSpace ? 0.0f : cameraY;
-
-    drawText(text.value, static_cast<int>(transform.x - offsetX),
-             static_cast<int>(transform.y - offsetY), text.scale,
-             SDL_Color{text.r, text.g, text.b, text.a});
+    drawText(
+        text.value,
+        static_cast<int>(viewToScreenX(camera, transform.x, text.screenSpace)),
+        static_cast<int>(viewToScreenY(camera, transform.y, text.screenSpace)),
+        text.scale, SDL_Color{text.r, text.g, text.b, text.a});
 }
 
 // Draws a string one font pixel at a time, each as a filled rectangle — the

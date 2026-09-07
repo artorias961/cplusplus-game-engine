@@ -36,10 +36,14 @@ namespace {
 
 AudioDevice* audioDevice = nullptr;
 
-// Where each side's units appear, just clear of their own castle.
-constexpr float kLeftSpawnX = kCastleMargin + kCastleWidth + 4.0f;
-constexpr float kRightSpawnX = kWindowWidth - kCastleMargin - kCastleWidth -
-                               kUnitWidth - 4.0f;
+// Where each side's castle stands, and where its units appear just clear of
+// it. All measured against the WORLD, not the window — the window is only how
+// much of the world you happen to be looking at.
+constexpr float kLeftCastleX = kCastleMargin;
+constexpr float kRightCastleX = kWorldWidth - kCastleMargin - kCastleWidth;
+
+constexpr float kLeftSpawnX = kLeftCastleX + kCastleWidth + 4.0f;
+constexpr float kRightSpawnX = kRightCastleX - kUnitWidth - 4.0f;
 
 // --- Sound -----------------------------------------------------------------
 
@@ -233,6 +237,47 @@ int countUnits(World& world, bool leftSide) {
     return count;
 }
 
+Camera* findCamera(World& world) {
+    for (auto& entry : world.view<Camera>()) return &entry.second;
+    return nullptr;
+}
+
+float frontLineX(World& world, bool leftSide) {
+    const float direction = facing(leftSide);
+
+    bool found = false;
+    float front = 0.0f;
+    for (Entity entity : world.entities()) {
+        if (!world.hasComponent<Unit>(entity)) continue;
+        Team* team = world.getComponent<Team>(entity);
+        Transform* transform = world.getComponent<Transform>(entity);
+        if (!team || team->leftSide != leftSide || !transform) continue;
+
+        // "Frontmost" is furthest along your own direction of travel, which
+        // is the largest x for the left side and the smallest for the right.
+        // Multiplying by the direction lets one comparison serve both.
+        if (!found || transform->x * direction > front * direction) {
+            front = transform->x;
+            found = true;
+        }
+    }
+    if (found) return front;
+
+    // Nothing on the field: your advance has reached your own front door.
+    const Entity castle = findCastle(world, leftSide);
+    if (castle != kInvalidEntity) {
+        if (Transform* transform = world.getComponent<Transform>(castle)) {
+            return transform->x + kCastleWidth / 2.0f;
+        }
+    }
+    // Unreachable while a battle is running — a side always has a castle, and
+    // the scene stops calling this the moment one falls. Kept because the
+    // function has to return something when findCastle finds nothing, and
+    // noted because no test can reach it: breaking this line on purpose left
+    // every test passing, which is a fact about the line, not the tests.
+    return leftSide ? kLeftCastleX : kRightCastleX;
+}
+
 Entity spawnUnit(World& world, bool leftSide) {
     const float x = leftSide ? kLeftSpawnX : kRightSpawnX;
 
@@ -327,6 +372,12 @@ public:
         sessionEntity_ = world.createEntity();
         world.addComponent(sessionEntity_, Session{});
 
+        // One camera, on its own entity. The renderer picks up the first one
+        // it finds; before this game the only thing that ever moved it was
+        // Asteroids' screen shake, a few pixels at a time.
+        cameraEntity_ = world.createEntity();
+        world.addComponent(cameraEntity_, Camera{});
+
         buildField(world);
 
         goldText_ = createText(world, "GOLD 150", 16, 14, 3, 235, 220, 150,
@@ -335,13 +386,29 @@ public:
                                      kHudLayer);
         rightHealthText_ = createText(world, "", kWindowWidth - 220, 48, 2,
                                       240, 150, 130, kHudLayer);
-        createText(world, "A SPAWNS - P PAUSES", 16, kWindowHeight - 30, 2,
-                   150, 150, 175, kHudLayer);
+        hud_.push_back(goldText_);
+        hud_.push_back(leftHealthText_);
+        hud_.push_back(rightHealthText_);
+        // The old hint read "A SPAWNS", which taught the one strategy that
+        // cannot win: spending the instant you can afford to is exactly what
+        // the opponent does, and mirroring it deadlocks the field forever.
+        // Banking for a wave is the actual game, so the hint says so.
+        hud_.push_back(createText(world,
+                                  "A SENDS - SAVE FOR A WAVE - ARROWS LOOK - P PAUSES",
+                                  16, kWindowHeight - 30, 2, 150, 150, 175,
+                                  kHudLayer));
+
+        buildMinimap(world);
+
+        // Start looking at your own castle rather than at the origin, so the
+        // first frame is not a lurch.
+        snapCameraToTarget(world);
     }
 
     void onExit(World& world) override {
         clearField(world);
         world.destroyLater(sessionEntity_);
+        world.destroyLater(cameraEntity_);
         for (Entity entity : hud_) world.destroyLater(entity);
         hud_.clear();
     }
@@ -353,6 +420,7 @@ public:
         clearField(world);
         *session = Session{};
         buildField(world);
+        snapCameraToTarget(world);
         overlayShown_ = false;
         shownGold_ = -1;
     }
@@ -379,32 +447,55 @@ public:
         handleSpawning(world, *session, input, dt);
         fight(world, *session, dt);
         removeTheDead(world, *session);
+
+        // After the dead are gone, so the camera never chases a corpse for a
+        // frame, and after the fight, so the minimap shows this frame's front
+        // line rather than last frame's.
+        updateCamera(world, *session, input, dt);
         refreshHud(world, *session);
+        refreshMinimap(world);
     }
 
 private:
     void buildField(World& world) {
         // The ground, drawn as one wide bar so the units have something to
-        // stand on rather than floating in the dark.
-        field_.push_back(createRect(world, 0.0f, kGroundY,
-                                    static_cast<float>(kWindowWidth),
+        // stand on rather than floating in the dark. It spans the WORLD now,
+        // not the window, or it would run out halfway through the first push.
+        field_.push_back(createRect(world, 0.0f, kGroundY, kWorldWidth,
                                     static_cast<float>(kWindowHeight) - kGroundY,
                                     38, 42, 52, kFieldLayer));
 
-        Entity left = createRect(world, kCastleMargin, kGroundY - kCastleHeight,
+        buildDistanceMarkers(world);
+
+        Entity left = createRect(world, kLeftCastleX, kGroundY - kCastleHeight,
                                  kCastleWidth, kCastleHeight, 70, 120, 165,
                                  kFieldLayer);
         world.addComponent(left, Team{true});
         world.addComponent(left, Castle{});
         field_.push_back(left);
 
-        Entity right = createRect(
-            world, static_cast<float>(kWindowWidth) - kCastleMargin - kCastleWidth,
-            kGroundY - kCastleHeight, kCastleWidth, kCastleHeight, 170, 90, 80,
-            kFieldLayer);
+        Entity right = createRect(world, kRightCastleX, kGroundY - kCastleHeight,
+                                  kCastleWidth, kCastleHeight, 170, 90, 80,
+                                  kFieldLayer);
         world.addComponent(right, Team{false});
         world.addComponent(right, Castle{});
         field_.push_back(right);
+    }
+
+    // Posts along the field at a fixed spacing.
+    //
+    // These are not decoration. A uniform ground bar under a moving camera
+    // looks exactly like a stationary ground bar under a stationary camera —
+    // with nothing at a fixed world position to slide past, a correct camera
+    // and a broken one are indistinguishable. Something has to mark distance
+    // for the scrolling to read as scrolling at all.
+    void buildDistanceMarkers(World& world) {
+        for (float x = 240.0f; x < kWorldWidth - 120.0f; x += 240.0f) {
+            field_.push_back(createRect(world, x, kGroundY - 46.0f, 3.0f, 46.0f,
+                                        52, 58, 70, kFieldLayer));
+            field_.push_back(createRect(world, x - 6.0f, kGroundY - 52.0f, 15.0f,
+                                        6.0f, 62, 70, 84, kFieldLayer));
+        }
     }
 
     void clearField(World& world) {
@@ -511,6 +602,113 @@ private:
         }
     }
 
+    // --- The view ----------------------------------------------------------
+
+    // Where the camera wants to be: your front line, centred, and never past
+    // the ends of the world.
+    float cameraTargetX(World& world) const {
+        const float centred = frontLineX(world, true) -
+                              static_cast<float>(kWindowWidth) / 2.0f;
+        return std::min(std::max(centred, 0.0f), kCameraMaxX);
+    }
+
+    void snapCameraToTarget(World& world) {
+        if (Camera* camera = world.getComponent<Camera>(cameraEntity_)) {
+            camera->x = cameraTargetX(world);
+        }
+    }
+
+    void updateCamera(World& world, Session& session, InputManager& input,
+                      float dt) {
+        Camera* camera = world.getComponent<Camera>(cameraEntity_);
+        if (!camera) return;
+
+        const bool left = input.isKeyDown(SDL_SCANCODE_LEFT);
+        const bool right = input.isKeyDown(SDL_SCANCODE_RIGHT);
+
+        if (left != right) {
+            camera->x += (right ? 1.0f : -1.0f) * kFreeLookSpeed * dt;
+            session.freeLookSeconds = kFreeLookHold;
+        } else if (session.freeLookSeconds > 0.0f) {
+            // Held where the player left it, so a glance at your own castle
+            // isn't yanked away the instant you let go of the key.
+            session.freeLookSeconds -= dt;
+        } else {
+            // Exponential catch-up: it closes a fixed FRACTION of the
+            // remaining distance each second, so it starts quickly and eases
+            // in rather than arriving at a hard stop. Written against dt so
+            // the feel does not change with the frame rate.
+            const float target = cameraTargetX(world);
+            camera->x += (target - camera->x) *
+                         std::min(1.0f, kCameraFollowRate * dt);
+        }
+
+        // Clamped last, and unconditionally, so free-look obeys the same
+        // limits as following does.
+        camera->x = std::min(std::max(camera->x, 0.0f), kCameraMaxX);
+        camera->y = 0.0f;
+    }
+
+    // --- The minimap -------------------------------------------------------
+
+    void buildMinimap(World& world) {
+        hud_.push_back(makeScreenRect(world, kMinimapX, kMinimapY,
+                                      kMinimapWidth, kMinimapHeight, 30, 34, 44,
+                                      kHudLayer));
+
+        // Castles first so the front-line markers draw over them: same layer,
+        // and within a layer the draw order is by entity id.
+        minimapLeftCastle_ = makeScreenRect(world, 0.0f, kMinimapY, 4.0f,
+                                            kMinimapHeight, 90, 150, 200,
+                                            kHudLayer);
+        minimapRightCastle_ = makeScreenRect(world, 0.0f, kMinimapY, 4.0f,
+                                             kMinimapHeight, 200, 110, 100,
+                                             kHudLayer);
+        minimapLeftFront_ = makeScreenRect(world, 0.0f, kMinimapY - 3.0f,
+                                           kMinimapMarkerWidth,
+                                           kMinimapHeight + 6.0f, 140, 210, 250,
+                                           kHudLayer);
+        minimapRightFront_ = makeScreenRect(world, 0.0f, kMinimapY - 3.0f,
+                                            kMinimapMarkerWidth,
+                                            kMinimapHeight + 6.0f, 250, 150, 130,
+                                            kHudLayer);
+
+        hud_.push_back(minimapLeftCastle_);
+        hud_.push_back(minimapRightCastle_);
+        hud_.push_back(minimapLeftFront_);
+        hud_.push_back(minimapRightFront_);
+    }
+
+    Entity makeScreenRect(World& world, float x, float y, float width,
+                          float height, unsigned char r, unsigned char g,
+                          unsigned char b, int layer) {
+        const Entity entity =
+            createRect(world, x, y, width, height, r, g, b, layer);
+        world.getComponent<Sprite>(entity)->screenSpace = true;
+        return entity;
+    }
+
+    void refreshMinimap(World& world) {
+        placeMarker(world, minimapLeftCastle_, kLeftCastleX + kCastleWidth / 2.0f,
+                    4.0f);
+        placeMarker(world, minimapRightCastle_,
+                    kRightCastleX + kCastleWidth / 2.0f, 4.0f);
+        placeMarker(world, minimapLeftFront_, frontLineX(world, true),
+                    kMinimapMarkerWidth);
+        placeMarker(world, minimapRightFront_, frontLineX(world, false),
+                    kMinimapMarkerWidth);
+    }
+
+    // World x -> a position along the strip, with the marker centred on it and
+    // kept inside the strip at both ends.
+    void placeMarker(World& world, Entity marker, float worldX, float width) {
+        Transform* transform = world.getComponent<Transform>(marker);
+        if (!transform) return;
+
+        const float fraction = std::min(std::max(worldX / kWorldWidth, 0.0f), 1.0f);
+        transform->x = kMinimapX + fraction * (kMinimapWidth - width);
+    }
+
     void refreshHud(World& world, const Session& session) {
         const int gold = static_cast<int>(session.gold);
         if (gold != shownGold_) {
@@ -538,9 +736,14 @@ private:
     }
 
     Entity sessionEntity_ = kInvalidEntity;
+    Entity cameraEntity_ = kInvalidEntity;
     Entity goldText_ = kInvalidEntity;
     Entity leftHealthText_ = kInvalidEntity;
     Entity rightHealthText_ = kInvalidEntity;
+    Entity minimapLeftCastle_ = kInvalidEntity;
+    Entity minimapRightCastle_ = kInvalidEntity;
+    Entity minimapLeftFront_ = kInvalidEntity;
+    Entity minimapRightFront_ = kInvalidEntity;
     std::vector<Entity> field_;
     std::vector<Entity> hud_;
     int shownGold_ = -1;

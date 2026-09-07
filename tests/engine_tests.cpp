@@ -32,6 +32,7 @@
 #include "engine/Scene.h"
 #include "engine/Systems.h"
 #include "engine/Timing.h"
+#include "engine/View.h"
 
 using namespace engine;
 
@@ -553,6 +554,51 @@ void testFont() {
 
 }  // namespace
 
+// --- The view --------------------------------------------------------------
+//
+// These look almost too small to be worth writing, and for three games they
+// would have been: no world was ever bigger than its window, so the camera sat
+// at the origin and world coordinates and screen coordinates were the same
+// number. A scrolling battlefield is the first thing that can tell the
+// difference, and this rule is the whole of it.
+//
+// It is worth being clear about what these do and do not prove. They pin the
+// arithmetic, which Engine::render now calls rather than repeating — so the
+// two cannot drift. They cannot prove anything about what reaches the screen;
+// that still needs a window and a pair of eyes.
+void testViewTransform() {
+    Camera camera{200.0f, 50.0f};
+
+    // Moving the camera right slides the world left, which is the sign
+    // convention it is easiest to get backwards.
+    check(nearly(viewToScreenX(camera, 500.0f, false), 300.0f),
+          "a world position is shifted by the negative of the camera");
+    check(nearly(viewToScreenY(camera, 90.0f, false), 40.0f),
+          "on both axes");
+
+    // Screen-space things ignore the camera entirely: this is what keeps a
+    // score in the corner of the screen rather than 200 pixels off the left of
+    // it once the view has scrolled.
+    check(nearly(viewToScreenX(camera, 500.0f, true), 500.0f),
+          "screen-space x ignores the camera");
+    check(nearly(viewToScreenY(camera, 90.0f, true), 90.0f),
+          "screen-space y ignores the camera");
+
+    // A camera at the origin is the identity, which is why the three games
+    // written before any of this existed still draw exactly as they did.
+    const Camera atOrigin;
+    check(nearly(viewToScreenX(atOrigin, 137.0f, false), 137.0f),
+          "with no camera, world space and screen space coincide");
+    check(nearly(viewToScreenY(atOrigin, 137.0f, false), 137.0f),
+          "on both axes");
+
+    // Negative camera positions are not special-cased anywhere; a game may
+    // legitimately want to look left of the origin.
+    const Camera behind{-40.0f, 0.0f};
+    check(nearly(viewToScreenX(behind, 10.0f, false), 50.0f),
+          "a negative camera position shifts the world right");
+}
+
 int main() {
     std::printf("engine tests\n");
 
@@ -573,6 +619,7 @@ int main() {
     testLifetimeSystem();
     testSceneStack();
     testFont();
+    testViewTransform();
 
     if (failures == 0) {
         std::printf("all %d checks passed\n", checks);

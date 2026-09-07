@@ -50,6 +50,11 @@ struct Game {
 
     Session& session() { return *lanebattle::findSession(world); }
 
+    float cameraX() {
+        Camera* camera = lanebattle::findCamera(world);
+        return camera ? camera->x : -1.0f;
+    }
+
     float castleHealth(bool leftSide) {
         const Entity castle = lanebattle::findCastle(world, leftSide);
         if (castle == kInvalidEntity) return -1.0f;
@@ -372,6 +377,244 @@ void testRestartingAfterDefeat() {
           "and the enemy is starting over too");
 }
 
+// --- The view (slice 2) ----------------------------------------------------
+//
+// The battlefield is now two and a half screens wide, so where the camera is
+// pointing decides what the player can actually see — which makes it game
+// state worth testing, not presentation. None of this needs a window: the
+// camera is a component, so a headless run can read it directly.
+
+void testTheFieldIsWiderThanTheWindow() {
+    Game game;
+    game.startPlaying();
+
+    const Entity leftCastle = lanebattle::findCastle(game.world, true);
+    const Entity rightCastle = lanebattle::findCastle(game.world, false);
+    const float leftX = game.world.getComponent<Transform>(leftCastle)->x;
+    const float rightX = game.world.getComponent<Transform>(rightCastle)->x;
+
+    check(lanebattle::kWorldWidth > static_cast<float>(lanebattle::kWindowWidth),
+          "the world is wider than the view");
+    check(rightX > static_cast<float>(lanebattle::kWindowWidth),
+          "the enemy castle starts off-screen");
+    check(rightX - leftX > static_cast<float>(lanebattle::kWindowWidth),
+          "and the two castles are more than a screen apart");
+}
+
+void testTheCameraStartsOnYourOwnCastle() {
+    Game game;
+    game.startPlaying();
+
+    check(lanebattle::findCamera(game.world) != nullptr, "there is a camera");
+
+    // Your castle is near the left edge, so centring on it would need a
+    // negative camera position; clamping pins the view to the world edge
+    // instead. Starting anywhere else would mean the first frame lurches.
+    check(game.cameraX() == 0.0f,
+          "the view starts pinned to the left edge of the world");
+}
+
+void testTheCameraFollowsYourFrontLine() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const Entity mine = lanebattle::spawnUnit(game.world, true);
+    game.world.getComponent<Transform>(mine)->x = 1200.0f;
+
+    const float before = game.cameraX();
+    game.driver.step(120);  // two seconds of catching up
+    const float after = game.cameraX();
+
+    check(after > before, "the view moves towards an advancing unit");
+
+    // Measured against where the unit ACTUALLY is, not where it was put: it
+    // is still marching while the camera chases it, so it has moved a couple
+    // of hundred pixels by now. A tolerance wide enough to cover that would
+    // have stopped testing anything.
+    //
+    // The camera trails a moving target by about speed/followRate — roughly
+    // 24 pixels here — because easing never quite catches something that
+    // keeps running away. That is a feature; it is what stops the view
+    // snapping.
+    const float unitX = game.world.getComponent<Transform>(mine)->x;
+    const float wanted = unitX - static_cast<float>(lanebattle::kWindowWidth) / 2.0f;
+    check(std::fabs(after - wanted) < 40.0f,
+          "and settles with that unit near the middle of the screen");
+}
+
+void testTheCameraStopsAtTheEdgesOfTheWorld() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    // A unit at the far end: centring on it would run the view off the end of
+    // the world, so it should stop at the last full screen instead.
+    const Entity mine = lanebattle::spawnUnit(game.world, true);
+    game.world.getComponent<Transform>(mine)->x = lanebattle::kWorldWidth - 10.0f;
+    game.driver.step(300);
+
+    check(game.cameraX() <= lanebattle::kCameraMaxX + 0.01f,
+          "the view never scrolls past the right edge of the world");
+    check(game.cameraX() > lanebattle::kCameraMaxX - 1.0f,
+          "but does reach it");
+
+    // And back the other way, with nothing on the field at all.
+    game.world.destroyLater(mine);
+    game.driver.step(300);
+    check(game.cameraX() >= 0.0f,
+          "and never scrolls past the left edge either");
+    check(game.cameraX() < 1.0f, "returning home when the field is empty");
+}
+
+void testArrowKeysTakeTheViewOffTheLeash() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const float before = game.cameraX();
+
+    game.driver.hold(SDL_SCANCODE_RIGHT);
+    game.driver.step(30);
+    game.driver.release(SDL_SCANCODE_RIGHT);
+
+    const float scouted = game.cameraX();
+    check(scouted > before + 100.0f,
+          "holding RIGHT scrolls the view away from the front line");
+
+    // Letting go does not snap it back instantly — you get a moment to look.
+    game.driver.step(2);
+    check(std::fabs(game.cameraX() - scouted) < 5.0f,
+          "and letting go holds the view briefly rather than snapping back");
+
+    // But it does hand control back eventually.
+    game.driver.step(240);  // four seconds, well past the hold
+    check(game.cameraX() < scouted - 50.0f,
+          "then following resumes and the view comes home");
+}
+
+// Following clamps its target before it ever moves the camera, so the edge
+// test above passes even if the camera's own clamp is deleted. Free-look is
+// the path that can genuinely run off the end of the world, and it needs
+// checking separately — steering is exactly where a view escapes.
+void testFreeLookRespectsTheWorldEdges() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    game.driver.hold(SDL_SCANCODE_RIGHT);
+    game.driver.step(300);  // five seconds: far more than the field is wide
+    check(game.cameraX() <= lanebattle::kCameraMaxX + 0.01f,
+          "steering right stops at the edge of the world");
+    check(game.cameraX() > lanebattle::kCameraMaxX - 1.0f, "having reached it");
+    game.driver.release(SDL_SCANCODE_RIGHT);
+
+    game.driver.hold(SDL_SCANCODE_LEFT);
+    game.driver.step(300);
+    check(game.cameraX() >= 0.0f, "and steering left stops at the other edge");
+    check(game.cameraX() < 1.0f, "having reached that one too");
+    game.driver.release(SDL_SCANCODE_LEFT);
+}
+
+// The HUD is drawn in screen space, which did nothing at all while every world
+// fit inside its window. On a scrolling field it is the difference between a
+// score in the corner and a score that slides off the side of the screen, so
+// it is worth pinning down that the game actually asks for it.
+void testTheHudIgnoresTheCamera() {
+    Game game;
+    game.startPlaying();
+
+    int worldSpaceText = 0;
+    int screenSpaceText = 0;
+    for (Entity entity : game.world.entities()) {
+        if (Text* text = game.world.getComponent<Text>(entity)) {
+            if (text->screenSpace) {
+                ++screenSpaceText;
+            } else {
+                ++worldSpaceText;
+            }
+        }
+    }
+
+    check(screenSpaceText > 0, "the HUD exists");
+    check(worldSpaceText == 0, "and every word of it ignores the camera");
+}
+
+// The minimap is the only way to see a push that is happening off-screen, so
+// its markers have to actually track the battle rather than sit still.
+void testTheMinimapTracksTheFrontLines() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    check(std::fabs(lanebattle::frontLineX(game.world, true) -
+                    (lanebattle::kCastleMargin + lanebattle::kCastleWidth / 2.0f)) <
+              1.0f,
+          "with nothing fielded, your front line is your own castle");
+
+    const Entity mine = lanebattle::spawnUnit(game.world, true);
+    game.world.getComponent<Transform>(mine)->x = 900.0f;
+
+    const Entity behind = lanebattle::spawnUnit(game.world, true);
+    game.world.getComponent<Transform>(behind)->x = 300.0f;
+    game.driver.step();
+
+    check(std::fabs(lanebattle::frontLineX(game.world, true) - 900.0f) < 5.0f,
+          "the front line is the furthest-advanced unit, not the newest");
+
+    // The right side advances the other way, so "furthest forward" for them is
+    // the SMALLEST x — the one comparison most likely to be written backwards.
+    const Entity theirs = lanebattle::spawnUnit(game.world, false);
+    game.world.getComponent<Transform>(theirs)->x = 1500.0f;
+    const Entity theirsBehind = lanebattle::spawnUnit(game.world, false);
+    game.world.getComponent<Transform>(theirsBehind)->x = 2000.0f;
+    game.driver.step();
+
+    check(std::fabs(lanebattle::frontLineX(game.world, false) - 1500.0f) < 5.0f,
+          "and for the enemy, forward is the other way");
+}
+
+// --- Can the game actually be played? --------------------------------------
+//
+// Every test above checks a rule in isolation: this one checks that the rules
+// add up to a game that ends. It exists because nothing did, and the gap hid
+// something the individual tests could never have caught.
+//
+// Simulating a whole battle showed the two sides deadlocked at the exact same
+// two pixel positions for four solid minutes, castles untouched, gold cycling
+// on a perfect period. Spending the instant you can afford to is precisely
+// what the opponent does, so playing that way mirrors it exactly and neither
+// front line ever moves.
+//
+// Banking the gold and sending a wave breaks it immediately — the extra
+// bodies win the trade at the front and the line rolls forward. That is a real
+// strategy and it is the whole of the game's depth at the moment, which is a
+// finding about the DESIGN rather than a bug. What is pinned here is only the
+// part that must never stop being true: that the battle can be won at all.
+void testABattleCanBeWon() {
+    Game game;
+    game.startPlaying();
+
+    bool dumping = false;
+    for (int frame = 0; frame < 60 * 150; ++frame) {
+        // Bank two units' worth, then spend it all: the cheapest strategy
+        // that is not simply mirroring the opponent.
+        if (!dumping && game.session().gold >= lanebattle::kUnitCost * 2.0f) {
+            dumping = true;
+            game.driver.hold(SDL_SCANCODE_A);
+        } else if (dumping && game.session().gold < lanebattle::kUnitCost) {
+            dumping = false;
+            game.driver.release(SDL_SCANCODE_A);
+        }
+
+        game.driver.step();
+        if (game.session().gameOver) break;
+    }
+
+    check(game.session().gameOver, "a battle played with banked waves ends");
+    check(game.session().playerWon, "and massing units wins it");
+}
+
 }  // namespace
 
 int main() {
@@ -392,6 +635,16 @@ int main() {
     testTheEconomiesAreSymmetric();
     testPauseFreezesTheBattle();
     testRestartingAfterDefeat();
+
+    testTheFieldIsWiderThanTheWindow();
+    testTheCameraStartsOnYourOwnCastle();
+    testTheCameraFollowsYourFrontLine();
+    testTheCameraStopsAtTheEdgesOfTheWorld();
+    testArrowKeysTakeTheViewOffTheLeash();
+    testFreeLookRespectsTheWorldEdges();
+    testTheHudIgnoresTheCamera();
+    testTheMinimapTracksTheFrontLines();
+    testABattleCanBeWon();
 
     if (failures == 0) {
         std::printf("all %d checks passed\n", checks);

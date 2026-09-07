@@ -81,10 +81,9 @@ private:
 
     void processEvents();
     void render(World& world);
-    void drawSprite(World& world, Entity entity, float cameraX, float cameraY);
-    void drawPolygon(World& world, Entity entity, float cameraX, float cameraY);
-    void drawTextComponent(World& world, Entity entity, float cameraX,
-                           float cameraY);
+    void drawSprite(World& world, Entity entity, const Camera& camera);
+    void drawPolygon(World& world, Entity entity, const Camera& camera);
+    void drawTextComponent(World& world, Entity entity, const Camera& camera);
     void drawText(const std::string& text, int x, int y, int scale,
                   SDL_Color color);
 

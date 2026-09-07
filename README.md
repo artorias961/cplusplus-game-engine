@@ -24,8 +24,11 @@ Four games are built on it: **Asteroids**, **Breakout** and **Lane Battle** in
 That's on purpose — an engine with only one game is a hypothesis, not an engine
 — and each needed something the last one didn't: Snake wanted fixed ticks and
 box collision, Asteroids wanted rotation and circles, Breakout wanted contact
-normals and sub-frame movement. Lane Battle, so far, has needed nothing new at
-all, which is its own kind of result.
+normals and sub-frame movement. Lane Battle's first slice needed nothing new at
+all — its own kind of result — and its second needed one small thing: a
+battlefield wider than the window finally made world and screen coordinates
+differ, and moved that rule out of the renderer into `View.h` where a test can
+reach it.
 
 It is **not** trying to be fast, complete, or production-ready. Storage uses
 `std::unordered_map` instead of packed arrays, there's no batching, no scene
@@ -44,8 +47,9 @@ an optimisation is worth doing.
 
 **The live tree is now growing a fourth game**, Lane Battle, and the engine
 grows only where that game demands it — the same rule that produced everything
-in v1.0. So far it has demanded nothing, which is exactly what the first slice
-of a game should demand.
+in v1.0. Two slices in, it has demanded one header. `docs/v3-plan.md` has the
+running notes, including what the second slice found out about whether the game
+is any good.
 
 The list at the bottom is **exercises, not debt**. Nothing on it is missing in
 the sense of being needed; each is a next thing to learn if you want one.
@@ -61,6 +65,7 @@ engine_project/
 │   ├── Systems.h       Movement and Lifetime (and includes Collision.h)
 │   ├── Collision.h     Overlap tests + contact normals, boxes and circles
 │   ├── Timing.h        TickTimer (variable frames -> fixed-length ticks)
+│   ├── View.h          World coordinates -> screen coordinates, given a Camera
 │   ├── Scene.h         Scene + SceneStack (menu / playing / paused / ...)
 │   ├── Font.h          A 5x7 bitmap font, built into the binary
 │   ├── Audio.h         Sound synthesised in code; no files, no SDL_mixer
@@ -655,7 +660,7 @@ is missing, and rendering changes no state — it's verified by looking at it.
 
 ### Controls
 
-Both games open on a title screen where `SPACE` starts and `Q` quits. In both,
+All three open on a title screen where `SPACE` starts and `Q` quits. In each,
 `P` pauses, `R` plays again from the game-over screen, and `Escape` quits from
 anywhere.
 
@@ -680,21 +685,32 @@ returning.
 | Left / Right | Move the paddle |
 | Space | Launch the ball |
 
+The ball rides the paddle until you launch it, so you choose where each rally
+starts. Where it lands across the paddle's face angles the bounce — that's the
+whole skill of it. Clear the field and the next level refills it with a faster
+ball. Missing the ball costs one of three lives.
+
 **Lane Battle** (`.\build\Release\lanebattle.exe`)
 
 | Key | Action |
 | --- | --- |
-| A | Spend gold to send a unit |
+| A | Spend gold to send a unit (hold to keep sending) |
+| Left / Right | Look up and down the field; lets go after a moment |
 
 Gold accrues on its own. Units march right, stop when an enemy is in reach,
 and fight until one falls. Break the enemy castle to win, and lose if yours
 falls first. The opponent plays by exactly the same economy — same purse, same
 income, same unit cost — so difficulty is one multiplier rather than a fudge.
 
-The ball rides the paddle until you launch it, so you choose where each rally
-starts. Where it lands across the paddle's face angles the bounce — that's the
-whole skill of it. Clear the field and the next level refills it with a faster
-ball. Missing the ball costs one of three lives.
+The battlefield is two and a half screens wide, so the camera rides with your
+front line and drifts home to your castle when you have nothing out. The strip
+at the top is the whole field in miniature, with a marker for each castle and
+each side's front line — the fighting is often somewhere you aren't looking.
+
+One thing worth knowing, because the game does not yet make you discover it:
+**spending the instant you can afford to is a losing move.** That is exactly
+what the opponent does, so it mirrors you and the front line never moves.
+Bank the gold and send a wave.
 
 ### When it doesn't work
 
