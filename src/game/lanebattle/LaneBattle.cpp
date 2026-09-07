@@ -305,6 +305,16 @@ int countUnitsOfKind(World& world, bool leftSide, int kind) {
     return count;
 }
 
+int buttonAt(float screenX, float screenY) {
+    if (screenY < kButtonY || screenY > kButtonY + kButtonHeight) return -1;
+
+    for (int index = 0; index < kUnitKindCount; ++index) {
+        const float left = buttonLeft(index);
+        if (screenX >= left && screenX <= left + kButtonWidth) return index;
+    }
+    return -1;
+}
+
 Camera* findCamera(World& world) {
     for (auto& entry : world.view<Camera>()) return &entry.second;
     return nullptr;
@@ -470,24 +480,12 @@ public:
         popText_ = createText(world, "", 16, 78, 2, 170, 170, 195, kHudLayer);
         hud_.push_back(popText_);
 
-        // The roster, one line per row of the table, coloured as the units
-        // are. This is the whole interface until slice 4 replaces it with a
-        // clickable bar — and it is the only place the player can learn what
-        // the three types cost.
-        for (int kind = 0; kind < kUnitKindCount; ++kind) {
-            const UnitKind& stats = kUnitKinds[kind];
-            const std::string label = std::to_string(kind + 1) + " " +
-                                      stats.name + " " +
-                                      std::to_string(static_cast<int>(stats.cost));
-            rosterText_[kind] =
-                createText(world, label, 16 + kind * 150, kWindowHeight - 52, 2,
-                           stats.leftR, stats.leftG, stats.leftB, kHudLayer);
-            hud_.push_back(rosterText_[kind]);
-        }
+        buildSpawnBar(world);
 
-        hud_.push_back(createText(world, "ARROWS LOOK - P PAUSES", 16,
-                                  kWindowHeight - 28, 2, 150, 150, 175,
-                                  kHudLayer));
+        hud_.push_back(createText(world, "DRAG OR ARROWS TO LOOK - P PAUSES",
+                                  static_cast<int>(kButtonX),
+                                  static_cast<int>(kButtonY) - 22, 2,
+                                  130, 130, 155, kHudLayer));
 
         buildMinimap(world);
 
@@ -624,13 +622,29 @@ private:
                                             SDL_SCANCODE_3, SDL_SCANCODE_4};
         for (int kind = 0; kind < kUnitKindCount && kind < 4; ++kind) {
             if (!input.isKeyDown(keys[kind])) continue;
-            if (session.gold < kUnitKinds[kind].cost) continue;
-
-            session.gold -= kUnitKinds[kind].cost;
-            session.spawnCooldown = kSpawnCooldown;
-            spawnUnit(world, true, kind);
-            return;  // one per cooldown, whatever else is held down
+            if (trySpawn(world, session, kind)) return;
         }
+
+        // A click on the bar does exactly what its key does. `wasMousePressed`
+        // rather than `isMouseDown`, or one held click would empty the purse
+        // one unit per cooldown for as long as the finger stayed down.
+        if (!input.wasMousePressed()) return;
+
+        const int kind = buttonAt(static_cast<float>(input.mouseX()),
+                                  static_cast<float>(input.mouseY()));
+        if (kind >= 0) trySpawn(world, session, kind);
+    }
+
+    // Buys one unit if it can be afforded, and reports whether it did. The one
+    // place gold is spent, so the keyboard and the mouse cannot drift apart.
+    bool trySpawn(World& world, Session& session, int kind) {
+        if (kind < 0 || kind >= kUnitKindCount) return false;
+        if (session.gold < kUnitKinds[kind].cost) return false;
+
+        session.gold -= kUnitKinds[kind].cost;
+        session.spawnCooldown = kSpawnCooldown;
+        spawnUnit(world, true, kind);
+        return true;
     }
 
     // The opponent, playing by the same rules from the same purse.
@@ -781,6 +795,32 @@ private:
         Camera* camera = world.getComponent<Camera>(cameraEntity_);
         if (!camera) return;
 
+        // A drag on the field scrolls the view. Starting one over the spawn
+        // bar is not a drag — that press belongs to the button underneath it,
+        // or every click on a button would also nudge the camera.
+        if (input.wasMousePressed() &&
+            buttonAt(static_cast<float>(input.mouseX()),
+                     static_cast<float>(input.mouseY())) < 0) {
+            session.dragging = true;
+            session.dragStartX = static_cast<float>(input.mouseX());
+            session.dragStartCameraX = camera->x;
+        }
+        if (!input.isMouseDown()) session.dragging = false;
+
+        if (session.dragging) {
+            // The field follows the cursor: drag left and the world moves
+            // left under your finger, which means the camera moves right.
+            const float moved =
+                static_cast<float>(input.mouseX()) - session.dragStartX;
+            if (std::fabs(moved) >= kDragThreshold) {
+                camera->x = session.dragStartCameraX - moved;
+                session.freeLookSeconds = kFreeLookHold;
+                camera->x = std::min(std::max(camera->x, 0.0f), kCameraMaxX);
+                camera->y = 0.0f;
+                return;
+            }
+        }
+
         const bool left = input.isKeyDown(SDL_SCANCODE_LEFT);
         const bool right = input.isKeyDown(SDL_SCANCODE_RIGHT);
 
@@ -805,6 +845,78 @@ private:
         // limits as following does.
         camera->x = std::min(std::max(camera->x, 0.0f), kCameraMaxX);
         camera->y = 0.0f;
+    }
+
+    // --- The spawn bar -----------------------------------------------------
+
+    void buildSpawnBar(World& world) {
+        for (int kind = 0; kind < kUnitKindCount; ++kind) {
+            const UnitKind& stats = kUnitKinds[kind];
+            const float left = buttonLeft(kind);
+
+            // Three pieces per button: the plate, a fill that shrinks as the
+            // cooldown runs, and the label. The fill is drawn over the plate
+            // and under the text, which the layer sort already guarantees
+            // because entity ids increase in creation order within a layer.
+            buttonPlate_[kind] =
+                makeScreenRect(world, left, kButtonY, kButtonWidth,
+                               kButtonHeight, 34, 38, 48, kHudLayer);
+            buttonFill_[kind] =
+                makeScreenRect(world, left, kButtonY + kButtonHeight - 4.0f,
+                               kButtonWidth, 4.0f, stats.leftR, stats.leftG,
+                               stats.leftB, kHudLayer);
+
+            const std::string label =
+                std::to_string(kind + 1) + " " + stats.name;
+            buttonName_[kind] = createText(
+                world, label, static_cast<int>(left) + 8,
+                static_cast<int>(kButtonY) + 8, 2, stats.leftR, stats.leftG,
+                stats.leftB, kHudLayer);
+            buttonCost_[kind] = createText(
+                world, std::to_string(static_cast<int>(stats.cost)),
+                static_cast<int>(left) + 8, static_cast<int>(kButtonY) + 26, 2,
+                220, 200, 140, kHudLayer);
+
+            world.getComponent<Text>(buttonName_[kind])->screenSpace = true;
+            world.getComponent<Text>(buttonCost_[kind])->screenSpace = true;
+
+            hud_.push_back(buttonPlate_[kind]);
+            hud_.push_back(buttonFill_[kind]);
+            hud_.push_back(buttonName_[kind]);
+            hud_.push_back(buttonCost_[kind]);
+        }
+    }
+
+    void refreshSpawnBar(World& world, const Session& session, int fielded) {
+        for (int kind = 0; kind < kUnitKindCount; ++kind) {
+            const UnitKind& stats = kUnitKinds[kind];
+            const bool affordable = session.gold >= stats.cost &&
+                                    fielded < kPopulationCap;
+
+            if (Text* name = world.getComponent<Text>(buttonName_[kind])) {
+                name->r = affordable ? stats.leftR : 95;
+                name->g = affordable ? stats.leftG : 95;
+                name->b = affordable ? stats.leftB : 110;
+            }
+            if (Text* cost = world.getComponent<Text>(buttonCost_[kind])) {
+                cost->r = affordable ? 220 : 95;
+                cost->g = affordable ? 200 : 95;
+                cost->b = affordable ? 140 : 110;
+            }
+            if (Sprite* plate = world.getComponent<Sprite>(buttonPlate_[kind])) {
+                plate->r = affordable ? 44 : 28;
+                plate->g = affordable ? 50 : 32;
+                plate->b = affordable ? 64 : 40;
+            }
+
+            // The fill is the shared spawn cooldown draining left to right,
+            // so the bar shows *when* you can send as well as *what*.
+            if (Sprite* fill = world.getComponent<Sprite>(buttonFill_[kind])) {
+                const float remaining =
+                    std::max(0.0f, session.spawnCooldown) / kSpawnCooldown;
+                fill->width = static_cast<int>(kButtonWidth * (1.0f - remaining));
+            }
+        }
     }
 
     // --- The minimap -------------------------------------------------------
@@ -887,16 +999,7 @@ private:
 
         // Dim whatever you cannot currently buy, so affordability is readable
         // without doing arithmetic against the gold counter.
-        for (int kind = 0; kind < kUnitKindCount; ++kind) {
-            Text* text = world.getComponent<Text>(rosterText_[kind]);
-            if (!text) continue;
-            const UnitKind& stats = kUnitKinds[kind];
-            const bool affordable = session.gold >= stats.cost &&
-                                    fielded < kPopulationCap;
-            text->r = affordable ? stats.leftR : 90;
-            text->g = affordable ? stats.leftG : 90;
-            text->b = affordable ? stats.leftB : 105;
-        }
+        refreshSpawnBar(world, session, fielded);
 
         updateHealthText(world, leftHealthText_, "YOU  ", true);
         updateHealthText(world, rightHealthText_, "ENEMY ", false);
@@ -919,7 +1022,10 @@ private:
     Entity cameraEntity_ = kInvalidEntity;
     Entity goldText_ = kInvalidEntity;
     Entity popText_ = kInvalidEntity;
-    Entity rosterText_[kUnitKindCount] = {};
+    Entity buttonPlate_[kUnitKindCount] = {};
+    Entity buttonFill_[kUnitKindCount] = {};
+    Entity buttonName_[kUnitKindCount] = {};
+    Entity buttonCost_[kUnitKindCount] = {};
     Entity leftHealthText_ = kInvalidEntity;
     Entity rightHealthText_ = kInvalidEntity;
     Entity minimapLeftCastle_ = kInvalidEntity;

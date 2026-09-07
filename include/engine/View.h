@@ -13,8 +13,9 @@
 // can be tested. This can. Engine::render calls it, so a test that pins the
 // rule down is testing the real thing rather than a copy of it.
 //
-// It is deliberately NOT paired with a screenToWorld(). Nothing needs one
-// yet — that arrives with mouse input, and gets written then.
+// The inverse below arrived with mouse input, exactly as predicted: a click is
+// reported in screen pixels, and the thing it lands on is somewhere else
+// entirely once the view has scrolled.
 // ---------------------------------------------------------------------------
 
 #include "engine/Components.h"
@@ -33,6 +34,25 @@ inline float viewToScreenX(const Camera& camera, float worldX,
 inline float viewToScreenY(const Camera& camera, float worldY,
                            bool screenSpace) {
     return screenSpace ? worldY : worldY - camera.y;
+}
+
+// And back the other way: what world position is under this screen pixel?
+//
+// This is what a mouse click needs. SDL reports the cursor in window pixels,
+// but the unit standing under it is at a world position that differs by
+// however far the view has scrolled — up to a screen and a half, in the game
+// that motivated this.
+//
+// Exact inverses of the two above, so `screenToWorldX(c, viewToScreenX(c, x))`
+// is x for any camera. There is no `screenSpace` parameter because the
+// question does not arise: a screen-space element is already in screen
+// coordinates, so hit-testing one needs no conversion at all.
+inline float screenToWorldX(const Camera& camera, float screenX) {
+    return screenX + camera.x;
+}
+
+inline float screenToWorldY(const Camera& camera, float screenY) {
+    return screenY + camera.y;
 }
 
 }  // namespace engine

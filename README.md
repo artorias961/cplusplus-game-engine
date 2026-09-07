@@ -24,11 +24,11 @@ Four games are built on it: **Asteroids**, **Breakout** and **Lane Battle** in
 That's on purpose — an engine with only one game is a hypothesis, not an engine
 — and each needed something the last one didn't: Snake wanted fixed ticks and
 box collision, Asteroids wanted rotation and circles, Breakout wanted contact
-normals and sub-frame movement. Lane Battle has needed almost nothing new at
-all across three slices, which is its own kind of result — just one small
-thing, when a battlefield wider than the window finally made world and screen
-coordinates differ and moved that rule out of the renderer into `View.h`, where
-a test can reach it.
+normals and sub-frame movement. Lane Battle has asked for very little across
+four slices, which is its own kind of result: a battlefield wider than its
+window made world and screen coordinates differ for the first time, moving that
+rule out of the renderer into `View.h` where a test can reach it, and a
+clickable spawn bar wanted a mouse.
 
 It is **not** trying to be fast, complete, or production-ready. Storage uses
 `std::unordered_map` instead of packed arrays, there's no batching, no scene
@@ -47,10 +47,10 @@ an optimisation is worth doing.
 
 **The live tree is now growing a fourth game**, Lane Battle, and the engine
 grows only where that game demands it — the same rule that produced everything
-in v1.0. Three slices in, it has demanded one header. `docs/v3-plan.md` has the
-running notes — including how measuring whole battles, rather than individual
-rules, found the game unwinnable twice before it was playable — and
-`docs/roadmap-cartoonwars.md` has what is left.
+in v1.0. Four slices in, it has demanded one new header and mouse input.
+`docs/v3-plan.md` has the running notes — including how measuring whole
+battles, rather than individual rules, found the game unwinnable twice before
+it was playable — and `docs/roadmap-cartoonwars.md` has what is left.
 
 The list at the bottom is **exercises, not debt**. Nothing on it is missing in
 the sense of being needed; each is a next thing to learn if you want one.
@@ -71,7 +71,7 @@ engine_project/
 │   ├── Font.h          A 5x7 bitmap font, built into the binary
 │   ├── Audio.h         Sound synthesised in code; no files, no SDL_mixer
 │   ├── Resources.h     TextureCache (load each image once, own it)
-│   ├── Input.h         InputManager (keys held, and keys just pressed)
+│   ├── Input.h         InputManager (keys and mouse: held, and just pressed)
 │   └── Engine.h        Window/renderer/game-loop owner
 ├── src/engine/
 │   └── Engine.cpp      SDL setup, the loop, and the built-in render system
@@ -693,11 +693,13 @@ ball. Missing the ball costs one of three lives.
 
 **Lane Battle** (`.\build\Release\lanebattle.exe`)
 
-| Key | Action |
+| Input | Action |
 | --- | --- |
+| Click the bar | Send that unit |
 | 1 | Send a **runner** — 35 gold, fast and fragile |
 | 2 | Send a **soldier** — 60 gold, the front line |
 | 3 | Send an **archer** — 95 gold, outranges everything, dies to anything |
+| Drag the field | Scroll the view |
 | Left / Right | Look up and down the field; lets go after a moment |
 
 Gold accrues on its own, and killing something pays you a share of what it cost

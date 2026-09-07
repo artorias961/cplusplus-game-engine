@@ -824,6 +824,179 @@ void testKillsPayGold() {
           "and it is the other side that gets paid when you lose one");
 }
 
+// --- The spawn bar (slice 4) -----------------------------------------------
+//
+// The buttons are screen-space, so they are hit-tested straight against the
+// cursor with no camera involved — which is why none of this uses
+// screenToWorld. That inverse exists for clicking on the *field*, which
+// nothing does yet.
+
+// The centre of button `index`, which is where a test clicks.
+float buttonCenterX(int index) {
+    return lanebattle::buttonLeft(index) + lanebattle::kButtonWidth / 2.0f;
+}
+float buttonCenterY() {
+    return lanebattle::kButtonY + lanebattle::kButtonHeight / 2.0f;
+}
+
+void testButtonHitTesting() {
+    for (int kind = 0; kind < lanebattle::kUnitKindCount; ++kind) {
+        check(lanebattle::buttonAt(buttonCenterX(kind), buttonCenterY()) == kind,
+              "the centre of a button is that button");
+    }
+
+    check(lanebattle::buttonAt(buttonCenterX(0), buttonCenterY() - 200.0f) == -1,
+          "the battlefield above the bar is not a button");
+    check(lanebattle::buttonAt(lanebattle::buttonLeft(0) - 8.0f,
+                               buttonCenterY()) == -1,
+          "nor is the margin to the left of the first one");
+
+    // The gap between two buttons belongs to neither, or a sloppy click sends
+    // whichever one the arithmetic happened to round towards.
+    const float betweenX = lanebattle::buttonLeft(0) + lanebattle::kButtonWidth +
+                           lanebattle::kButtonGap / 2.0f;
+    check(lanebattle::buttonAt(betweenX, buttonCenterY()) == -1,
+          "and the gap between two buttons is neither of them");
+}
+
+void testClickingAButtonSendsItsUnit() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = 10000.0f;
+
+    for (int kind = 0; kind < lanebattle::kUnitKindCount; ++kind) {
+        game.driver.clickAt(static_cast<int>(buttonCenterX(kind)),
+                            static_cast<int>(buttonCenterY()));
+        game.driver.step(2);
+        check(lanebattle::countUnitsOfKind(game.world, true, kind) == 1,
+              "clicking a button sends that button's unit");
+        game.driver.step(30);  // clear the shared cooldown
+    }
+}
+
+// One physical click buys one unit. Without the pressed-this-frame edge, a
+// button held down for a third of a second empties the purse.
+void testHoldingTheMouseDoesNotEmptyThePurse() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = 10000.0f;
+
+    game.driver.moveMouse(static_cast<int>(buttonCenterX(kSoldier)),
+                          static_cast<int>(buttonCenterY()));
+    game.driver.pressMouse();
+    game.driver.step(120);  // two seconds of holding it down
+    game.driver.releaseMouse();
+    game.driver.step();
+
+    check(lanebattle::countUnits(game.world, true) == 1,
+          "holding the button down buys exactly one unit");
+}
+
+void testClickingTheFieldBuysNothing() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = 10000.0f;
+
+    game.driver.clickAt(480, 200);  // mid-field, well above the bar
+    game.driver.step(4);
+
+    check(lanebattle::countUnits(game.world, true) == 0,
+          "clicking the battlefield does not send anything");
+}
+
+void testAnUnaffordableButtonDoesNothing() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = stats(kArcher).cost - 10.0f;
+
+    game.driver.clickAt(static_cast<int>(buttonCenterX(kArcher)),
+                        static_cast<int>(buttonCenterY()));
+    game.driver.step(4);
+
+    check(lanebattle::countUnitsOfKind(game.world, true, kArcher) == 0,
+          "a button you cannot afford sends nothing");
+    check(game.session().gold > 0.0f, "and takes no money");
+}
+
+void testDraggingScrollsTheView() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    // Somewhere on the field, not on the bar.
+    game.driver.moveMouse(600, 200);
+    game.driver.pressMouse();
+    game.driver.step();
+
+    const float before = game.cameraX();
+    game.driver.moveMouse(300, 200);  // dragged 300px to the left
+    game.driver.step();
+
+    check(game.cameraX() > before + 200.0f,
+          "dragging the field left scrolls the view right");
+    check(std::fabs((game.cameraX() - before) - 300.0f) < 1.0f,
+          "by as far as the cursor moved");
+
+    game.driver.releaseMouse();
+    game.driver.step();
+
+    // And it obeys the same limits following does.
+    game.driver.moveMouse(600, 200);
+    game.driver.pressMouse();
+    game.driver.step();
+    game.driver.moveMouse(-100000, 200);
+    game.driver.step();
+    check(game.cameraX() <= lanebattle::kCameraMaxX + 0.01f,
+          "a drag cannot leave the world either");
+    game.driver.releaseMouse();
+}
+
+// A press that starts on the bar belongs to the button under it. Without this
+// every click on a button would also shove the camera a few pixels.
+void testDraggingFromTheBarDoesNotScroll() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = 10000.0f;
+
+    game.driver.moveMouse(static_cast<int>(buttonCenterX(kSoldier)),
+                          static_cast<int>(buttonCenterY()));
+    game.driver.pressMouse();
+    game.driver.step();
+
+    const float before = game.cameraX();
+    game.driver.moveMouse(static_cast<int>(buttonCenterX(kSoldier)) - 250,
+                          static_cast<int>(buttonCenterY()));
+    game.driver.step();
+
+    check(std::fabs(game.cameraX() - before) < 1.0f,
+          "a press that started on the spawn bar never becomes a drag");
+    game.driver.releaseMouse();
+}
+
+// The keys are not a legacy path to be quietly dropped: they are faster than
+// the bar once you know the roster, and both routes must spend gold the same
+// way or they will drift apart.
+void testTheKeysStillWork() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = 10000.0f;
+
+    const float before = game.session().gold;
+    game.driver.tap(SDL_SCANCODE_3);
+    game.driver.step(2);
+
+    check(lanebattle::countUnitsOfKind(game.world, true, kArcher) == 1,
+          "the number keys still send units");
+    check(std::fabs((before - game.session().gold) - stats(kArcher).cost) < 2.0f,
+          "and charge the same as clicking does");
+}
+
 // --- Can the game actually be played? --------------------------------------
 
 // Plays a whole battle on a fixed composition, sending each unit as soon as it
@@ -948,6 +1121,15 @@ int main() {
     testMeleeWalksPastItsOwnArchers();
     testArchersOutrangeSoldiers();
     testKillsPayGold();
+
+    testButtonHitTesting();
+    testClickingAButtonSendsItsUnit();
+    testHoldingTheMouseDoesNotEmptyThePurse();
+    testClickingTheFieldBuysNothing();
+    testAnUnaffordableButtonDoesNothing();
+    testDraggingScrollsTheView();
+    testDraggingFromTheBarDoesNotScroll();
+    testTheKeysStillWork();
 
     testABattleCanBeWon();
     testOneUnitTypeIsNotEnough();

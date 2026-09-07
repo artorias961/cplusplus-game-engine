@@ -33,7 +33,7 @@ balance lives in files exported from a spreadsheet, one of which is called
 | # | The game work | What it forces into the engine | The question it answers |
 | --- | --- | --- | --- |
 | ~~**3**~~ **DONE** | **Make the battle a battle.** Three unit types (runner, soldier, archer) in a table, keys `1`-`3`, a population cap of 10, units that queue rather than standing inside one another, an opponent that banks a wave and cycles a composition — **and gold paid for kills**, which was not in this plan and turned out to be the mechanic the whole design rested on. | **Nothing**, as predicted. | **Yes.** Mono-type loses every time, ranged without a front line loses fastest, and mixed compositions win. See `v3-plan.md` for the measurements and the two wrong turns on the way. |
-| **4** | **A spawn bar.** Clickable unit buttons showing cost, cooldown and whether you can afford them. Click-drag the camera. | **Mouse input** — position, buttons, and "pressed this frame" edges; plus `screenToWorld`, the inverse of `View.h`, because a click arrives in screen space and the thing it hits is not there. | Is the genre's actual interface better than four number keys? |
+| ~~**4**~~ **DONE** | **A spawn bar.** Clickable unit buttons showing cost, affordability and the draining cooldown; drag the field to scroll. Number keys kept. | **Mouse input** (held / pressed-this-frame / released) and **`screenToWorld`**, both exactly as predicted — plus mouse events in the test harness, which was not predicted and is what makes any of it testable. | Open. The bar teaches the roster where the keys did not, but whether it is *better* needs a player. |
 | **5** | **Units that move.** Walk, attack and death animations; units facing the way they travel. | **`Animation`** — a component plus a system advancing `Sprite.srcX`. `Sprite` already carries a source rect, so this is small. And **`Sprite.flip`**: `SDL_FLIP_NONE` is currently hardcoded, so today a left-facing unit needs a second copy of every frame. | Does it read as a fight rather than as rectangles sliding? |
 | **6** | **A battlefield worth looking at.** Three or four background layers scrolling at different rates, a skyline, a foreground. | **A per-layer scroll factor.** `screenSpace` is a boolean today — full camera or none — with nothing in between, which is exactly what parallax needs. | Does the wide field feel like a place instead of a corridor? |
 | **7** | **Balance you can edit without a compiler.** Unit stats, costs and stage definitions move out of `constexpr` and into data files. | **File reading** — the engine has none at all today. `Resources.h` loads PNGs through SDL_image; nothing anywhere reads a data file. A small key/value or CSV reader is enough. | Only worth doing once the constants genuinely hurt — around six unit types. Until then it is speculative. |
@@ -46,9 +46,10 @@ balance lives in files exported from a spreadsheet, one of which is called
 
 ## Five engine additions, total
 
-Across eleven slices the engine gains: **mouse input**, **`Animation` + sprite
-flip**, **a parallax scroll factor**, **file reading**, and **save/load** —
-plus a spatial grid if and only if a measurement asks for one.
+Across eleven slices the engine gains: ~~**mouse input**~~ (done, slice 4),
+**`Animation` + sprite flip**, **a parallax scroll factor**, **file reading**,
+and **save/load** — plus a spatial grid if and only if a measurement asks for
+one.
 
 That is the whole list. Nothing about the ECS, the scene stack, the renderer's
 structure, the audio device or the collision system needs rebuilding to get

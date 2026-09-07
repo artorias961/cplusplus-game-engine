@@ -29,6 +29,7 @@
 #include "engine/Components.h"
 #include "engine/ECS.h"
 #include "engine/Font.h"
+#include "engine/Input.h"
 #include "engine/Scene.h"
 #include "engine/Systems.h"
 #include "engine/Timing.h"
@@ -599,6 +600,85 @@ void testViewTransform() {
           "a negative camera position shifts the world right");
 }
 
+void testViewRoundTrip() {
+    const Camera camera{640.0f, 12.0f};
+
+    // The inverse arrived with mouse input: SDL reports a click in window
+    // pixels, and the thing under it is up to a screen and a half away.
+    check(nearly(screenToWorldX(camera, 100.0f), 740.0f),
+          "a screen position maps back to the world under it");
+    check(nearly(screenToWorldY(camera, 100.0f), 112.0f), "on both axes");
+
+    // Exact inverses, which is the property worth pinning: get this wrong and
+    // a click lands on whatever the camera offset happens to be away.
+    for (float x = -500.0f; x <= 3000.0f; x += 371.0f) {
+        check(nearly(screenToWorldX(camera, viewToScreenX(camera, x, false)), x),
+              "world -> screen -> world is the identity");
+    }
+}
+
+// The mouse is shaped exactly like the keyboard, and for the same reason: a
+// button stays physically down for several frames, so a spawn button driven by
+// "is it held?" would buy a unit every frame the finger rested on it.
+void testMouseInput() {
+    InputManager input;
+
+    SDL_Event move{};
+    move.type = SDL_MOUSEMOTION;
+    move.motion.x = 120;
+    move.motion.y = 44;
+
+    input.beginFrame();
+    input.handleEvent(move);
+    check(input.mouseX() == 120 && input.mouseY() == 44,
+          "motion updates the reported position");
+    check(!input.isMouseDown(), "and moving is not clicking");
+
+    SDL_Event down{};
+    down.type = SDL_MOUSEBUTTONDOWN;
+    down.button.button = SDL_BUTTON_LEFT;
+    down.button.x = 200;
+    down.button.y = 50;
+
+    input.beginFrame();
+    input.handleEvent(down);
+    check(input.isMouseDown(), "a press is held");
+    check(input.wasMousePressed(), "and registers as an edge on this frame");
+    check(!input.wasMouseReleased(), "and is not a release");
+
+    // A button event carries its own position, and it is the one that counts:
+    // a fast click can arrive with no motion event before it.
+    check(input.mouseX() == 200 && input.mouseY() == 50,
+          "a click reports where it happened, not where the cursor last moved");
+
+    // Still down next frame, but no longer an edge — the whole point.
+    input.beginFrame();
+    check(input.isMouseDown(), "it stays held across frames");
+    check(!input.wasMousePressed(),
+          "but only counts as pressed on the frame it went down");
+
+    SDL_Event up{};
+    up.type = SDL_MOUSEBUTTONUP;
+    up.button.button = SDL_BUTTON_LEFT;
+    up.button.x = 200;
+    up.button.y = 50;
+
+    input.beginFrame();
+    input.handleEvent(up);
+    check(!input.isMouseDown(), "releasing clears the held state");
+    check(input.wasMouseReleased(), "and registers as a release edge");
+
+    // Buttons are independent of one another.
+    SDL_Event rightDown{};
+    rightDown.type = SDL_MOUSEBUTTONDOWN;
+    rightDown.button.button = SDL_BUTTON_RIGHT;
+    input.beginFrame();
+    input.handleEvent(rightDown);
+    check(input.isMouseDown(SDL_BUTTON_RIGHT), "the right button is tracked");
+    check(!input.isMouseDown(SDL_BUTTON_LEFT),
+          "and does not affect the left one");
+}
+
 int main() {
     std::printf("engine tests\n");
 
@@ -620,6 +700,8 @@ int main() {
     testSceneStack();
     testFont();
     testViewTransform();
+    testViewRoundTrip();
+    testMouseInput();
 
     if (failures == 0) {
         std::printf("all %d checks passed\n", checks);

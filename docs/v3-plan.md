@@ -73,6 +73,36 @@ rather than by design:
   pixel and fights as a single enormous unit.
 
 
+**Slice 4 is done**: a clickable spawn bar along the bottom — one button per
+row of the roster, showing name, cost, whether you can currently afford it, and
+the shared cooldown draining left to right — plus drag-the-field to scroll. The
+number keys still work and always will; they are faster once you know the
+roster, and dropping them to add a mouse would be a downgrade.
+
+It pulled two things out of the engine, both predicted:
+
+- **Mouse input** in `Input.h`, shaped deliberately like the keyboard: a held
+  query, a pressed-this-frame edge, and a released edge. The edge is not a
+  nicety — a mouse button stays physically down for several frames, so a spawn
+  button driven by "is it held?" buys a unit per frame. A button event also
+  carries its own position, and that is the one used, because a fast click can
+  arrive before any motion event.
+- **`screenToWorldX/Y`** in `View.h`, the exact inverse of what slice 2 added.
+  Written now rather than then, which was the point of leaving it out.
+
+And one thing out of the test harness: `Harness` now synthesises real
+`SDL_MOUSEMOTION` and `SDL_MOUSEBUTTON` events, so a headless test clicks a
+button the same way a player does and exercises the same edge detection.
+
+Two rules in it are less obvious than they look, and both have tests because
+both were easy to get wrong:
+
+- **A press that starts on the spawn bar never becomes a drag.** Without that,
+  every click on a button also shoves the camera a few pixels.
+- **The gap between two buttons belongs to neither.** A hit test written as
+  "the last button whose left edge you are past" silently makes the gaps part
+  of the button to their left.
+
 ## The open question, answered — and then answered again
 
 **Slice 2's verdict: it was not fun, and the reason was not the camera.**

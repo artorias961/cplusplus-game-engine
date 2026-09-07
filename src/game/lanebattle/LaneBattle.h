@@ -181,6 +181,37 @@ constexpr float kCameraMaxX = kWorldWidth - static_cast<float>(kWindowWidth);
 // for each castle and each side's front line. On a one-screen field this would
 // be clutter; on a field two and a half screens wide it is the only way to
 // know a push is happening while you are looking somewhere else.
+// --- The spawn bar ---------------------------------------------------------
+//
+// One button per row of the roster, along the bottom of the screen. The number
+// keys still work and always will — they are faster once you know the roster,
+// and losing them to add a mouse would be a downgrade — but a bar is how this
+// genre is actually played, and it is the only way a new player learns what
+// the three types cost without reading a README.
+//
+// Buttons are screen-space, so they stay put while the field scrolls beneath
+// them, and they are hit-tested directly against the cursor with no camera
+// involved. That is the whole reason `screenToWorld` is *not* used here: a
+// screen-space element is already in the space the mouse reports.
+constexpr float kButtonWidth = 130.0f;
+constexpr float kButtonHeight = 46.0f;
+constexpr float kButtonGap = 10.0f;
+constexpr float kButtonY = kWindowHeight - kButtonHeight - 14.0f;
+constexpr float kButtonX = 16.0f;
+
+// Where button `index` sits. Kept here rather than in the .cpp because both
+// the game and its tests need to know — a test that clicks a button has to
+// work out where it is, and hard-coding that in two places is how a UI test
+// stops testing the UI.
+constexpr float buttonLeft(int index) {
+    return kButtonX + static_cast<float>(index) * (kButtonWidth + kButtonGap);
+}
+
+// Dragging the field scrolls the view, which is the genre's other mouse verb.
+// A few pixels of slop before a press counts as a drag, so a slightly shaky
+// click on a button is still a click.
+constexpr float kDragThreshold = 4.0f;
+
 constexpr float kMinimapX = 300.0f;
 constexpr float kMinimapY = 20.0f;
 constexpr float kMinimapWidth = 360.0f;
@@ -231,8 +262,15 @@ struct Session {
     int enemyWaveRemaining = 0;
 
     // Counts down while the player is steering the view by hand. Above zero
-    // the camera obeys the arrow keys; at zero it goes back to following.
+    // the camera obeys the arrow keys or the drag; at zero it goes back to
+    // following.
     float freeLookSeconds = 0.0f;
+
+    // A drag in progress: where it started, and whether it has moved far
+    // enough to count as one rather than as a click.
+    bool dragging = false;
+    float dragStartX = 0.0f;
+    float dragStartCameraX = 0.0f;
 };
 
 // --- Queries (used by the game and by its tests) ---------------------------
@@ -250,6 +288,11 @@ engine::Camera* findCamera(engine::World& world);
 // castle when it has nothing on the field. This is what the camera follows and
 // what the minimap marks.
 float frontLineX(engine::World& world, bool leftSide);
+
+// Which spawn-bar button is under this screen position, or -1 for none.
+// Exposed because it is the rule the UI is built on, and a test should be able
+// to check it without inferring it from what happened afterwards.
+int buttonAt(float screenX, float screenY);
 
 // Units of one kind on one side. `kind` of -1 counts all of them, which is
 // what the population cap is measured against.
