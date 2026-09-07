@@ -41,21 +41,22 @@ balance lives in files exported from a spreadsheet, one of which is called
 | ~~**7**~~ **DONE** | **Balance you can edit without a compiler.** `assets/lanebattle/units.txt` holds the roster; it can override any field of any unit and **add new unit types**, and anything it omits keeps its compiled-in value. | **`DataFile.h`** — repeated `[section]` blocks of key/value pairs, paths resolved against the executable like textures, a missing file non-fatal. Also `resetBalance()`, because a roster a file can change is global mutable state and tests must be able to put it back. | Done early: the roadmap said "wait until six unit types", but slices 8 and 9 both want data tables, so the loader earns itself now rather than being rebuilt then. |
 | ~~**8**~~ **DONE** | **A castle that fights.** A cannon aimed by clicking the field — press-and-release fires, press-and-drag scrolls — costing 30 gold a shot and reaching 420 pixels. Plus INCOME / WALLS / SUPPLY upgrades at geometrically rising cost, bought by both sides. | **Nothing**, as predicted. It is the first caller of `screenToWorldX`, which slice 4 added and nothing had used. | Yes, but only after a rebalance. Free, long-ranged defensive fire made every game a 800-800 stalemate; charging for shots and halving the reach restored it. See `v3-plan.md`. |
 | ~~**9**~~ **DONE** | **A campaign.** Eight stages, each setting the opponent's income, castle health and **composition**; a stage list with locked rows; a win opens the next. Stage tables live in `units.txt`. | **Nothing**, as predicted — the scene stack already did this and the loader was built for it in slice 7. | Yes. The curve took three attempts and every failure was invisible in the table: the first left three stages nobody could win, the second put a wall at stage three because a lean composition beats a padded one. |
-| **10** | **Progression that persists.** Stages pay out; the payout buys permanent unit and castle upgrades and unlocks new types. | **Serialization** — writing and reading a save file. Same machinery as slice 7, which is why these two belong next to each other rather than at opposite ends of the plan. | Is there a reason to come back tomorrow? |
+| ~~**10**~~ **DONE** | **Progression that persists.** Stages pay out (double on a first clear); the bank buys WEAPONS / RAMPARTS / TREASURY from an armoury on the stage list; all of it survives closing the game. | **`DataWriter`** — the other half of `DataFile`, writing the format it reads — and **`userPath()`**, because a save does not belong next to a read-only executable. **The last item on this list.** | Yes. Perks are keyed by name so reordering the enum cannot scramble a save, and everything a player can edit is clamped on the way in. |
 | **11** | **Spells.** Two or three abilities on long cooldowns — a meteor that damages an area, a heal, a rage. | Area queries, which `Collision.h` already answers. | Do the moments of a battle have peaks, or is it flat? |
 | **12** | **The sky.** Flying units in a second lane, which ground melee cannot reach and only ranged can answer. | Nothing, but it **breaks the one-dimensional assumption** this game has rested on since slice 1 — the first genuine structural change to the rules. | Worth doing only if slice 3 shows that roles make the game interesting. |
 | **13** | **Hundreds of units.** | **A spatial grid — but only if `engine_bench` says so.** Targeting is a linear scan per unit per frame, O(n²) overall, and free at present counts. The benchmark says collision costs 12.8% of a frame at 200 entities and 52% at 400. Measure at the real number first. | Is it actually slow, or does it just look like it should be? |
 
 ## Five engine additions, total
 
-Across eleven slices the engine gains: ~~**mouse input**~~ (done, slice 4),
+Across eleven slices the engine gains: ~~**mouse input**~~ (slice 4),
 **`Animation` + sprite flip** (deferred — no art to animate), ~~**a parallax
-scroll factor**~~ (done, slice 6), ~~**file reading**~~ (done, slice 7), and
-**save/load** — plus a spatial grid if and only if a measurement asks for one.
+scroll factor**~~ (slice 6), ~~**file reading**~~ (slice 7), and ~~**save/load**~~
+(slice 10) — plus a spatial grid if and only if a measurement asks for one, and
+it still has not.
 
-Nine slices in, the engine has gained four things: `View.h`, the mouse,
-`parallax`, and `DataFile.h`. Five of the nine needed nothing at all, and only
-one item on the original list is left — save/load, in slice 10.
+**The list is finished.** Ten slices in, the engine has gained four headers:
+`View.h`, the mouse in `Input.h`, `parallax`, and `DataFile.h` — which now
+writes as well as reads. Five of the ten slices needed no engine code at all.
 
 That is the whole list. Nothing about the ECS, the scene stack, the renderer's
 structure, the audio device or the collision system needs rebuilding to get

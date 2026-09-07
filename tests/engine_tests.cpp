@@ -851,6 +851,81 @@ noequals
     check(!values->has("noequals"), "and a line with no equals sign is too");
 }
 
+// --- Writing data files ----------------------------------------------------
+//
+// The engine could read a data file and not write one, which was fine until
+// something needed to remember anything between runs. Saving and loading use
+// the SAME format deliberately: a save file you can open, read and correct by
+// hand is worth more than a compact one in a project this size, and one format
+// means the reader is already tested by everything else that reads a file.
+
+void testDataWriterRoundTrip() {
+    DataWriter writer;
+    writer.beginSection("campaign");
+    writer.set("stages_unlocked", 4);
+    writer.set("bank", 1250);
+    writer.set("label", std::string("A SHORT WAR"));
+    writer.set("rate", 1.5f);
+    writer.blank();
+    writer.beginSection("campaign");
+    writer.set("stages_unlocked", 9);
+
+    const std::string path = writeTempFile("engine_writer_test.txt",
+                                           writer.text().c_str());
+
+    // Read back with the real loader, not by inspecting the string. That is
+    // the property worth having: what this writes, that reads.
+    DataFile file;
+    check(file.load(path), "what the writer wrote, the reader loads");
+
+    const std::vector<const DataSection*> sections = file.all("campaign");
+    check(sections.size() == 2, "including repeated sections");
+    check(sections[0]->integer("stages_unlocked", 0) == 4, "integers survive");
+    check(sections[0]->integer("bank", 0) == 1250, "and larger ones");
+    check(sections[0]->text("label", "?") == "A SHORT WAR",
+          "strings with spaces survive");
+    check(nearly(sections[0]->number("rate", 0.0f), 1.5f), "so do decimals");
+    check(sections[1]->integer("stages_unlocked", 0) == 9,
+          "and the second section is its own");
+}
+
+void testDataWriterHandlesAnEmptyAndOddContents() {
+    DataWriter empty;
+    const std::string emptyPath =
+        writeTempFile("engine_writer_empty.txt", empty.text().c_str());
+
+    DataFile file;
+    check(file.load(emptyPath), "an empty file is still a file");
+    check(file.sectionCount() == 0, "with nothing in it");
+
+    // An empty string value reads back as empty rather than as the fallback,
+    // which is what lets "no stages cleared yet" be written at all.
+    DataWriter writer;
+    writer.beginSection("campaign");
+    writer.set("cleared", std::string(""));
+    const std::string path =
+        writeTempFile("engine_writer_blank.txt", writer.text().c_str());
+
+    DataFile back;
+    check(back.load(path), "a file with an empty value loads");
+    const DataSection* section = back.first("campaign");
+    check(section != nullptr && section->has("cleared"),
+          "and the key is present");
+    check(section != nullptr && section->text("cleared", "MISSING").empty(),
+          "with an empty value, not a missing one");
+}
+
+void testWritingSomewhereImpossibleFails() {
+    DataWriter writer;
+    writer.beginSection("campaign");
+    writer.set("bank", 1);
+
+    // Reported rather than thrown or ignored. A game that cannot save should
+    // say so and carry on, not die and not pretend it worked.
+    check(!writer.save("no/such/directory/anywhere/save.txt"),
+          "saving to a path that cannot exist reports failure");
+}
+
 int main() {
     std::printf("engine tests\n");
 
@@ -878,6 +953,9 @@ int main() {
     testDataFileParsing();
     testMissingDataFileIsNotFatal();
     testDataFileEdgeCases();
+    testDataWriterRoundTrip();
+    testDataWriterHandlesAnEmptyAndOddContents();
+    testWritingSomewhereImpossibleFails();
 
     if (failures == 0) {
         std::printf("all %d checks passed\n", checks);

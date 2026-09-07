@@ -328,21 +328,73 @@ constexpr int kMaxStages = 24;
 const StageKind& stageKind(int stage);
 int stageCount();
 
-// How far through the campaign the player has got.
+// --- Permanent upgrades ----------------------------------------------------
+//
+// The in-battle upgrades are spent from a purse that resets every battle. These
+// are bought between battles from money the campaign paid out, and they never
+// go away — which is the difference between a game you can finish in one
+// sitting and one worth coming back to.
+//
+// Three of them, deliberately touching things the in-battle upgrades do not,
+// so the two systems are not the same choice at different speeds.
+enum class Perk { Damage, Fortify, Purse, Count };
+constexpr int kPerkCount = static_cast<int>(Perk::Count);
+
+struct PerkKind {
+    const char* name;
+    const char* effectText;
+    float baseCost;
+    float costGrowth;
+    float effect;  // per level
+};
+
+constexpr PerkKind kDefaultPerks[] = {
+    {"WEAPONS",  "+10% DAMAGE",   200.0f, 1.55f, 0.10f},
+    {"RAMPARTS", "+150 CASTLE",   180.0f, 1.55f, 150.0f},
+    {"TREASURY", "+40 START GOLD", 160.0f, 1.55f, 40.0f},
+};
+
+const PerkKind& perkKind(int perk);
+float perkCost(int perk, int owned);
+
+// What a stage pays for winning it. Later stages pay more, and the first clear
+// of one pays double — so pushing forward is worth more than farming a stage
+// you have already beaten, without ever forbidding the farming.
+constexpr float kStageRewardBase = 90.0f;
+constexpr float kStageRewardPerStage = 55.0f;
+constexpr float kFirstClearBonus = 2.0f;
+
+float stageReward(int stage, bool firstClear);
+
+// How far through the campaign the player has got, and what they own.
 //
 // A separate component from Session because Session is one battle and this
 // outlives them: it is created once and read by the stage-select screen, the
 // play scene, and the victory that unlocks the next stage.
-//
-// It is NOT saved anywhere yet — close the game and the campaign restarts.
-// Persisting it is slice 10, and doing it here would have been building the
-// half of a feature whose other half does not exist.
 struct Campaign {
     int stagesUnlocked = 1;
     int currentStage = 0;
+    int bank = 0;                    // gold carried between battles
+    int perks[kPerkCount] = {};
+    bool cleared[kMaxStages] = {};   // for the first-clear bonus
 };
 
 Campaign& campaignOf(engine::World& world);  // created on first use
+
+// --- Saving ----------------------------------------------------------------
+//
+// Written to the per-user location SDL reports, not next to the executable:
+// the folder a game is installed into is frequently read-only.
+//
+// A missing save is a new campaign, and a corrupt one is treated the same way.
+// There is nothing here worth refusing to start over.
+bool saveCampaign(const Campaign& campaign);
+bool loadCampaign(Campaign& campaign);
+std::string savePath();
+
+// Points saving somewhere else. For tests, which must not write over a real
+// player's campaign — and for anyone who wants two of them.
+void setSavePath(const std::string& path);
 
 // --- The view --------------------------------------------------------------
 //
@@ -681,5 +733,19 @@ constexpr float stageTop(int index) {
 }
 
 int stageAt(float screenX, float screenY);
+
+// The armoury, down the left of the stage list: one row per permanent upgrade,
+// bought from the bank.
+constexpr float kPerkX = 20.0f;
+constexpr float kPerkY = 130.0f;
+constexpr float kPerkWidth = 220.0f;
+constexpr float kPerkHeight = 44.0f;
+constexpr float kPerkGap = 8.0f;
+
+constexpr float perkTop(int index) {
+    return kPerkY + static_cast<float>(index) * (kPerkHeight + kPerkGap);
+}
+
+int perkAt(float screenX, float screenY);
 
 }  // namespace lanebattle

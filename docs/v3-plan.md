@@ -463,6 +463,56 @@ Dropping every retry back to stage one passed cleanly, because the test that
 checked it retried stage one. Retrying a later stage cannot confuse "restart
 this stage" with "restart at the beginning". Sixth of six caught after that.
 
+### Slice 10
+
+**Done**: a campaign that persists, money that outlives a battle, and an
+armoury to spend it in. This is the **last item on the roadmap's engine list**.
+
+**The engine gained the other half of `DataFile`**: a `DataWriter` that emits
+the format `DataFile` reads, and `userPath()`, which asks SDL where this
+platform keeps a user's files. Everything else in this engine resolves paths
+against the executable, which is right for things that ship with the game and
+wrong for a save — the folder a game is installed into is frequently read-only.
+
+Saving deliberately uses the SAME format as every other data file rather than
+something terser or binary. A save you can open, read and correct by hand is
+worth more than a compact one in a project this size, and one format means the
+reader was already tested by everything that reads a file.
+
+Three permanent upgrades, bought between battles from money the campaign paid
+out: WEAPONS (+10% damage), RAMPARTS (+150 castle) and TREASURY (+40 starting
+gold). They touch things the in-battle upgrades do not, so the two systems are
+not the same choice at different speeds. A stage pays more the later it is and
+**double on its first clear**, so pushing forward beats farming without ever
+forbidding it.
+
+Two details that are easy to get wrong and were:
+
+- **Perks are written by NAME, not by position.** Reordering the enum would
+  otherwise turn everyone's weapons into ramparts.
+- **Everything a player edits is clamped on the way in.** A save file is a text
+  file; `stages_unlocked = 900` opens the campaign rather than indexing off the
+  end of the stage list, and a negative bank becomes zero.
+
+#### The tests were quietly overwriting a real campaign
+
+Winning a battle saves, and these tests win a great many battles — so for one
+build they were steadily writing over the save of anyone who ran them. The test
+harness now points saving at a scratch file next to the binary.
+
+Worth noting what is NOT a leak: the game binary creates an empty save folder
+on startup, because `SDL_GetPrefPath` makes the directory as a side effect of
+being asked where it is. That folder appearing during a smoke test looked like
+the same bug and is not one.
+
+#### Eight mutations, and the one that survived
+
+"Pay the first-clear bonus every single time" passed cleanly. The payout test
+won each stage exactly once, which is precisely the case where the two rates
+cannot be told apart. There is now a test that wins an already-cleared stage
+and checks it pays the ordinary rate — and still pays *something*, so farming
+stays possible and stops being the best way to earn.
+
 ## Between slices: an audit, and closing the last untested gaps
 
 ### The audit

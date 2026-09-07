@@ -474,6 +474,111 @@ int stageAt(float screenX, float screenY) {
     return -1;
 }
 
+// --- Permanent upgrades and saving -----------------------------------------
+
+const PerkKind& perkKind(int perk) {
+    if (perk < 0) return kDefaultPerks[0];
+    if (perk >= kPerkCount) return kDefaultPerks[kPerkCount - 1];
+    return kDefaultPerks[perk];
+}
+
+float perkCost(int perk, int owned) {
+    const PerkKind& kind = perkKind(perk);
+    float cost = kind.baseCost;
+    for (int level = 0; level < owned; ++level) cost *= kind.costGrowth;
+    return cost;
+}
+
+float stageReward(int stage, bool firstClear) {
+    const float base =
+        kStageRewardBase + kStageRewardPerStage * static_cast<float>(stage);
+    return firstClear ? base * kFirstClearBonus : base;
+}
+
+namespace {
+std::string gSavePath;  // empty means "ask SDL where the user's folder is"
+}  // namespace
+
+void setSavePath(const std::string& path) { gSavePath = path; }
+
+std::string savePath() {
+    if (!gSavePath.empty()) return gSavePath;
+    return userPath("TinyEngine", "LaneBattle", "campaign.txt");
+}
+
+bool saveCampaign(const Campaign& campaign) {
+    DataWriter writer;
+    writer.beginSection("campaign");
+    writer.set("stages_unlocked", campaign.stagesUnlocked);
+    writer.set("bank", campaign.bank);
+
+    // Written by NAME rather than by index, so reordering the perks in the
+    // header cannot silently turn everyone's weapons into ramparts.
+    for (int perk = 0; perk < kPerkCount; ++perk) {
+        writer.set(std::string("perk_") + perkKind(perk).name,
+                   campaign.perks[perk]);
+    }
+
+    std::string cleared;
+    for (int stage = 0; stage < kMaxStages; ++stage) {
+        if (!campaign.cleared[stage]) continue;
+        if (!cleared.empty()) cleared += ",";
+        cleared += std::to_string(stage);
+    }
+    writer.set("cleared", cleared);
+
+    return writer.save(savePath());
+}
+
+bool loadCampaign(Campaign& campaign) {
+    DataFile file;
+    if (!file.load(savePath())) return false;
+
+    const DataSection* section = file.first("campaign");
+    if (!section) return false;
+
+    // Clamped on the way in. A save file is a text file a player can edit, and
+    // a stages_unlocked of 900 should open the campaign rather than index off
+    // the end of the stage list.
+    campaign.stagesUnlocked = std::min(
+        std::max(1, section->integer("stages_unlocked", 1)), stageCount());
+    campaign.bank = std::max(0, section->integer("bank", 0));
+
+    for (int perk = 0; perk < kPerkCount; ++perk) {
+        campaign.perks[perk] = std::max(
+            0, section->integer(std::string("perk_") + perkKind(perk).name, 0));
+    }
+
+    for (int stage = 0; stage < kMaxStages; ++stage) {
+        campaign.cleared[stage] = false;
+    }
+    const std::string cleared = section->text("cleared", "");
+    int value = 0;
+    bool digits = false;
+    for (std::size_t at = 0; at <= cleared.size(); ++at) {
+        const char c = at < cleared.size() ? cleared[at] : ',';
+        if (c >= '0' && c <= '9') {
+            value = value * 10 + (c - '0');
+            digits = true;
+            continue;
+        }
+        if (digits && value < kMaxStages) campaign.cleared[value] = true;
+        value = 0;
+        digits = false;
+    }
+    return true;
+}
+
+int perkAt(float screenX, float screenY) {
+    if (screenX < kPerkX || screenX > kPerkX + kPerkWidth) return -1;
+
+    for (int index = 0; index < kPerkCount; ++index) {
+        const float top = perkTop(index);
+        if (screenY >= top && screenY <= top + kPerkHeight) return index;
+    }
+    return -1;
+}
+
 Campaign& campaignOf(World& world) {
     for (auto& entry : world.view<Campaign>()) return entry.second;
 
@@ -940,8 +1045,21 @@ public:
         // Which stage this battle is. Read once, here, so everything below
         // works from one snapshot rather than consulting the campaign
         // mid-fight.
-        stage_ = campaignOf(world).currentStage;
-        applyStage(*world.getComponent<Session>(sessionEntity_), stage_);
+        const Campaign& campaign = campaignOf(world);
+        stage_ = campaign.currentStage;
+
+        for (int perk = 0; perk < kPerkCount; ++perk) perks_[perk] = campaign.perks[perk];
+        damageScale_ =
+            1.0f + perks_[static_cast<int>(Perk::Damage)] *
+                       perkKind(static_cast<int>(Perk::Damage)).effect;
+
+        Session& fresh = *world.getComponent<Session>(sessionEntity_);
+        applyStage(fresh, stage_);
+
+        // TREASURY is a head start rather than a rate, which is what makes it
+        // worth buying early and worth less later.
+        fresh.gold += perks_[static_cast<int>(Perk::Purse)] *
+                      perkKind(static_cast<int>(Perk::Purse)).effect;
 
         // One camera, on its own entity. The renderer picks up the first one
         // it finds; before this game the only thing that ever moved it was
@@ -1085,7 +1203,10 @@ private:
                                  kCastleWidth, kCastleHeight, 70, 120, 165,
                                  kFieldLayer);
         world.addComponent(left, Team{true});
-        world.addComponent(left, Castle{});
+        // RAMPARTS is permanent, so it is applied when the castle is built
+        // rather than bought mid-battle like WALLS.
+        world.addComponent(left, Castle{kCastleHealth + perks_[static_cast<int>(Perk::Fortify)] *
+                                            perkKind(static_cast<int>(Perk::Fortify)).effect});
         field_.push_back(left);
 
         Entity right = createRect(world, kRightCastleX, kGroundY - kCastleHeight,
@@ -1458,11 +1579,17 @@ private:
             unit->timeUntilAttack = stats.attackDelay;
             unit->swing = 1.0f;  // starts the arm through its arc
 
+            // WEAPONS is the player.s perk, so only the player.s units swing
+            // harder for it. Scaling every blow would have handed the
+            // opponent every upgrade the player ever bought.
+            const float damage =
+                stats.damage * (team->leftSide ? damageScale_ : 1.0f);
+
             if (Unit* victim = world.getComponent<Unit>(target)) {
-                victim->health -= stats.damage;
+                victim->health -= damage;
                 playHit();
             } else if (Castle* castle = world.getComponent<Castle>(target)) {
-                castle->health -= stats.damage;
+                castle->health -= damage;
                 playCastleHit();
                 if (castle->health <= 0.0f) {
                     Team* castleTeam = world.getComponent<Team>(target);
@@ -1479,6 +1606,20 @@ private:
                         campaign.stagesUnlocked =
                             std::min(stageCount(),
                                      std::max(campaign.stagesUnlocked, stage_ + 2));
+
+                        // Paid out, and the first clear pays double — so
+                        // pushing forward is worth more than farming a stage
+                        // already beaten, without ever forbidding the farming.
+                        const bool firstClear =
+                            stage_ < kMaxStages && !campaign.cleared[stage_];
+                        campaign.bank += static_cast<int>(
+                            stageReward(stage_, firstClear));
+                        if (stage_ < kMaxStages) campaign.cleared[stage_] = true;
+
+                        // Saved the moment it is earned rather than on exit.
+                        // A campaign lost because the window was closed the
+                        // wrong way is a bad way to learn about save points.
+                        saveCampaign(campaign);
                     }
                 }
             }
@@ -1955,6 +2096,11 @@ private:
 
     int stage_ = 0;
     bool returnToCampaign_ = false;
+
+    // The permanent upgrades, read once when the battle starts. A snapshot,
+    // so buying something between battles cannot change a fight in progress.
+    int perks_[kPerkCount] = {};
+    float damageScale_ = 1.0f;
     Entity sessionEntity_ = kInvalidEntity;
     Entity cameraEntity_ = kInvalidEntity;
     Entity goldText_ = kInvalidEntity;
@@ -2015,6 +2161,8 @@ public:
                 kHudLayer));
         }
 
+        buildArmoury(world, campaign);
+
         owned_.push_back(createCenteredText(
             world, "CLICK A BATTLE, OR ENTER FOR THE LATEST", 470, 2,
             160, 160, 185, kHudLayer));
@@ -2028,8 +2176,64 @@ public:
     }
 
     void onResume(World& world) override {
-        // Coming back from a battle: a stage may have just been unlocked, so
-        // the list is rebuilt rather than left showing what it showed before.
+        // Coming back from a battle: a stage may have just been unlocked and
+        // the bank has almost certainly changed, so the whole screen is
+        // rebuilt rather than left showing what it showed before.
+        onExit(world);
+        world.flushDestroyed();
+        onEnter(world);
+    }
+
+    // The armoury: what the campaign's winnings buy.
+    void buildArmoury(World& world, const Campaign& campaign) {
+        owned_.push_back(createText(
+            world, "GOLD " + std::to_string(campaign.bank),
+            static_cast<int>(kPerkX), static_cast<int>(kPerkY) - 34, 3,
+            235, 220, 150, kHudLayer));
+
+        for (int perk = 0; perk < kPerkCount; ++perk) {
+            const PerkKind& kind = perkKind(perk);
+            const float top = perkTop(perk);
+            const float cost = perkCost(perk, campaign.perks[perk]);
+            const bool affordable = static_cast<float>(campaign.bank) >= cost;
+
+            Entity plate = createRect(world, kPerkX, top, kPerkWidth,
+                                      kPerkHeight,
+                                      affordable ? 44 : 30,
+                                      affordable ? 50 : 34,
+                                      affordable ? 64 : 42, kHudLayer);
+            world.getComponent<Sprite>(plate)->screenSpace = true;
+            owned_.push_back(plate);
+
+            owned_.push_back(createText(
+                world,
+                std::string(kind.name) + " " + std::to_string(campaign.perks[perk]),
+                static_cast<int>(kPerkX) + 8, static_cast<int>(top) + 6, 2,
+                affordable ? 215 : 100, affordable ? 215 : 100,
+                affordable ? 230 : 115, kHudLayer));
+
+            owned_.push_back(createText(
+                world,
+                std::string(kind.effectText) + "  " +
+                    std::to_string(static_cast<int>(cost)),
+                static_cast<int>(kPerkX) + 8, static_cast<int>(top) + 24, 2,
+                affordable ? 190 : 90, affordable ? 175 : 90,
+                affordable ? 120 : 105, kHudLayer));
+        }
+    }
+
+    // Buys one level of a permanent upgrade, and saves immediately — the whole
+    // point of the bank is that it survives the window closing.
+    void buyPerk(World& world, Campaign& campaign, int perk) {
+        if (perk < 0 || perk >= kPerkCount) return;
+
+        const float cost = perkCost(perk, campaign.perks[perk]);
+        if (static_cast<float>(campaign.bank) < cost) return;
+
+        campaign.bank -= static_cast<int>(cost);
+        ++campaign.perks[perk];
+        saveCampaign(campaign);
+
         onExit(world);
         world.flushDestroyed();
         onEnter(world);
@@ -2056,8 +2260,16 @@ public:
 
         if (!input.wasMousePressed()) return;
 
-        const int picked = stageAt(static_cast<float>(input.mouseX()),
-                                   static_cast<float>(input.mouseY()));
+        const float mouseX = static_cast<float>(input.mouseX());
+        const float mouseY = static_cast<float>(input.mouseY());
+
+        const int perk = perkAt(mouseX, mouseY);
+        if (perk >= 0) {
+            buyPerk(world, campaign, perk);
+            return;
+        }
+
+        const int picked = stageAt(mouseX, mouseY);
         if (picked < 0 || picked >= campaign.stagesUnlocked) return;
 
         campaign.currentStage = picked;

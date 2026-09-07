@@ -97,6 +97,71 @@ private:
     std::unordered_map<std::string, std::string> values_;
 };
 
+// Where a game may WRITE.
+//
+// Everything else in this engine resolves paths against the executable, which
+// is right for things that ship with the game and wrong for a save: the folder
+// a game is installed into is frequently read-only, and on every desktop
+// platform there is a proper per-user place for this. SDL knows where it is on
+// each of them.
+//
+// Falls back to the plain relative path if SDL cannot say — a save that lands
+// in the working directory is worse than one in the right place and far better
+// than none.
+inline std::string userPath(const std::string& organisation,
+                            const std::string& application,
+                            const std::string& file) {
+    char* base = SDL_GetPrefPath(organisation.c_str(), application.c_str());
+    if (!base) return file;
+
+    std::string full = std::string(base) + file;
+    SDL_free(base);
+    return full;
+}
+
+// Writes the format DataFile reads.
+//
+// Deliberately the same format in both directions rather than something
+// terser or binary for saves. A save file you can open, read and correct by
+// hand is worth more than a compact one in a project this size — and a single
+// format means the loader is already tested by everything that reads a data
+// file.
+class DataWriter {
+public:
+    void beginSection(const std::string& name) {
+        text_ += "[" + name + "]\n";
+    }
+
+    void set(const std::string& key, const std::string& value) {
+        text_ += key + " = " + value + "\n";
+    }
+
+    void set(const std::string& key, int value) {
+        set(key, std::to_string(value));
+    }
+
+    void set(const std::string& key, float value) {
+        set(key, std::to_string(value));
+    }
+
+    void blank() { text_ += "\n"; }
+
+    // Returns false if the file could not be written — a full disk, a
+    // read-only folder, a path that does not exist. Callers are expected to
+    // carry on: failing to save is a thing to report, not to die of.
+    bool save(const std::string& path) const {
+        std::ofstream file(path, std::ios::trunc);
+        if (!file) return false;
+        file << text_;
+        return file.good();
+    }
+
+    const std::string& text() const { return text_; }
+
+private:
+    std::string text_;
+};
+
 class DataFile {
 public:
     // Returns false if the file could not be opened. The object is still

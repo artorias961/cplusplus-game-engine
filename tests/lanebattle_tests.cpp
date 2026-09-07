@@ -74,7 +74,15 @@ struct Game {
     // every case starts from the compiled-in defaults. Without this, one test
     // loading a file would quietly change the meaning of every test after it —
     // and the failure would land somewhere else entirely.
-    Game() : scenes(), driver(world, scenes) { lanebattle::resetBalance(); }
+    Game() : scenes(), driver(world, scenes) {
+        lanebattle::resetBalance();
+
+        // Saving is pointed at a scratch file next to the test binary, NOT at
+        // the real per-user save. Winning a battle writes a campaign file, and
+        // these tests win a great many battles; without this they would
+        // steadily overwrite the campaign of anyone who ran them.
+        lanebattle::setSavePath(writeRoster("lb_test_campaign.txt", ""));
+    }
 
     // Title -> stage list -> battle. The stage list arrived with the campaign
     // and sits between the two, so this is two taps rather than one.
@@ -2269,6 +2277,272 @@ void testTheEnemyUpgradesToo() {
 }
 
 
+// --- Persistence and permanent upgrades (slice 10) -------------------------
+
+void testACampaignSurvivesBeingSavedAndLoaded() {
+    Game game;  // its constructor points saving at a scratch file
+
+    lanebattle::Campaign saved;
+    saved.stagesUnlocked = 5;
+    saved.bank = 1234;
+    saved.perks[static_cast<int>(lanebattle::Perk::Damage)] = 3;
+    saved.perks[static_cast<int>(lanebattle::Perk::Purse)] = 1;
+    saved.cleared[0] = true;
+    saved.cleared[3] = true;
+
+    check(lanebattle::saveCampaign(saved), "a campaign can be written");
+
+    lanebattle::Campaign loaded;
+    check(lanebattle::loadCampaign(loaded), "and read back");
+    check(loaded.stagesUnlocked == 5, "how far you got survives");
+    check(loaded.bank == 1234, "so does the bank");
+    check(loaded.perks[static_cast<int>(lanebattle::Perk::Damage)] == 3,
+          "and every permanent upgrade");
+    check(loaded.perks[static_cast<int>(lanebattle::Perk::Purse)] == 1,
+          "including the ones bought only once");
+    check(loaded.perks[static_cast<int>(lanebattle::Perk::Fortify)] == 0,
+          "and the ones never bought stay unbought");
+    check(loaded.cleared[0] && loaded.cleared[3],
+          "which stages have been cleared survives");
+    check(!loaded.cleared[1] && !loaded.cleared[2],
+          "and which have not");
+}
+
+// Perks are written by NAME, so reordering the enum cannot silently turn
+// everyone's weapons into ramparts.
+void testTheSaveFileIsReadableAndKeyedByName() {
+    Game game;
+
+    lanebattle::Campaign saved;
+    saved.perks[static_cast<int>(lanebattle::Perk::Damage)] = 2;
+    check(lanebattle::saveCampaign(saved), "the campaign saved");
+
+    std::ifstream file(lanebattle::savePath());
+    check(file.good(), "the save file exists where savePath says");
+
+    std::string contents((std::istreambuf_iterator<char>(file)),
+                         std::istreambuf_iterator<char>());
+    check(contents.find("[campaign]") != std::string::npos,
+          "and is the same plain format every other data file uses");
+    check(contents.find(lanebattle::perkKind(0).name) != std::string::npos,
+          "with perks keyed by name rather than by position");
+}
+
+void testAMissingSaveIsANewCampaign() {
+    Game game;
+    lanebattle::setSavePath("no/such/folder/anywhere/campaign.txt");
+
+    lanebattle::Campaign campaign;
+    campaign.stagesUnlocked = 7;   // deliberately not the default
+    check(!lanebattle::loadCampaign(campaign),
+          "a missing save reports that there was nothing to load");
+    check(campaign.stagesUnlocked == 7,
+          "and leaves what it was given alone rather than zeroing it");
+}
+
+// A save file is a text file a player can edit. Nothing in it should be able
+// to put the game into a state it cannot draw.
+void testACorruptSaveDoesNotBreakTheGame() {
+    Game game;
+    const std::string path = writeRoster("lb_corrupt_save.txt", R"(
+[campaign]
+stages_unlocked = 900
+bank = -5000
+perk_WEAPONS = -3
+cleared = 4,999999,,,7,
+this line is not a pair
+)");
+    lanebattle::setSavePath(path);
+
+    lanebattle::Campaign campaign;
+    check(lanebattle::loadCampaign(campaign), "a mangled save still loads");
+    check(campaign.stagesUnlocked <= lanebattle::stageCount(),
+          "an impossible stage count is clamped to the campaign that exists");
+    check(campaign.stagesUnlocked >= 1, "and never below the first stage");
+    check(campaign.bank >= 0, "a negative bank is clamped to nothing");
+    check(campaign.perks[0] >= 0, "so is a negative upgrade level");
+    check(campaign.cleared[4] && campaign.cleared[7],
+          "the readable entries in a mangled list still count");
+}
+
+void testWinningPaysOutAndTheFirstClearPaysDouble() {
+    check(lanebattle::stageReward(3, true) >
+              lanebattle::stageReward(3, false) * 1.5f,
+          "the first clear of a stage pays roughly double");
+    check(lanebattle::stageReward(6, false) > lanebattle::stageReward(1, false),
+          "and later stages pay more than earlier ones");
+
+    Game game;
+    game.startStage(2);
+    game.suppressEnemySpawns();
+    const int before = lanebattle::campaignOf(game.world).bank;
+
+    const Entity mine = lanebattle::spawnUnit(game.world, true);
+    const Entity enemyCastle = lanebattle::findCastle(game.world, false);
+    game.world.getComponent<Transform>(mine)->x =
+        game.world.getComponent<Transform>(enemyCastle)->x -
+        stats(kSoldier).range + 4.0f;
+    game.world.getComponent<Castle>(enemyCastle)->health = 1.0f;
+    game.driver.step(4);
+
+    check(game.session().playerWon, "the stage was won");
+    const lanebattle::Campaign& campaign = lanebattle::campaignOf(game.world);
+    check(campaign.bank > before, "winning pays into the bank");
+    check(campaign.cleared[2], "and marks the stage cleared");
+    check(campaign.bank - before ==
+              static_cast<int>(lanebattle::stageReward(2, true)),
+          "at the first-clear rate, because it was the first clear");
+
+    // Winning a stage ALREADY cleared pays the lower rate.
+    //
+    // Without this, paying the first-clear bonus every single time was
+    // invisible: the test above wins each stage once, which is exactly the
+    // case where the two rates cannot be told apart. Farming a stage should
+    // stay possible and stop being the best way to earn.
+    Game again;
+    again.startStage(2);
+    again.suppressEnemySpawns();
+    lanebattle::campaignOf(again.world).cleared[2] = true;
+    const int bankBefore = lanebattle::campaignOf(again.world).bank;
+
+    const Entity second = lanebattle::spawnUnit(again.world, true);
+    const Entity castleAgain = lanebattle::findCastle(again.world, false);
+    again.world.getComponent<Transform>(second)->x =
+        again.world.getComponent<Transform>(castleAgain)->x -
+        stats(kSoldier).range + 4.0f;
+    again.world.getComponent<Castle>(castleAgain)->health = 1.0f;
+    again.driver.step(4);
+
+    const int earnedAgain =
+        lanebattle::campaignOf(again.world).bank - bankBefore;
+    check(earnedAgain == static_cast<int>(lanebattle::stageReward(2, false)),
+          "replaying a cleared stage pays the ordinary rate, not the bonus");
+    check(earnedAgain > 0, "but still pays something, so farming stays possible");
+}
+
+void testPerkCostsRise() {
+    for (int perk = 0; perk < lanebattle::kPerkCount; ++perk) {
+        check(lanebattle::perkCost(perk, 0) > 0.0f, "a first level costs something");
+        check(lanebattle::perkCost(perk, 1) > lanebattle::perkCost(perk, 0),
+              "and each one costs more than the last");
+        check(lanebattle::perkCost(perk, 5) > lanebattle::perkCost(perk, 1) * 2.0f,
+              "steeply enough that buying everything is not a plan");
+    }
+}
+
+void testBuyingAPerkSpendsTheBankAndPersists() {
+    Game game;
+    game.scenes.push(lanebattle::makeTitleScene());
+    game.driver.step();
+    lanebattle::campaignOf(game.world).bank = 100000;
+    game.driver.tap(SDL_SCANCODE_SPACE);
+    game.driver.step(2);
+
+    const int weapons = static_cast<int>(lanebattle::Perk::Damage);
+    const float cost = lanebattle::perkCost(weapons, 0);
+
+    game.driver.clickAt(static_cast<int>(lanebattle::kPerkX + 10),
+                        static_cast<int>(lanebattle::perkTop(weapons) + 10));
+    game.driver.step(3);
+
+    const lanebattle::Campaign& campaign = lanebattle::campaignOf(game.world);
+    check(campaign.perks[weapons] == 1, "clicking a perk buys a level of it");
+    check(campaign.bank == 100000 - static_cast<int>(cost),
+          "and charges the bank its listed price");
+
+    // Written straight away. The whole point of a bank is that it survives the
+    // window closing, and closing it is not something the game is told about.
+    lanebattle::Campaign reloaded;
+    check(lanebattle::loadCampaign(reloaded), "the campaign was saved");
+    check(reloaded.perks[weapons] == 1, "with the perk that was just bought");
+}
+
+void testAPerkYouCannotAffordIsNotSold() {
+    Game game;
+    game.scenes.push(lanebattle::makeTitleScene());
+    game.driver.step();
+    lanebattle::campaignOf(game.world).bank = 5;
+    game.driver.tap(SDL_SCANCODE_SPACE);
+    game.driver.step(2);
+
+    game.driver.clickAt(static_cast<int>(lanebattle::kPerkX + 10),
+                        static_cast<int>(lanebattle::perkTop(0) + 10));
+    game.driver.step(3);
+
+    check(lanebattle::campaignOf(game.world).perks[0] == 0,
+          "a perk you cannot afford is not bought");
+    check(lanebattle::campaignOf(game.world).bank == 5, "and costs nothing");
+}
+
+void testPerkHitTesting() {
+    for (int perk = 0; perk < lanebattle::kPerkCount; ++perk) {
+        check(lanebattle::perkAt(lanebattle::kPerkX + 10.0f,
+                                 lanebattle::perkTop(perk) + 10.0f) == perk,
+              "each armoury row is its own button");
+    }
+    check(lanebattle::perkAt(lanebattle::kStageX + 20.0f,
+                             lanebattle::stageTop(0) + 8.0f) == -1,
+          "and the stage list beside it is not one");
+}
+
+// Each perk has to change the battle, not just the shop. Reading them in the
+// UI and forgetting them in the rules would look right and play identically.
+void testPerksChangeTheBattle() {
+    {
+        Game plain;
+        plain.startStage(0);
+        const float baseCastle = plain.castleHealth(true);
+        const float baseGold = plain.session().gold;
+
+        Game fortified;
+        fortified.scenes.push(lanebattle::makeTitleScene());
+        fortified.driver.step();
+        lanebattle::campaignOf(fortified.world)
+            .perks[static_cast<int>(lanebattle::Perk::Fortify)] = 2;
+        lanebattle::campaignOf(fortified.world)
+            .perks[static_cast<int>(lanebattle::Perk::Purse)] = 2;
+        fortified.driver.tap(SDL_SCANCODE_SPACE);
+        fortified.driver.step(2);
+        fortified.driver.tap(SDL_SCANCODE_RETURN);
+        fortified.driver.step(2);
+
+        check(fortified.castleHealth(true) > baseCastle,
+              "RAMPARTS gives you a stronger castle to start with");
+        check(fortified.session().gold > baseGold,
+              "and TREASURY a fuller purse");
+    }
+
+    // WEAPONS is the player's, so only the player's units swing harder for it.
+    // Scaling every blow would hand the opponent every upgrade ever bought.
+    Game game;
+    game.scenes.push(lanebattle::makeTitleScene());
+    game.driver.step();
+    lanebattle::campaignOf(game.world)
+        .perks[static_cast<int>(lanebattle::Perk::Damage)] = 5;
+    game.driver.tap(SDL_SCANCODE_SPACE);
+    game.driver.step(2);
+    game.driver.tap(SDL_SCANCODE_RETURN);
+    game.driver.step(2);
+    game.suppressEnemySpawns();
+
+    const Entity mine = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const Entity theirs = lanebattle::spawnUnit(game.world, false, kSoldier);
+    game.world.getComponent<Transform>(mine)->x = 400.0f;
+    game.world.getComponent<Transform>(theirs)->x =
+        400.0f + stats(kSoldier).range - 4.0f;
+    game.driver.step(2);
+
+    const float dealt =
+        stats(kSoldier).health - game.world.getComponent<Unit>(theirs)->health;
+    const float taken =
+        stats(kSoldier).health - game.world.getComponent<Unit>(mine)->health;
+
+    check(dealt > stats(kSoldier).damage * 1.2f,
+          "WEAPONS makes your units hit harder");
+    check(taken <= stats(kSoldier).damage + 0.01f,
+          "and does nothing whatever for theirs");
+}
+
 // --- Can the game actually be played? --------------------------------------
 
 // Plays a whole battle on a fixed composition, sending each unit as soon as it
@@ -2664,6 +2938,17 @@ int main() {
     testTheLastStageNeedsMoreThanComposition();
     testWinningUnlocksTheNextStageOnly();
     testStagesCanComeFromAFile();
+
+    testACampaignSurvivesBeingSavedAndLoaded();
+    testTheSaveFileIsReadableAndKeyedByName();
+    testAMissingSaveIsANewCampaign();
+    testACorruptSaveDoesNotBreakTheGame();
+    testWinningPaysOutAndTheFirstClearPaysDouble();
+    testPerkCostsRise();
+    testBuyingAPerkSpendsTheBankAndPersists();
+    testAPerkYouCannotAffordIsNotSold();
+    testPerkHitTesting();
+    testPerksChangeTheBattle();
 
     testABattleCanBeWon();
     testOneUnitTypeIsNotEnough();

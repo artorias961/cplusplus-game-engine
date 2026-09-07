@@ -37,6 +37,18 @@ int main(int, char**) {
     engine::SceneStack scenes;
     scenes.push(lanebattle::makeTitleScene());
 
+    // The campaign, if there is one. Loaded before the first scene runs so the
+    // stage list opens showing what the player actually owns.
+    lanebattle::Campaign& campaign = lanebattle::campaignOf(world);
+    if (lanebattle::loadCampaign(campaign)) {
+        std::cout << "Loaded a campaign from " << lanebattle::savePath() << " ("
+                  << campaign.stagesUnlocked << " stages open, "
+                  << campaign.bank << " gold banked)\n";
+    } else {
+        std::cout << "No saved campaign; starting a new one.\n"
+                  << "It will be saved to " << lanebattle::savePath() << "\n";
+    }
+
     gameEngine.run(world, scenes);
     return 0;
 }

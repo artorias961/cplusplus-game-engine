@@ -50,8 +50,9 @@ an optimisation is worth doing.
 
 **The live tree is now growing a fourth game**, Lane Battle, and the engine
 grows only where that game demands it — the same rule that produced everything
-in v1.0. Nine slices in, it has demanded four things: two small headers, mouse
-input, and a parallax factor. Five of those nine needed no engine code at all.
+in v1.0. Ten slices in, it has demanded four things: two small headers, mouse
+input, and a parallax factor. Five of those ten needed no engine code at all,
+and the roadmap's engine list is now finished.
 `docs/v3-plan.md` has the running notes — including how measuring whole
 battles, rather than individual rules, found the game unwinnable twice before
 it was playable — and `docs/roadmap-cartoonwars.md` has what is left.
@@ -70,7 +71,7 @@ engine_project/
 │   ├── Systems.h       Movement and Lifetime (and includes Collision.h)
 │   ├── Collision.h     Overlap tests + contact normals, boxes and circles
 │   ├── Timing.h        TickTimer (variable frames -> fixed-length ticks)
-│   ├── DataFile.h      Reading balance tables out of a text file
+│   ├── DataFile.h      Reading and writing text data files (balance, saves)
 │   ├── View.h          World coordinates -> screen coordinates, given a Camera
 │   ├── Scene.h         Scene + SceneStack (menu / playing / paused / ...)
 │   ├── Font.h          A 5x7 bitmap font, built into the binary (batched draws)
@@ -703,9 +704,15 @@ ball. Missing the ball costs one of three lives.
 
 **Lane Battle** (`.uildReleaseanebattle.exe`)
 
-An eight-stage campaign. Pick a battle from the list; winning one opens the
-next. Each stage gives the opponent a different economy, a different castle
-and — the part that actually changes the fight — a different army.
+An eight-stage campaign that remembers where you got to. Pick a battle from
+the list; winning one opens the next. Each stage gives the opponent a different
+economy, a different castle and — the part that actually changes the fight — a
+different army.
+
+Winning pays gold into a bank, double the first time you clear a stage. The
+armoury down the left of the stage list spends it on WEAPONS, RAMPARTS and
+TREASURY, which are permanent. All of it is saved the moment it is earned, to
+a plain text file in your user folder that you can read and correct by hand.
 
 | Input | Action |
 | --- | --- |
