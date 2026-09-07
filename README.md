@@ -525,6 +525,15 @@ system entirely (only the ball moves, so it tests the ball against each
 collider — O(n) instead of O(n²), worth roughly 1.5ms a frame here). Both sit
 far below where any of this begins to matter.
 
+Tests must be **deterministic**, which for Asteroids means seeding it:
+`setRandomSeed` fixes the wave layout so every run is identical. That isn't
+theoretical tidiness — the first version of these tests waited three seconds of
+simulated time for spawn protection to lapse, during which a randomly placed
+rock could reach the ship first, and the test then used a ship that no longer
+existed. It crashed about one run in twelve, passed CI twice, and failed the
+third time. A test that is only usually right is worse than no test, because it
+teaches you to ignore red.
+
 The harness runs the same systems in the same order as `Engine::run`, calling
 the shared `RunBuiltinSystems` rather than repeating the list, so the two can't
 drift apart. It feeds real `SDL_Event`s into a real `InputManager`, so

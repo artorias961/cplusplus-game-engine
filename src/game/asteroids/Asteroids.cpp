@@ -431,6 +431,7 @@ int countBullets(World& world) {
 
 void setSpriteSheet(SDL_Texture* sheet) { spriteSheet = sheet; }
 void setAudioDevice(AudioDevice* audio) { audioDevice = audio; }
+void setRandomSeed(unsigned int seed) { rng().seed(seed); }
 
 namespace {
 

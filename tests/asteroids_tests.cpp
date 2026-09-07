@@ -41,7 +41,11 @@ struct Game {
     SceneStack scenes;
     harness::Harness driver;
 
-    Game() : scenes(), driver(world, scenes) {}
+    Game() : scenes(), driver(world, scenes) {
+        // Same waves every run. Without this the rocks are placed from a
+        // system seed, and a test that survives one run can crash the next.
+        asteroids::setRandomSeed(20260906u);
+    }
 
     void startPlaying() {
         scenes.push(asteroids::makeTitleScene());
@@ -49,6 +53,16 @@ struct Game {
         driver.tap(SDL_SCANCODE_SPACE);
         driver.step(2);
     }
+
+    // Ends spawn protection immediately.
+    //
+    // These tests used to run 180 frames to let it lapse on its own, which
+    // meant three seconds of randomly placed rocks drifting around a ship that
+    // became vulnerable partway through. About one run in twelve, one of them
+    // reached the ship first and the test then dereferenced a ship that no
+    // longer existed. Setting the field is instant and cannot be interfered
+    // with.
+    void endSpawnProtection() { session().spawnProtection = 0.0f; }
 
     Session& session() { return *asteroids::findSession(world); }
     Entity ship() { return asteroids::findShip(world); }
@@ -129,13 +143,18 @@ void testCollidingWithARockCostsALife() {
     game.startPlaying();
 
     // Spawn protection has to run out before the ship is vulnerable.
-    game.driver.step(180);
-    check(game.session().spawnProtection <= 0.0f, "spawn protection expires");
+    game.endSpawnProtection();
+    check(game.session().spawnProtection <= 0.0f, "spawn protection can be ended");
 
     game.removeAllRocks();
     game.driver.step();
 
-    // Drop a rock exactly on the ship.
+    // Drop a rock exactly on the ship. Guarded, so that if setup ever stops
+    // leaving a ship alive this reports a failure instead of crashing.
+    if (game.ship() == kInvalidEntity) {
+        check(false, "the ship survived setup");
+        return;
+    }
     Transform shipAt = *game.world.getComponent<Transform>(game.ship());
     Entity rock = game.world.createEntity();
     game.world.addComponent(rock, Transform{shipAt.x, shipAt.y, 0.0f});
@@ -155,7 +174,7 @@ void testCollidingWithARockCostsALife() {
 void testRespawnWaitsForAClearSpace() {
     Game game;
     game.startPlaying();
-    game.driver.step(180);  // let spawn protection lapse
+    game.endSpawnProtection();
     game.removeAllRocks();
     game.driver.step();
 
@@ -189,13 +208,17 @@ void testRespawnWaitsForAClearSpace() {
 void testRunningOutOfLivesAndRestarting() {
     Game game;
     game.startPlaying();
-    game.driver.step(180);
+    game.endSpawnProtection();
 
     game.session().lives = 1;
     game.session().score = 500;
     game.removeAllRocks();
     game.driver.step();
 
+    if (game.ship() == kInvalidEntity) {
+        check(false, "the ship survived setup");
+        return;
+    }
     Transform shipAt = *game.world.getComponent<Transform>(game.ship());
     Entity rock = game.world.createEntity();
     game.world.addComponent(rock, Transform{shipAt.x, shipAt.y, 0.0f});
@@ -220,6 +243,9 @@ void testPauseFreezesPlay() {
     Game game;
     game.startPlaying();
 
+    // Spawn protection is left running here on purpose: it keeps the ship
+    // alive while the test thrusts around, so nothing below can hit a ship
+    // that no longer exists.
     game.driver.hold(SDL_SCANCODE_UP);
     game.driver.step(10);
     game.driver.release(SDL_SCANCODE_UP);

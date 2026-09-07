@@ -121,6 +121,12 @@ int countBullets(engine::World& world);
 void setSpriteSheet(SDL_Texture* sheet);
 void setAudioDevice(engine::AudioDevice* audio);
 
+// Fixes the random sequence, so every run produces the same waves. Left alone,
+// the generator is seeded from the system and each game differs — which is
+// right for playing and wrong for a test, where a rock drifting somewhere
+// slightly different is the difference between passing and failing.
+void setRandomSeed(unsigned int seed);
+
 // --- Scenes ----------------------------------------------------------------
 
 std::unique_ptr<engine::Scene> makeTitleScene();
