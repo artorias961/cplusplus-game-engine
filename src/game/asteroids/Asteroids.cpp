@@ -689,9 +689,14 @@ private:
         world.addComponent(bullet,
                            Velocity{shipVelocity->dx + direction.x * kBulletSpeed,
                                     shipVelocity->dy + direction.y * kBulletSpeed});
-        world.addComponent(bullet, bulletPolygon());
+        const Polygon outline = bulletPolygon();
+        world.addComponent(bullet, outline);
         world.addComponent(bullet, CircleCollider{kBulletRadius});
         world.addComponent(bullet, Wrapping{});
+        // Bullets wrap like everything else, so they get a ghost too —
+        // otherwise a shot vanishes at one edge and reappears at the other
+        // while the rocks around it slide smoothly across.
+        attachGhost(world, bullet, outline);
         // No bookkeeping list of live bullets: LifetimeSystem deletes it.
         world.addComponent(bullet, Lifetime{kBulletLife});
         world.addComponent(bullet, Bullet{});

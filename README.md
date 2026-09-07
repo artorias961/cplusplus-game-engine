@@ -1,5 +1,16 @@
 # Tiny Engine
 
+[![CI](https://github.com/artorias961/cplusplus-game-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/artorias961/cplusplus-game-engine/actions/workflows/ci.yml)
+
+| Asteroids | Breakout |
+| --- | --- |
+| ![Asteroids](docs/asteroids.png) | ![Breakout](docs/breakout.png) |
+
+Both are running on the same engine. Asteroids draws itself with vector
+polygons that rotate and wrap across the screen edges; Breakout is filled
+rectangles with a ball that bounces off contact normals. Neither knows anything
+about the other, and the engine knows nothing about either.
+
 A minimal 2D game engine in C++17 + SDL2, built to be read end to end in one
 sitting, one file at a time. It's the smallest version of the architecture
 real engines use: a game loop, an Entity-Component-System, a layered renderer
@@ -51,6 +62,7 @@ engine_project/
 │   └── engine_bench.cpp      Measures the naive parts; not a pass/fail test
 ├── .github/workflows/
 │   └── ci.yml          Builds and tests on Linux and macOS
+├── docs/               Screenshots used by this README
 ├── assets/
 │   └── asteroids.png   Ship icon + rock, for the HUD and title screen
 └── archive/
