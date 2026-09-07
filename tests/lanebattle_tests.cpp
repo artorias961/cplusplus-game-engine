@@ -15,6 +15,7 @@
 
 #include "Harness.h"
 #include "LaneBattle.h"
+#include "engine/View.h"
 
 using namespace engine;
 using lanebattle::Castle;
@@ -1175,6 +1176,129 @@ void testRestartingLeavesNoFiguresBehind() {
           "a restart clears the old figures along with the old army");
 }
 
+// --- Scenery (slice 6) -----------------------------------------------------
+//
+// What the hills look like cannot be tested. What can: that they are at a
+// range of depths, that they are wide enough not to run out, that nothing can
+// mistake them for a unit, and that they are cleaned up on a restart.
+
+void testSceneryIsAtSeveralDepths() {
+    Game game;
+    game.startPlaying();
+
+    bool sawFar = false, sawMid = false, sawNear = false, sawForeground = false;
+    for (Entity entity : game.world.entities()) {
+        const Polygon* shape = game.world.getComponent<Polygon>(entity);
+        if (!shape) continue;
+        if (shape->parallax < 0.3f) sawFar = true;
+        if (shape->parallax > 0.3f && shape->parallax < 0.6f) sawMid = true;
+        if (shape->parallax > 0.6f && shape->parallax < 1.0f) sawNear = true;
+        if (shape->parallax > 1.0f) sawForeground = true;
+    }
+
+    check(sawFar && sawMid && sawNear, "there are three bands behind the fight");
+    check(sawForeground,
+          "and one in front of it, moving faster than the ground");
+}
+
+// A band at parallax p slides kCameraMaxX*p pixels over a full sweep of the
+// camera. Any narrower than the window plus that, and scrolling to the far end
+// reveals the void behind it.
+void testSceneryIsWideEnoughToCoverTheSweep() {
+    Game game;
+    game.startPlaying();
+
+    float widest[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    const float bands[4] = {lanebattle::kFarParallax, lanebattle::kMidParallax,
+                            lanebattle::kNearParallax, lanebattle::kForeParallax};
+
+    for (Entity entity : game.world.entities()) {
+        const Polygon* shape = game.world.getComponent<Polygon>(entity);
+        const Transform* at = game.world.getComponent<Transform>(entity);
+        if (!shape || !at) continue;
+        for (int band = 0; band < 4; ++band) {
+            if (std::fabs(shape->parallax - bands[band]) > 0.001f) continue;
+
+            // The right edge of the shape, not of its Transform. Points are in
+            // local space and a hill is drawn either side of its origin, so
+            // measuring the origin alone understates the coverage by a
+            // half-width — which is exactly the mistake this test made first
+            // time and had to be corrected for.
+            for (const Vec2& point : shape->points) {
+                widest[band] = std::max(widest[band], at->x + point.x);
+            }
+        }
+    }
+
+    for (int band = 0; band < 4; ++band) {
+        const float needed = static_cast<float>(lanebattle::kWindowWidth) +
+                             lanebattle::kCameraMaxX * bands[band];
+        check(widest[band] >= needed,
+              "each band reaches far enough that scrolling never runs off it");
+    }
+}
+
+// Scenery has no Team and no Unit, so nothing can walk up to a hill and
+// attack it. Worth pinning: the targeting scan walks every entity in the
+// world, and it is only the absence of those two components that saves it.
+void testSceneryIsNotAValidTarget() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const int before = lanebattle::countUnits(game.world, true);
+    const Entity unit = lanebattle::spawnUnit(game.world, true, kSoldier);
+    game.driver.step(60);
+
+    check(lanebattle::countUnits(game.world, true) == before + 1,
+          "the unit is still alive");
+    check(game.world.getComponent<Velocity>(unit)->dx > 0.0f,
+          "and walks straight through the scenery rather than stopping to fight it");
+}
+
+// The HUD must stay locked to the screen now that there are four other
+// scroll rates in play — this is the case parallax could quietly break.
+void testTheHudStillIgnoresTheCameraEntirely() {
+    Game game;
+    game.startPlaying();
+
+    for (Entity entity : game.world.entities()) {
+        const Sprite* sprite = game.world.getComponent<Sprite>(entity);
+        if (sprite && sprite->screenSpace) {
+            check(engine::scrollFactor(sprite->screenSpace, sprite->parallax) == 0.0f,
+                  "a screen-space sprite gets none of the camera, whatever its parallax");
+        }
+    }
+    check(true, "checked every screen-space sprite");
+}
+
+void testRestartingClearsTheScenery() {
+    Game game;
+    game.startPlaying();
+
+    int sceneryBefore = 0;
+    for (Entity entity : game.world.entities()) {
+        const Polygon* shape = game.world.getComponent<Polygon>(entity);
+        if (shape && shape->parallax != 1.0f) ++sceneryBefore;
+    }
+    check(sceneryBefore > 0, "there is scenery to begin with");
+
+    const Entity myCastle = lanebattle::findCastle(game.world, true);
+    game.world.getComponent<Castle>(myCastle)->health = 0.0f;
+    game.session().gameOver = true;
+    game.driver.step(3);
+    game.driver.tap(SDL_SCANCODE_R);
+    game.driver.step(4);
+
+    int sceneryAfter = 0;
+    for (Entity entity : game.world.entities()) {
+        const Polygon* shape = game.world.getComponent<Polygon>(entity);
+        if (shape && shape->parallax != 1.0f) ++sceneryAfter;
+    }
+    check(sceneryAfter == sceneryBefore,
+          "and exactly as much after a restart — no more, no fewer");
+}
+
 // --- Can the game actually be played? --------------------------------------
 
 // Plays a whole battle on a fixed composition, sending each unit as soon as it
@@ -1316,6 +1440,12 @@ int main() {
     testFiguresDoNotOutliveTheirUnits();
     testNoFiguresLeakAcrossABattle();
     testRestartingLeavesNoFiguresBehind();
+
+    testSceneryIsAtSeveralDepths();
+    testSceneryIsWideEnoughToCoverTheSweep();
+    testSceneryIsNotAValidTarget();
+    testTheHudStillIgnoresTheCameraEntirely();
+    testRestartingClearsTheScenery();
 
     testABattleCanBeWon();
     testOneUnitTypeIsNotEnough();

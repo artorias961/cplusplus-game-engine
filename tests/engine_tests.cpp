@@ -600,6 +600,39 @@ void testViewTransform() {
           "a negative camera position shifts the world right");
 }
 
+// Between "moves with the world" and "ignores the camera" there is a third
+// case the boolean could never express: scenery at a distance. The factor is
+// the fraction of the camera's movement a thing gets.
+void testParallax() {
+    const Camera camera{1000.0f, 0.0f};
+
+    check(nearly(viewToScreenX(camera, 500.0f, false, 1.0f), -500.0f),
+          "parallax 1 is the world, exactly as before");
+    check(nearly(viewToScreenX(camera, 500.0f, false, 0.5f), 0.0f),
+          "parallax 0.5 slides past at half the rate");
+    check(nearly(viewToScreenX(camera, 500.0f, false, 0.0f), 500.0f),
+          "parallax 0 does not move at all");
+
+    // Over 1 is a foreground that outruns the ground, which is the half of
+    // depth a screenSpace flag could never reach.
+    check(nearly(viewToScreenX(camera, 500.0f, false, 1.5f), -1000.0f),
+          "parallax above 1 slides past faster than the ground");
+
+    // Omitting the argument has to keep meaning what it always meant, or every
+    // game written before this silently changes depth.
+    check(nearly(viewToScreenX(camera, 500.0f, false),
+                 viewToScreenX(camera, 500.0f, false, 1.0f)),
+          "the default is the world, so existing games are untouched");
+
+    // screenSpace wins. The two overlap arithmetically, and a HUD element that
+    // someone also gave a parallax to must still be a HUD element.
+    check(nearly(viewToScreenX(camera, 500.0f, true, 0.3f), 500.0f),
+          "screenSpace overrides parallax rather than combining with it");
+
+    check(nearly(scrollFactor(false, 0.25f), 0.25f), "the factor is the parallax");
+    check(nearly(scrollFactor(true, 0.25f), 0.0f), "unless it is screen space");
+}
+
 void testViewRoundTrip() {
     const Camera camera{640.0f, 12.0f};
 
@@ -700,6 +733,7 @@ int main() {
     testSceneStack();
     testFont();
     testViewTransform();
+    testParallax();
     testViewRoundTrip();
     testMouseInput();
 

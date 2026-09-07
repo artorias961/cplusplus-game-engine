@@ -175,8 +175,10 @@ void Engine::drawSprite(World& world, Entity entity, const Camera& camera) {
     const Transform& transform = *world.getComponent<Transform>(entity);
 
     SDL_Rect rect{
-        static_cast<int>(viewToScreenX(camera, transform.x, sprite.screenSpace)),
-        static_cast<int>(viewToScreenY(camera, transform.y, sprite.screenSpace)),
+        static_cast<int>(viewToScreenX(camera, transform.x, sprite.screenSpace,
+                                       sprite.parallax)),
+        static_cast<int>(viewToScreenY(camera, transform.y, sprite.screenSpace,
+                                       sprite.parallax)),
         sprite.width,
         sprite.height,
     };
@@ -229,9 +231,9 @@ void Engine::drawPolygon(World& world, Entity entity, const Camera& camera) {
     if (polygon.points.size() < 2) return;
 
     const float originX =
-        viewToScreenX(camera, transform.x, polygon.screenSpace);
+        viewToScreenX(camera, transform.x, polygon.screenSpace, polygon.parallax);
     const float originY =
-        viewToScreenY(camera, transform.y, polygon.screenSpace);
+        viewToScreenY(camera, transform.y, polygon.screenSpace, polygon.parallax);
 
     const float cosA = std::cos(transform.rotation);
     const float sinA = std::sin(transform.rotation);

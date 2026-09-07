@@ -238,7 +238,38 @@ constexpr float kMinimapWidth = 360.0f;
 constexpr float kMinimapHeight = 12.0f;
 constexpr float kMinimapMarkerWidth = 6.0f;
 
+// --- Scenery ---------------------------------------------------------------
+//
+// Three bands of distance behind the fighting and one in front of it, each
+// sliding past at its own rate. Without them a two-and-a-half-screen field
+// scrolls past a flat colour and reads as a corridor; with them it reads as a
+// place, and — the practical part — you can tell how far you have scrolled
+// without looking at the minimap.
+//
+// The numbers are the fraction of the camera's movement each band gets. The
+// ground is 1.0 by definition; the foreground is over 1.0, which is what sells
+// depth in the other direction and is the case a boolean could never express.
+constexpr float kFarParallax = 0.18f;
+constexpr float kMidParallax = 0.45f;
+constexpr float kNearParallax = 0.72f;
+constexpr float kForeParallax = 1.30f;
+
+// A band at parallax p slides `kCameraMaxX * p` pixels over a full sweep of
+// the camera, so it needs to be that much wider than the window to avoid
+// running out and showing the void behind it.
+constexpr float bandWidth(float parallax) {
+    return static_cast<float>(kWindowWidth) + kCameraMaxX * parallax + 40.0f;
+}
+
+// Layers are drawn low to high, so scenery behind the fight is negative and
+// the foreground sits above everything except the HUD.
+constexpr int kSkyLayer = -4;
+constexpr int kFarLayer = -3;
+constexpr int kMidLayer = -2;
+constexpr int kNearLayer = -1;
+
 constexpr int kFieldLayer = 0;
+constexpr int kForeLayer = 1;
 constexpr int kHudLayer = 5;
 constexpr int kOverlayLayer = 10;
 constexpr int kOverlayTextLayer = 11;

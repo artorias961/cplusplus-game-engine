@@ -25,10 +25,12 @@ That's on purpose — an engine with only one game is a hypothesis, not an engin
 — and each needed something the last one didn't: Snake wanted fixed ticks and
 box collision, Asteroids wanted rotation and circles, Breakout wanted contact
 normals and sub-frame movement. Lane Battle has asked for very little across
-five slices, which is its own kind of result: a battlefield wider than its
+six slices, which is its own kind of result: a battlefield wider than its
 window made world and screen coordinates differ for the first time, moving that
-rule out of the renderer into `View.h` where a test can reach it, and a
-clickable spawn bar wanted a mouse. Three of its five slices needed nothing.
+rule out of the renderer into `View.h` where a test can reach it; a clickable
+spawn bar wanted a mouse; and scenery at a distance wanted a parallax factor,
+because `screenSpace` was a boolean with nothing between the world and the
+screen. Half its slices needed nothing at all.
 
 It is **not** trying to be fast, complete, or production-ready. Storage uses
 `std::unordered_map` instead of packed arrays, there's no batching, no scene
@@ -47,8 +49,8 @@ an optimisation is worth doing.
 
 **The live tree is now growing a fourth game**, Lane Battle, and the engine
 grows only where that game demands it — the same rule that produced everything
-in v1.0. Five slices in, it has demanded two things: one new header and mouse
-input. Three of those five slices needed no engine code at all.
+in v1.0. Six slices in, it has demanded three things: one new header, mouse
+input, and a parallax factor. Three of those six needed no engine code at all.
 `docs/v3-plan.md` has the running notes — including how measuring whole
 battles, rather than individual rules, found the game unwinnable twice before
 it was playable — and `docs/roadmap-cartoonwars.md` has what is left.
@@ -719,6 +721,10 @@ swing while walking, an arm that sweeps when a blow lands. There is no artwork
 anywhere in this game — the figures are `Polygon` line strips rebuilt from
 scratch every frame, which is why a runner's legs cycle faster than a
 soldier's without anything having to say so.
+
+Behind them are three bands of hills sliding past at 0.18, 0.45 and 0.72 of the
+camera's movement, and in front of them grass at 1.30 — faster than the ground,
+which is what sells depth in the other direction.
 
 One thing worth knowing, because the game does not yet teach it: **no single
 unit type is a strategy.** An army of nothing but soldiers loses, an army of

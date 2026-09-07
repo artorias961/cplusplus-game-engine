@@ -37,6 +37,18 @@ struct Vec2 {
 //
 // Anything that should ignore the camera — a score, a menu, a full-screen
 // dimming panel — sets `screenSpace` on its Sprite, Polygon or Text instead.
+//
+// Between "moves with the world" and "ignores the camera" there is a third
+// case, which is what `parallax` on Sprite and Polygon is for: distant scenery
+// that should slide past more slowly than the ground does, or foreground
+// detail that should slide past faster. A factor of 1 is the world, 0 is the
+// screen, and anything between is depth. `screenSpace` and `parallax` overlap
+// arithmetically — `screenSpace` is `parallax = 0` — but they say different
+// things: one is "this is not in the world at all", the other is "this is in
+// the world, but far away". `screenSpace` wins where both are set.
+//
+// Text has no parallax. Nothing has wanted a signpost in the middle distance,
+// and a HUD is the only text this project has ever drawn.
 struct Camera {
     float x = 0.0f;
     float y = 0.0f;
@@ -102,6 +114,7 @@ struct Sprite {
 
     int layer = 0;
     bool screenSpace = false;  // ignore the Camera; draw at fixed coordinates
+    float parallax = 1.0f;     // how much of the camera's movement applies
 };
 
 // An outline drawn as connected line segments — the "vector graphics" look of
@@ -124,6 +137,7 @@ struct Polygon {
     unsigned char a = 255;
     int layer = 0;
     bool screenSpace = false;
+    float parallax = 1.0f;
 };
 
 // The rectangle an entity collides with, in pixels, anchored at its

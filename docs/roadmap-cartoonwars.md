@@ -4,7 +4,8 @@ A full slice list, written after reading the Cartoon Wars 2 APK's *structure*
 (asset categories, data tables, native library) — not its code and not its art,
 neither of which are ours to use.
 
-Slices 1 and 2 are done; see `v3-plan.md`. This is everything after them.
+Slices 1-6 are done; see `v3-plan.md` for what each one found. This is the
+whole list, with the finished rows struck through.
 
 ## What the reference actually is
 
@@ -36,7 +37,7 @@ balance lives in files exported from a spreadsheet, one of which is called
 | ~~**4**~~ **DONE** | **A spawn bar.** Clickable unit buttons showing cost, affordability and the draining cooldown; drag the field to scroll. Number keys kept. | **Mouse input** (held / pressed-this-frame / released) and **`screenToWorld`**, both exactly as predicted — plus mouse events in the test harness, which was not predicted and is what makes any of it testable. | Open. The bar teaches the roster where the keys did not, but whether it is *better* needs a player. |
 | ~~**5**~~ **DONE, differently** | **Units that move.** Each unit is a coloured block with an articulated stick figure over it: legs that swing while walking, an arm that sweeps when a blow lands. Built from `Polygon`, whose points the game rebuilds each frame. | **Nothing.** Option 1 from *the thing that is not on this list* below was taken, so no art exists to animate and no sprite machinery was owed. | Open — this is the first slice that cannot be measured. It needs eyes. |
 | **5b** | **Frame-based sprite animation**, if real art ever arrives. | **`Animation`** — a component plus a system advancing `Sprite.srcX`. And **`Sprite.flip`**: `SDL_FLIP_NONE` is hardcoded, so a left-facing unit needs a second copy of every frame. | Deferred, not cancelled. Owed the moment there are sprites. |
-| **6** | **A battlefield worth looking at.** Three or four background layers scrolling at different rates, a skyline, a foreground. | **A per-layer scroll factor.** `screenSpace` is a boolean today — full camera or none — with nothing in between, which is exactly what parallax needs. | Does the wide field feel like a place instead of a corridor? |
+| ~~**6**~~ **DONE** | **A battlefield worth looking at.** Three bands of hills behind the fight (0.18 / 0.45 / 0.72) and grass tufts in front of it at **1.30**, all placed by a deterministic hash rather than randomly. | **`parallax`** on `Sprite` and `Polygon`, plus `scrollFactor` in `View.h`. Added as a fourth parameter rather than replacing `screenSpace`, because collapsing them would silently invert every existing caller. | Open — needs eyes, like slice 5. |
 | **7** | **Balance you can edit without a compiler.** Unit stats, costs and stage definitions move out of `constexpr` and into data files. | **File reading** — the engine has none at all today. `Resources.h` loads PNGs through SDL_image; nothing anywhere reads a data file. A small key/value or CSV reader is enough. | Only worth doing once the constants genuinely hurt — around six unit types. Until then it is speculative. |
 | **8** | **A castle that fights.** An aimed shot on a cooldown, and in-battle upgrades: income rate, castle health, population cap. | Probably nothing; projectiles are Transform + Velocity + Collider, all of which exist. | Is there anything to do while you wait for gold? |
 | **9** | **A campaign.** Eight or so stages, each with its own enemy composition, income multiplier and castle health. A stage-select screen. Win, advance, get harder. | Nothing new — the scene stack already does this. Stage tables ride on slice 7. | Does it survive being played more than once? |
@@ -48,12 +49,12 @@ balance lives in files exported from a spreadsheet, one of which is called
 ## Five engine additions, total
 
 Across eleven slices the engine gains: ~~**mouse input**~~ (done, slice 4),
-**`Animation` + sprite flip** (deferred — no art to animate), **a parallax
-scroll factor**, **file reading**, and **save/load** — plus a spatial grid if
-and only if a measurement asks for one.
+**`Animation` + sprite flip** (deferred — no art to animate), ~~**a parallax
+scroll factor**~~ (done, slice 6), **file reading**, and **save/load** — plus a
+spatial grid if and only if a measurement asks for one.
 
-Five slices in, the engine has gained exactly two things: `View.h` and the
-mouse. Three of the five needed nothing at all.
+Six slices in, the engine has gained three things: `View.h`, the mouse, and
+`parallax`. Three of the six needed nothing at all.
 
 That is the whole list. Nothing about the ECS, the scene stack, the renderer's
 structure, the audio device or the collision system needs rebuilding to get
@@ -73,7 +74,8 @@ The realistic options, in the order I would try them:
    which the reference's art is not.
 3. **Draw it.** The engine loads PNGs and slices sheets already.
 
-Option 1 makes slice 5 buildable this week. Options 2 and 3 make it a project.
+Option 1 was taken and slice 5 shipped on it. Options 2 and 3 remain open, and
+would make slice 5b (frame-based sprite animation) worth building.
 
 ## One structural question, due around slice 9
 

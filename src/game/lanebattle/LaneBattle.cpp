@@ -183,19 +183,22 @@ Entity findTargetAhead(World& world, Entity attacker, bool leftSide,
     Entity best = kInvalidEntity;
     float bestGap = stats.range;
 
-    for (Entity other : world.entities()) {
-        if (other == attacker) continue;
+    // Only units and castles can be targets, so only those two pools are
+    // walked. This used to scan `world.entities()` and reject everything else
+    // by component, which was fine while the world held nothing but the
+    // fight — and stopped being fine the moment scenery arrived. Fifty hills
+    // and tufts, rejected once per unit per frame, made the test suite 60%
+    // slower on their own. Iterating the right pool is not an optimisation so
+    // much as not deliberately doing extra work.
+    auto consider = [&](Entity other) {
+        if (other == attacker) return;
 
         Team* team = world.getComponent<Team>(other);
-        if (!team || team->leftSide == leftSide) continue;  // friend, or teamless
-        if (!world.hasComponent<Unit>(other) &&
-            !world.hasComponent<Castle>(other)) {
-            continue;
-        }
+        if (!team || team->leftSide == leftSide) return;  // friend, or teamless
 
         Transform* transform = world.getComponent<Transform>(other);
         Sprite* sprite = world.getComponent<Sprite>(other);
-        if (!transform || !sprite) continue;
+        if (!transform || !sprite) return;
 
         // Measured between the facing EDGES, not between the Transforms.
         // Transforms sit at the left edge, so comparing them directly makes
@@ -207,14 +210,17 @@ Entity findTargetAhead(World& world, Entity attacker, bool leftSide,
         const float targetCenter = transform->x + targetWidth / 2.0f;
 
         const float centreAhead = (targetCenter - attackerCenter) * direction;
-        if (centreAhead < 0.0f) continue;  // behind us
+        if (centreAhead < 0.0f) return;  // behind us
 
         const float gap = centreAhead - (stats.width + targetWidth) / 2.0f;
-        if (gap > bestGap) continue;
+        if (gap > bestGap) return;
 
         bestGap = gap;
         best = other;
-    }
+    };
+
+    for (auto& entry : world.view<Unit>()) consider(entry.first);
+    for (auto& entry : world.view<Castle>()) consider(entry.first);
     return best;
 }
 
@@ -241,12 +247,14 @@ bool blockedByFriendly(World& world, Entity mover, bool leftSide, float moverX,
     const float direction = facing(leftSide);
     const float moverCenter = moverX + stats.width / 2.0f;
 
-    for (Entity other : world.entities()) {
+    // Only units can be in the way, so only the unit pool is walked — same
+    // reasoning as findTargetAhead above.
+    for (auto& [other, otherUnitRef] : world.view<Unit>()) {
         if (other == mover) continue;
 
-        Unit* otherUnit = world.getComponent<Unit>(other);
+        Unit* otherUnit = &otherUnitRef;
         Team* team = world.getComponent<Team>(other);
-        if (!otherUnit || !team || team->leftSide != leftSide) continue;
+        if (!team || team->leftSide != leftSide) continue;
 
         const UnitKind& otherStats = kindOf(otherUnit->kind);
         if (otherStats.range > stats.range) continue;  // it stops well short of me
@@ -643,6 +651,12 @@ public:
 
 private:
     void buildField(World& world) {
+        // Scenery first, so it holds the lowest entity ids as well as the
+        // lowest layers. Layers alone would be enough, but keeping creation
+        // order and draw order agreeing means the id tiebreak never has to
+        // arbitrate between two things at the same depth.
+        buildScenery(world);
+
         // The ground, drawn as one wide bar so the units have something to
         // stand on rather than floating in the dark. It spans the WORLD now,
         // not the window, or it would run out halfway through the first push.
@@ -665,6 +679,107 @@ private:
         world.addComponent(right, Team{false});
         world.addComponent(right, Castle{});
         field_.push_back(right);
+    }
+
+    // --- Scenery -----------------------------------------------------------
+    //
+    // Everything here goes into field_, so a restart clears it along with the
+    // army. Nothing is random: positions come from a cheap integer hash of the
+    // index, so every battle looks the same and a test can rely on it.
+
+    static float jitter(int seed, float low, float high) {
+        // A small deterministic hash. Not a good one — it only has to spread
+        // a dozen hills out without a pattern the eye can catch, and being
+        // reproducible matters far more than being uniform.
+        const unsigned int mixed = (static_cast<unsigned int>(seed) * 2654435761u) >> 16;
+        const float unit = static_cast<float>(mixed % 1000u) / 1000.0f;
+        return low + unit * (high - low);
+    }
+
+    void buildScenery(World& world) {
+        // Sky: screen-space, because it genuinely does not move. Three bands
+        // standing in for a gradient the renderer cannot draw.
+        field_.push_back(makeSky(world, 0.0f, 150.0f, 26, 30, 46));
+        field_.push_back(makeSky(world, 150.0f, 120.0f, 34, 38, 54));
+        field_.push_back(makeSky(world, 270.0f, kGroundY - 270.0f, 44, 46, 60));
+
+        buildHills(world, kFarParallax, kFarLayer, 150.0f, 320.0f, 54, 58, 78, 11);
+        buildHills(world, kMidParallax, kMidLayer, 100.0f, 240.0f, 44, 52, 66, 23);
+        buildHills(world, kNearParallax, kNearLayer, 60.0f, 180.0f, 36, 44, 56, 37);
+        buildForeground(world);
+    }
+
+    Entity makeSky(World& world, float y, float height, unsigned char r,
+                   unsigned char g, unsigned char b) {
+        const Entity entity =
+            createRect(world, 0.0f, y, static_cast<float>(kWindowWidth), height,
+                       r, g, b, kSkyLayer);
+        world.getComponent<Sprite>(entity)->screenSpace = true;
+        return entity;
+    }
+
+    // A row of triangles along the horizon. Closed polygons rather than
+    // sprites, because a hill is not a rectangle and the renderer already
+    // draws outlines.
+    void buildHills(World& world, float parallax, int layer, float minHeight,
+                    float spacing, unsigned char r, unsigned char g,
+                    unsigned char b, int seed) {
+        // One step past the far edge as well as one before the near one: a
+        // hill is drawn either side of its origin, so the band has to be
+        // seeded slightly beyond where it needs to be visible.
+        const float width = bandWidth(parallax) + spacing;
+        for (float x = -spacing; x < width; x += spacing) {
+            const int index = static_cast<int>(x / spacing) + seed;
+            const float height = jitter(index, minHeight, minHeight * 1.9f);
+            const float half = jitter(index + 7, spacing * 0.55f, spacing * 0.95f);
+
+            Entity hill = world.createEntity();
+            world.addComponent(hill, Transform{x + jitter(index + 3, -30.0f, 30.0f),
+                                               kGroundY, 0.0f});
+
+            Polygon shape;
+            shape.points = {Vec2{-half, 0.0f}, Vec2{0.0f, -height},
+                            Vec2{half, 0.0f}};
+            shape.closed = true;
+            shape.r = r;
+            shape.g = g;
+            shape.b = b;
+            shape.layer = layer;
+            shape.parallax = parallax;
+            world.addComponent(hill, shape);
+
+            field_.push_back(hill);
+        }
+    }
+
+    // Tufts in front of the fighting, sliding past faster than the ground.
+    // Kept low and sparse: this layer is depth, not decoration to look at, and
+    // anything taller would hide the thing the player is actually watching.
+    void buildForeground(World& world) {
+        const float width = bandWidth(kForeParallax) + 190.0f;
+        for (float x = 0.0f; x < width; x += 190.0f) {
+            const int index = static_cast<int>(x / 190.0f);
+            const float height = jitter(index + 91, 10.0f, 22.0f);
+
+            Entity tuft = world.createEntity();
+            world.addComponent(tuft, Transform{x + jitter(index + 53, -40.0f, 40.0f),
+                                               static_cast<float>(kWindowHeight) - 6.0f,
+                                               0.0f});
+
+            Polygon blades;
+            blades.points = {Vec2{-9.0f, 0.0f},  Vec2{-4.0f, -height},
+                             Vec2{-1.0f, 0.0f},  Vec2{3.0f, -height * 1.2f},
+                             Vec2{6.0f, 0.0f},   Vec2{10.0f, -height * 0.8f}};
+            blades.closed = false;
+            blades.r = 30;
+            blades.g = 38;
+            blades.b = 44;
+            blades.layer = kForeLayer;
+            blades.parallax = kForeParallax;
+            world.addComponent(tuft, blades);
+
+            field_.push_back(tuft);
+        }
     }
 
     // Posts along the field at a fixed spacing.

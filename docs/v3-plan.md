@@ -143,6 +143,54 @@ What this slice cannot tell you: whether any of it looks right. There is no
 window in a test. Every other slice has been measurable; this one is the first
 that genuinely needs eyes.
 
+**Slice 6 is done**, and it is the first slice since 2 to pull a real feature
+out of the engine.
+
+Three bands of scenery behind the fighting and one in front of it, each sliding
+past at its own rate: distant hills at 0.18 of the camera's movement, middle at
+0.45, near at 0.72, and grass tufts in the foreground at **1.30** — faster than
+the ground, which is the half of depth a boolean could never reach. Positions
+come from a cheap integer hash of the index, so nothing is random and every
+battle looks the same.
+
+**The engine gained `parallax`** on `Sprite` and `Polygon`, and `scrollFactor`
+in `View.h`. `screenSpace` stays, and wins where both are set: the two overlap
+arithmetically — `screenSpace` *is* `parallax = 0` — but they say different
+things. One means "this is not in the world at all"; the other means "this is
+in the world, but far away".
+
+The interesting decision was how to add it. Collapsing `screenSpace` and
+`parallax` into a single float is tidier and is a trap: every existing
+`viewToScreenX(camera, x, false)` would still compile, because `false`
+converts to `0.0f`, while silently meaning its exact opposite — the old `false`
+meant "apply the whole camera", the new `0.0f` means "apply none of it". So
+`parallax` is a fourth parameter with a default instead. A signature that
+quietly inverts its callers is worse than one with an extra argument.
+
+### The regression this slice caused, and what it actually revealed
+
+Adding fifty hills and tufts made the test suite 60% slower — 2.6s to 4.2s.
+The cause was not the drawing. `findTargetAhead` and `blockedByFriendly` walked
+`world.entities()` and rejected non-combatants by component, so every hill was
+considered and discarded once per unit per frame.
+
+That was fine while the world contained nothing but the fight, and stopped
+being fine the moment it did not. Both now walk `view<Unit>()` (and
+`view<Castle>()` for targets) instead: **4180ms to 1684ms**, which is faster
+than before the scenery existed, because the scans had also been walking the
+castles, the shards, the figures and the entire HUD.
+
+Worth being clear that this is not the spatial grid arriving early. It is
+O(n²) still, in the same place; n is simply now the number of things that can
+actually fight rather than the number of things that exist. The grid remains a
+later slice and remains contingent on a measurement.
+
+One property changed with it: those scans now iterate an `unordered_map` rather
+than the insertion-ordered entity vector, so an exact distance tie between two
+targets resolves differently — deterministic within a build, not necessarily
+identical across platforms. Nothing depends on the tie-break, and CI runs the
+suite on Linux and macOS, which is what would catch it if something ever did.
+
 ## The open question, answered — and then answered again
 
 **Slice 2's verdict: it was not fun, and the reason was not the camera.**
