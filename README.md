@@ -77,6 +77,8 @@ engine_project/
 │   └── ci.yml          Builds and tests on Linux and macOS
 ├── docs/               Screenshots used by this README
 ├── CHANGELOG.md        What v1.0 contains
+├── run.bat             Double-click on Windows: build and play
+├── run.sh              The same, for Linux and macOS
 ├── assets/
 │   └── asteroids.png   Ship icon + rock, for the HUD and title screen
 └── archive/
@@ -423,6 +425,28 @@ doing one day; the other never was.
 week, while the ECS and game loop written first have not produced a defect in a
 long time. That is the ordinary shape of software, and it is also the signal
 that told us when to stop.
+
+## Quick start
+
+If SDL2 is already installed (see *Requirements* below), you don't need to
+touch CMake at all:
+
+| Platform | Do this |
+| --- | --- |
+| Windows | Double-click **`run.bat`** |
+| Linux / macOS | `chmod +x run.sh` once, then `./run.sh` |
+
+Either one configures the build the first time, compiles Release, and asks
+which game to run. They're safe to run repeatedly — the build is incremental,
+so after the first time only what changed is recompiled.
+
+From a terminal you can skip the menu with `run.bat breakout`, `./run.sh
+tests`, `run.bat clean`, and so on. Everything they do by hand is spelled out
+under *Building and running* if you'd rather drive CMake yourself.
+
+To make the shell script double-clickable: on macOS copy it to `run.command`,
+which Finder opens in Terminal; on Linux most file managers offer "Run in
+Terminal", though some need that enabled in their preferences first.
 
 ## Requirements
 

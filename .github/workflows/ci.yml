@@ -41,6 +41,15 @@ jobs:
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure --repeat until-fail:20
 
+      # run.sh is the double-clickable launcher, and it is written on Windows
+      # where it cannot be tried. Running it here for real — rather than just
+      # syntax-checking it — is the only way to know it works on the platforms
+      # it exists for. The build already exists by now, so this reuses it.
+      - name: Check the launcher script
+        run: |
+          chmod +x run.sh
+          ./run.sh tests
+
   macos:
     name: macOS (Homebrew)
     runs-on: macos-latest
@@ -63,3 +72,12 @@ jobs:
       # and turns "it passed" into something worth believing.
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure --repeat until-fail:20
+
+      # run.sh is the double-clickable launcher, and it is written on Windows
+      # where it cannot be tried. Running it here for real — rather than just
+      # syntax-checking it — is the only way to know it works on the platforms
+      # it exists for. The build already exists by now, so this reuses it.
+      - name: Check the launcher script
+        run: |
+          chmod +x run.sh
+          ./run.sh tests
