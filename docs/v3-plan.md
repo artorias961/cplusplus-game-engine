@@ -51,49 +51,92 @@ Before this game, no world was ever bigger than its window. Asteroids moved the
 camera a few pixels for screen shake and that was the entire exercise the
 renderer's camera path had ever had.
 
-## The open question, answered
+**Slice 3 is done**: three unit types in a table (`kUnitKinds`), keys `1`-`3`,
+a population cap of 10, units that queue rather than standing inside one
+another, an opponent that banks for a wave and cycles a composition, and gold
+paid for kills. It needed **no new engine code**, which is the second time a
+Lane Battle slice has demanded nothing — the roster is stats and one extra
+comparison, and the queueing rule is a second scan of a list that was already
+being scanned.
 
-**It was not fun, and the reason was not the camera.** Simulating four minutes
-of play with the obvious strategy — hold `A`, spend the moment you can afford
-to — deadlocked the two armies at *exactly* x=1158 and x=1216, castles
-untouched at 800/800, gold cycling on a perfect period, for as long as the
-simulation ran. The same thing happened at the old one-screen width, so this
+Two details in it carry most of the behaviour, and both were found by measuring
+rather than by design:
+
+- **Only stopped friendlies block, and only if their reach is no longer than
+  yours.** The first half lets a fast runner overtake a marching soldier so the
+  queue forms only where the fighting is; the second lets a soldier walk past
+  its own archers. Without that second comparison the first archer sent walls
+  in every melee unit behind it, and ranged units are a trap instead of a
+  support.
+- **Rank-holding is what stops massing being dominant.** Deleting it on purpose
+  makes an army of nothing but runners win, because the whole force occupies one
+  pixel and fights as a single enormous unit.
+
+
+## The open question, answered — and then answered again
+
+**Slice 2's verdict: it was not fun, and the reason was not the camera.**
+Simulating four minutes of play with the obvious strategy — spend the moment
+you can afford to — deadlocked the two armies at *exactly* x=1158 and x=1216,
+castles untouched at 800/800, gold cycling on a perfect period, for as long as
+the simulation ran. The same thing happened at the old one-screen width, so it
 was a slice-1 flaw that slice 2 merely made visible.
 
-The cause is perfect symmetry. The opponent's whole strategy is "spend the
-instant you can afford to", so a player who does the same thing mirrors it
-exactly and neither front line ever moves a pixel.
+The cause was perfect symmetry: the opponent's whole strategy was "spend on
+sight", so a player doing the same mirrored it and neither front line moved.
 
-There is a lever, and it is decisive: **bank the gold and send a wave**. The
-extra bodies win the trade at the front and the line rolls forward. Banking
-just two units' worth wins in about 70 seconds without losing a single point of
-castle health — and so does banking six, which is the next problem.
+**Slice 3 fixed it, but not on the first attempt, and the failures are the
+interesting part.**
 
-So the loop currently has exactly one decision in it, and it is binary: mirror
-the AI and draw forever, or bank anything at all and win crushingly. That is
-now pinned by `testABattleCanBeWon`, and the in-game hint no longer teaches the
-losing strategy.
+Adding three unit types, a population cap, rank-holding and an opponent that
+banks made the game *worse* in a new way: measured across eight strategies, the
+player lost every single one, and the enemy castle never took a scratch. The
+front line marched steadily toward the player's castle because the opponent's
+mix included archers dealing free damage from behind its melee, and the player
+had no way to build a lasting advantage.
 
-**This is what slice 3 should be aimed at, not mouse plumbing for its own
-sake.** The shortest routes to a real decision, roughly in order of how much
-they'd buy:
+Copying that mix did not help either — it drew, for exactly the reason slice 2
+drew. **With income as the only source of gold, two competent sides earn
+identically no matter what happens on the field, so a won fight buys nothing
+and the line returns to the middle.**
 
-- **A second unit type** with a different cost/speed/damage shape, so "what to
-  send" joins "when to send it". This is slice 4's work pulled forward.
-- **An opponent that banks too**, so massing is answered rather than free.
-  Cheap: give it a target wave size instead of spending on sight.
-- **A reason not to mass**, such as a rising unit cost or a supply cap, so the
-  answer to every situation is not "send more".
+The missing mechanic was **gold for kills**. It is what makes a favourable
+trade compound: killing a 95-gold archer with two 35-gold runners now pays, an
+advantage on the ground becomes an advantage in the purse, and the purse buys
+more units. With it, the measured picture is finally a game:
+
+| Strategy | Result |
+| --- | --- |
+| All soldiers / all runners / all archers | **Loses**, every time |
+| Runners + archers (no front line) | **Loses** |
+| Soldiers + archers behind them | **Wins**, ~200s |
+| Copying the opponent's composition | **Wins**, ~209s |
+
+No single row of the roster is a strategy, a front line without ranged support
+loses, and ranged units without a front line lose fastest. That is the shape
+the genre is built on, and `testOneUnitTypeIsNotEnough` now guards it.
+
+Three lessons worth keeping:
+
+1. **Simulating whole battles found all of this.** Every individual rule test
+   passed at every stage, including the stage where the game was unwinnable.
+2. **Two of the three fixes were wrong before they were right.** Slice 3 was
+   built, measured, found broken, and only then completed. Measuring is not a
+   verification step at the end; it is how the design got made.
+3. **A balance test is worth its fragility.** `testOneUnitTypeIsNotEnough` will
+   break if the numbers are retuned badly, which is the point of it.
 
 ## Remaining slices
 
-| Slice | The game work | What it forces into the engine |
-| --- | --- | --- |
-| 3 | Spawn buttons instead of a keypress | **Mouse input.** The engine has none: position, buttons, and "clicked this frame" edges. Also the inverse of `viewToScreenX` — a click is in screen space and the world it lands on is not. |
-| 4 | Several unit types, costs, cooldowns | **A UI layer** — hit-tested regions, cooldown indicators. Starts game-side; only becomes engine code if a second game wants it. |
-| 5 | Units that walk and swing | **`Animation`** — `Sprite` already carries a source rect, so this is a component plus a system advancing `srcX`. First real consumer. |
-| 6 | Hundreds of units on the field | **Spatial grid**, but only if `engine_bench` says so at real unit counts. Targeting is currently a linear scan per unit per frame — O(n²) overall, and free at this size. |
-| 7 | Upgrades that persist between battles | **Serialization.** The last completely untouched category. |
+Moved to **`docs/roadmap-cartoonwars.md`**, which lists all eleven of them
+after reading what the reference game is actually made of. Keeping the list in
+one place stops two copies of it drifting apart.
+
+The short version: slice 3 is unit roles, a population cap and an opponent that
+banks — the slice that answers whether the loop has a decision in it — and it
+needs no engine code at all. Across the whole roadmap the engine gains five
+things: mouse input, animation plus sprite flip, a parallax scroll factor, file
+reading, and save/load.
 
 ## Deliberately not doing
 

@@ -51,39 +51,109 @@ constexpr float kCastleHeight = 130.0f;
 constexpr float kCastleMargin = 30.0f;
 constexpr float kCastleHealth = 800.0f;
 
-constexpr float kUnitWidth = 24.0f;
-constexpr float kUnitHeight = 36.0f;
+// --- The roster ------------------------------------------------------------
+//
+// Slices 1 and 2 had one unit type, and measuring a whole battle showed why
+// that was fatal: with one type, the only decision is *when* to spend, both
+// sides trade evenly, and a player who mirrors the opponent deadlocks the
+// field forever. Three types make the question "when AND what", which is the
+// smallest change that puts a real decision in the loop.
+//
+// This is a table, deliberately. Every number that balances the game is in one
+// place and in rows rather than scattered through the rules, which is how the
+// genre does it — the reference game keeps its equivalent in files exported
+// from a spreadsheet. When there are enough rows that recompiling to tweak one
+// hurts, the table moves to a file and nothing else has to change. That is a
+// later slice, and it is not this one: six numbers do not hurt yet.
+struct UnitKind {
+    const char* name;
+    float cost;
+    float health;
+    float damage;
+    float range;         // how close before it stops to fight
+    float attackDelay;   // seconds between blows
+    float speed;         // pixels per second
+    float width;
+    float height;
+    unsigned char leftR, leftG, leftB;     // your colours
+    unsigned char rightR, rightG, rightB;  // theirs
+};
+
+// The three roles the genre is built on, and the shape of each:
+//
+//   RUNNER  — cheap and fast, dies to anything, wins on gold-for-damage.
+//   SOLDIER — the slice-1 unit. Beats a runner one-to-one and loses to two.
+//   ARCHER  — outranges everything, but cannot survive being reached. Useless
+//             alone; the reason to own a front line.
+//
+// These numbers are a starting point that was then measured rather than
+// argued about: see the matchup probe in the tests.
+constexpr UnitKind kUnitKinds[] = {
+    // name       cost   hp    dmg   range  delay  speed   w      h     yours          theirs
+    {"RUNNER",    35.0f, 60.0f,  8.0f,  30.0f, 0.45f, 150.0f, 16.0f, 26.0f, 150, 215, 255, 255, 175, 150},
+    {"SOLDIER",   60.0f, 110.0f, 14.0f, 34.0f, 0.60f,  95.0f, 24.0f, 36.0f, 110, 190, 240, 235, 130, 110},
+    {"ARCHER",    95.0f, 55.0f,  20.0f, 135.0f, 0.95f,  70.0f, 18.0f, 34.0f,  90, 140, 210, 200,  95, 130},
+};
+constexpr int kUnitKindCount =
+    static_cast<int>(sizeof(kUnitKinds) / sizeof(kUnitKinds[0]));
+
+// The widest and tallest of them, for the few places that need a bound before
+// knowing which kind they are dealing with.
+constexpr float kMaxUnitWidth = 24.0f;
 
 // --- Tuning ----------------------------------------------------------------
-//
-// One unit type for now. These five numbers are the entire balance of the
-// game, which is a good sign that the loop is small enough to reason about.
-constexpr float kUnitHealth = 100.0f;
-constexpr float kUnitDamage = 14.0f;
-constexpr float kUnitRange = 34.0f;          // how close before it stops to fight
-constexpr float kUnitAttackDelay = 0.6f;     // seconds between blows
 
-// Raised from 60 when the field went from 960 pixels wide to 2400. At the old
-// speed an unopposed unit needed forty seconds to cross, which is a walking
-// simulator rather than a game; at this speed the two front lines meet about
-// eleven seconds after a push starts, which is long enough that committing to
-// one is a decision and short enough to stay interesting.
-constexpr float kUnitSpeed = 95.0f;          // pixels per second
-
-constexpr float kUnitCost = 60.0f;
 constexpr float kStartingGold = 150.0f;
 constexpr float kGoldPerSecond = 14.0f;
 constexpr float kSpawnCooldown = 0.35f;      // stops one keypress spawning ten
 
+// Killing something pays, as a fraction of what it cost its owner.
+//
+// This is the mechanic the first three attempts at this game were missing, and
+// without it the design cannot work. With income as the only source of gold,
+// two competent players earn identically no matter what happens on the field,
+// so a won fight buys nothing and the front line returns to the middle — which
+// is exactly what measuring slices 1, 2 and the first cut of 3 all showed:
+// good play drew, bad play lost, and nothing in between existed.
+//
+// Paying for kills makes a favourable trade compound. Killing a 95-gold archer
+// with two 35-gold runners is now worth doing twice, and an advantage on the
+// field turns into an advantage in the purse, which turns back into more
+// units. That loop is what lets skill decide a battle instead of arithmetic.
+constexpr float kKillRewardFraction = 0.45f;
+
+// How many units one side may have on the field at once.
+//
+// This is the answer to "why isn't sending more always right?", and without it
+// there is no answer: measuring slice 2 showed that banking two units' worth
+// won, and banking six won barely faster, so there was nothing to think about
+// past the first decision. A cap makes every slot spent an opportunity cost,
+// which is what turns composition into a choice.
+constexpr int kPopulationCap = 10;
+
+// Units queue rather than standing inside one another. Without this the whole
+// army piles onto the same pixel and fights as one enormous unit, which is
+// what made massing unconditionally correct.
+constexpr float kRankGap = 6.0f;             // clear space between queued units
+
 // The opponent plays by exactly the same rules: the same purse, the same
-// income, the same unit cost, the same cooldown. Its only "intelligence" is
-// spending the moment it can afford to.
+// income, the same costs, the same cooldown. Its only advantage is that it
+// never forgets to spend.
 //
 // It began as a free unit every three seconds, which quietly made the game
 // unwinnable — the enemy out-produced the player by half again, and no amount
-// of tuning the player's economy could fix a opponent that didn't have one.
+// of tuning the player's economy could fix an opponent that didn't have one.
 // Symmetry costs nothing and makes the difficulty a single number to change.
 constexpr float kEnemyIncomeMultiplier = 1.0f;
+
+// The opponent's composition, cycled. It banks until it can afford the next
+// whole wave and then sends it, because spending on sight is a losing policy —
+// slice 2 measured that too. This is not clever, but it is no longer free to
+// beat: a player who also spends on sight now loses.
+constexpr int kEnemyComposition[] = {1, 1, 2, 0, 1, 0};  // soldier-heavy, some archers and runners
+constexpr int kEnemyCompositionLength =
+    static_cast<int>(sizeof(kEnemyComposition) / sizeof(kEnemyComposition[0]));
+constexpr int kEnemyWaveSize = 3;            // units banked for before spending
 
 // --- The view --------------------------------------------------------------
 //
@@ -130,7 +200,8 @@ struct Team {
 };
 
 struct Unit {
-    float health = kUnitHealth;
+    int kind = 1;  // an index into kUnitKinds
+    float health = 0.0f;
     float timeUntilAttack = 0.0f;
 };
 
@@ -154,6 +225,11 @@ struct Session {
     float spawnCooldown = 0.0f;
     float enemySpawnTimer = 0.0f;
 
+    // Where the opponent is in its composition cycle, and how much of the
+    // current wave it still owes. Zero means it is banking for the next one.
+    int enemyWaveIndex = 0;
+    int enemyWaveRemaining = 0;
+
     // Counts down while the player is steering the view by hand. Above zero
     // the camera obeys the arrow keys; at zero it goes back to following.
     float freeLookSeconds = 0.0f;
@@ -175,9 +251,13 @@ engine::Camera* findCamera(engine::World& world);
 // what the minimap marks.
 float frontLineX(engine::World& world, bool leftSide);
 
-// Spawns one unit for a side, ignoring cost. Exposed so tests can set up a
-// fight directly instead of waiting for gold to accrue.
-engine::Entity spawnUnit(engine::World& world, bool leftSide);
+// Units of one kind on one side. `kind` of -1 counts all of them, which is
+// what the population cap is measured against.
+int countUnitsOfKind(engine::World& world, bool leftSide, int kind);
+
+// Spawns one unit for a side, ignoring cost and the population cap. Exposed so
+// tests can set up a fight directly instead of waiting for gold to accrue.
+engine::Entity spawnUnit(engine::World& world, bool leftSide, int kind = 1);
 
 // --- Wiring ----------------------------------------------------------------
 

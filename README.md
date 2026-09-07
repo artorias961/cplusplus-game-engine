@@ -24,11 +24,11 @@ Four games are built on it: **Asteroids**, **Breakout** and **Lane Battle** in
 That's on purpose — an engine with only one game is a hypothesis, not an engine
 — and each needed something the last one didn't: Snake wanted fixed ticks and
 box collision, Asteroids wanted rotation and circles, Breakout wanted contact
-normals and sub-frame movement. Lane Battle's first slice needed nothing new at
-all — its own kind of result — and its second needed one small thing: a
-battlefield wider than the window finally made world and screen coordinates
-differ, and moved that rule out of the renderer into `View.h` where a test can
-reach it.
+normals and sub-frame movement. Lane Battle has needed almost nothing new at
+all across three slices, which is its own kind of result — just one small
+thing, when a battlefield wider than the window finally made world and screen
+coordinates differ and moved that rule out of the renderer into `View.h`, where
+a test can reach it.
 
 It is **not** trying to be fast, complete, or production-ready. Storage uses
 `std::unordered_map` instead of packed arrays, there's no batching, no scene
@@ -47,9 +47,10 @@ an optimisation is worth doing.
 
 **The live tree is now growing a fourth game**, Lane Battle, and the engine
 grows only where that game demands it — the same rule that produced everything
-in v1.0. Two slices in, it has demanded one header. `docs/v3-plan.md` has the
-running notes, including what the second slice found out about whether the game
-is any good.
+in v1.0. Three slices in, it has demanded one header. `docs/v3-plan.md` has the
+running notes — including how measuring whole battles, rather than individual
+rules, found the game unwinnable twice before it was playable — and
+`docs/roadmap-cartoonwars.md` has what is left.
 
 The list at the bottom is **exercises, not debt**. Nothing on it is missing in
 the sense of being needed; each is a next thing to learn if you want one.
@@ -87,7 +88,7 @@ engine_project/
 │   └── engine_bench.cpp      Measures the naive parts; not a pass/fail test
 ├── .github/workflows/
 │   └── ci.yml          Builds and tests on Linux and macOS
-├── docs/               Screenshots, and v3-plan.md (work in progress)
+├── docs/               Screenshots, v3-plan.md, roadmap-cartoonwars.md
 ├── CHANGELOG.md        What v1.0 contains
 ├── run.bat             Double-click on Windows: build and play
 ├── run.sh              The same, for Linux and macOS
@@ -694,23 +695,28 @@ ball. Missing the ball costs one of three lives.
 
 | Key | Action |
 | --- | --- |
-| A | Spend gold to send a unit (hold to keep sending) |
+| 1 | Send a **runner** — 35 gold, fast and fragile |
+| 2 | Send a **soldier** — 60 gold, the front line |
+| 3 | Send an **archer** — 95 gold, outranges everything, dies to anything |
 | Left / Right | Look up and down the field; lets go after a moment |
 
-Gold accrues on its own. Units march right, stop when an enemy is in reach,
-and fight until one falls. Break the enemy castle to win, and lose if yours
-falls first. The opponent plays by exactly the same economy — same purse, same
-income, same unit cost — so difficulty is one multiplier rather than a fudge.
+Gold accrues on its own, and killing something pays you a share of what it cost
+its owner. Units march right, stop when an enemy is in reach, and fight until
+one falls. You can field ten at a time. Break the enemy castle to win, and lose
+if yours falls first. The opponent plays by exactly the same economy — same
+purse, same income, same costs — so difficulty is one multiplier, not a fudge.
 
 The battlefield is two and a half screens wide, so the camera rides with your
 front line and drifts home to your castle when you have nothing out. The strip
 at the top is the whole field in miniature, with a marker for each castle and
 each side's front line — the fighting is often somewhere you aren't looking.
 
-One thing worth knowing, because the game does not yet make you discover it:
-**spending the instant you can afford to is a losing move.** That is exactly
-what the opponent does, so it mirrors you and the front line never moves.
-Bank the gold and send a wave.
+One thing worth knowing, because the game does not yet teach it: **no single
+unit type is a strategy.** An army of nothing but soldiers loses, an army of
+nothing but runners loses, and archers with nobody to hide behind lose fastest
+of all. Archers do most of the damage in the game, but only from behind a line
+of somebody else. All of that is measured rather than asserted — see
+`docs/v3-plan.md`.
 
 ### When it doesn't work
 

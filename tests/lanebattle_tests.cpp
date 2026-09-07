@@ -23,6 +23,17 @@ using lanebattle::Unit;
 
 namespace {
 
+// Names for the rows of the roster, so the tests read as prose rather than as
+// indices. `stats(kSoldier).range` says what it means; `kUnitKinds[1].range`
+// does not.
+constexpr int kRunner = 0;
+constexpr int kSoldier = 1;
+constexpr int kArcher = 2;
+
+const lanebattle::UnitKind& stats(int kind) {
+    return lanebattle::kUnitKinds[kind];
+}
+
 int failures = 0;
 int checks = 0;
 
@@ -64,10 +75,9 @@ struct Game {
     // Gives a test a clear field for a controlled fight: stops the opponent
     // spending, and removes whatever it already fielded.
     //
-    // That second part matters because the enemy spends the instant it can
-    // afford to, so by the time setup has finished it already has a unit
-    // marching. Leaving it there let a stray soldier intercept fights these
-    // tests had carefully arranged.
+    // That second part matters because the enemy will send a wave as soon as
+    // it has banked for one, so a test that runs for a few seconds finds
+    // strangers wandering into the fight it carefully arranged.
     void suppressEnemySpawns() {
         session().enemySpawnTimer = 1.0e9f;
         for (Entity entity : world.entities()) {
@@ -116,7 +126,7 @@ void testSpawningCostsGoldAndIsRateLimited() {
     game.suppressEnemySpawns();
 
     const float before = game.session().gold;
-    game.driver.hold(SDL_SCANCODE_A);
+    game.driver.hold(SDL_SCANCODE_2);
     game.driver.step(2);
 
     check(lanebattle::countUnits(game.world, true) == 1, "holding A spawns a unit");
@@ -127,7 +137,7 @@ void testSpawningCostsGoldAndIsRateLimited() {
     check(lanebattle::countUnits(game.world, true) == 1,
           "the spawn cooldown prevents one keypress becoming an army");
 
-    game.driver.release(SDL_SCANCODE_A);
+    game.driver.release(SDL_SCANCODE_2);
 }
 
 void testCannotSpawnWithoutGold() {
@@ -136,9 +146,9 @@ void testCannotSpawnWithoutGold() {
     game.suppressEnemySpawns();
 
     game.session().gold = 0.0f;
-    game.driver.hold(SDL_SCANCODE_A);
+    game.driver.hold(SDL_SCANCODE_2);
     game.driver.step(3);
-    game.driver.release(SDL_SCANCODE_A);
+    game.driver.release(SDL_SCANCODE_2);
 
     check(lanebattle::countUnits(game.world, true) == 0,
           "an empty purse buys nothing");
@@ -156,7 +166,7 @@ void testUnitsWalkForward() {
 
     const float movedX = game.world.getComponent<Transform>(unit)->x;
     check(movedX > startX, "a left-side unit walks to the right");
-    check(std::fabs((movedX - startX) - lanebattle::kUnitSpeed * 0.5f) < 2.0f,
+    check(std::fabs((movedX - startX) - stats(kSoldier).speed * 0.5f) < 2.0f,
           "it walks at about its stated speed");
 }
 
@@ -170,13 +180,13 @@ void testUnitsStopAndFight() {
     const Entity theirs = lanebattle::spawnUnit(game.world, false);
     game.world.getComponent<Transform>(mine)->x = 400.0f;
     game.world.getComponent<Transform>(theirs)->x =
-        400.0f + lanebattle::kUnitRange - 4.0f;
+        400.0f + stats(kSoldier).range - 4.0f;
 
     game.driver.step(2);
 
     check(std::fabs(game.world.getComponent<Velocity>(mine)->dx) < 0.01f,
           "a unit within reach of an enemy stops walking");
-    check(game.world.getComponent<Unit>(theirs)->health < lanebattle::kUnitHealth,
+    check(game.world.getComponent<Unit>(theirs)->health < stats(kSoldier).health,
           "and starts hitting it");
 }
 
@@ -189,7 +199,7 @@ void testLosingUnitsDie() {
     const Entity theirs = lanebattle::spawnUnit(game.world, false);
     game.world.getComponent<Transform>(mine)->x = 400.0f;
     game.world.getComponent<Transform>(theirs)->x =
-        400.0f + lanebattle::kUnitRange - 4.0f;
+        400.0f + stats(kSoldier).range - 4.0f;
 
     // Leave the enemy on its last legs; the next blow should finish it.
     game.world.getComponent<Unit>(theirs)->health = 1.0f;
@@ -218,7 +228,7 @@ void testUnitsDamageTheEnemyCastle() {
 
     // Walk it up to the castle wall.
     game.world.getComponent<Transform>(mine)->x =
-        castleX - lanebattle::kUnitRange + 4.0f;
+        castleX - stats(kSoldier).range + 4.0f;
 
     const float before = game.castleHealth(false);
     game.driver.step(3);
@@ -236,7 +246,7 @@ void testBreakingTheCastleWinsTheBattle() {
     const Entity enemyCastle = lanebattle::findCastle(game.world, false);
     game.world.getComponent<Transform>(mine)->x =
         game.world.getComponent<Transform>(enemyCastle)->x -
-        lanebattle::kUnitRange + 4.0f;
+        stats(kSoldier).range + 4.0f;
     game.world.getComponent<Castle>(enemyCastle)->health = 1.0f;
 
     game.driver.step(4);
@@ -267,9 +277,56 @@ void testTheEnemySpawnsOnItsOwn() {
     Game game;
     game.startPlaying();
 
+    // It banks for a whole wave first, so nothing appears immediately — which
+    // is the point of the change, and worth asserting rather than assuming.
     game.driver.step(5);
-    check(lanebattle::countUnits(game.world, false) >= 1,
-          "the enemy sends units of its own");
+    check(lanebattle::countUnits(game.world, false) == 0,
+          "the enemy does not spend on sight any more");
+
+    game.driver.step(60 * 12);  // long enough to bank and send
+    check(lanebattle::countUnits(game.world, false) >= 2,
+          "it sends a wave rather than a trickle");
+}
+
+// The opponent used to spend the instant it could afford to, which measuring a
+// whole battle showed to be a losing policy: a player doing the same thing
+// mirrors it exactly and the front line never moves. Now it banks, so beating
+// it takes something other than copying it.
+void testTheEnemyBanksBeforeSpending() {
+    Game game;
+    game.startPlaying();
+
+    // Enough for one unit but not for a wave: it should sit on the money.
+    game.session().enemyGold = stats(kSoldier).cost + 5.0f;
+    game.session().enemyWaveRemaining = 0;
+    game.session().enemySpawnTimer = 0.0f;
+
+    const int before = lanebattle::countUnits(game.world, false);
+    game.driver.step(3);
+    check(lanebattle::countUnits(game.world, false) == before,
+          "one unit's worth of gold does not buy one unit");
+
+    // Enough for a whole wave: now it spends.
+    game.session().enemyGold = 10000.0f;
+    game.driver.step(60);
+    check(lanebattle::countUnits(game.world, false) >= before + 2,
+          "a full purse buys a wave");
+}
+
+// Its composition cycles rather than being one unit type repeated, so the
+// player faces a mix and cannot answer everything with one counter.
+void testTheEnemyMixesItsWave() {
+    Game game;
+    game.startPlaying();
+
+    game.session().enemyGold = 10000.0f;
+    game.driver.step(60 * 8);
+
+    int kindsSeen = 0;
+    for (int kind = 0; kind < lanebattle::kUnitKindCount; ++kind) {
+        if (lanebattle::countUnitsOfKind(game.world, false, kind) > 0) ++kindsSeen;
+    }
+    check(kindsSeen >= 2, "the enemy fields more than one kind of unit");
 }
 
 // The enemy used to spawn free while the player paid, which made the game
@@ -279,9 +336,9 @@ void testTheEnemyPaysForItsUnits() {
     Game game;
     game.startPlaying();
 
-    // It has already spent once during setup, so hand it a fresh purse and an
-    // open cooldown and watch it spend again.
-    game.session().enemyGold = lanebattle::kUnitCost + 10.0f;
+    // Hand it a purse big enough for a wave and an open cooldown, then watch
+    // the money actually leave the purse.
+    game.session().enemyGold = 10000.0f;
     game.session().enemySpawnTimer = 0.0f;
 
     const int fieldedBefore = lanebattle::countUnits(game.world, false);
@@ -294,6 +351,7 @@ void testTheEnemyPaysForItsUnits() {
 
     // Broke means idle, exactly as it does for the player.
     game.session().enemyGold = 0.0f;
+    game.session().enemyWaveRemaining = 0;
     const int fielded = lanebattle::countUnits(game.world, false);
     game.driver.step(4);
     check(lanebattle::countUnits(game.world, false) == fielded,
@@ -354,7 +412,7 @@ void testRestartingAfterDefeat() {
     const Entity enemyCastle = lanebattle::findCastle(game.world, false);
     game.world.getComponent<Transform>(mine)->x =
         game.world.getComponent<Transform>(enemyCastle)->x -
-        lanebattle::kUnitRange + 4.0f;
+        stats(kSoldier).range + 4.0f;
     game.world.getComponent<Castle>(enemyCastle)->health = 1.0f;
     game.driver.step(4);
     check(game.session().gameOver, "the battle is over");
@@ -574,7 +632,225 @@ void testTheMinimapTracksTheFrontLines() {
           "and for the enemy, forward is the other way");
 }
 
+// --- The roster (slice 3) --------------------------------------------------
+
+void testEachKeySendsItsOwnKind() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = 10000.0f;
+
+    const SDL_Scancode keys[] = {SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3};
+    for (int kind = 0; kind < 3; ++kind) {
+        game.driver.hold(keys[kind]);
+        game.driver.step(2);
+        game.driver.release(keys[kind]);
+        game.driver.step(30);  // let the cooldown clear
+        check(lanebattle::countUnitsOfKind(game.world, true, kind) == 1,
+              "each key sends its own kind of unit");
+    }
+}
+
+void testKindsCostWhatTheTableSays() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const SDL_Scancode keys[] = {SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3};
+    for (int kind = 0; kind < 3; ++kind) {
+        game.session().gold = 10000.0f;
+        const float before = game.session().gold;
+
+        game.driver.hold(keys[kind]);
+        game.driver.step(2);
+        game.driver.release(keys[kind]);
+
+        // Income accrues over those two frames, so this is not exact.
+        const float spent = before - game.session().gold;
+        check(std::fabs(spent - stats(kind).cost) < 2.0f,
+              "a unit costs what its row of the table says");
+        game.driver.step(30);
+    }
+}
+
+// The cap is the reason "send more" stops being the answer to everything.
+// Without it, slice 2 measured banking six units as barely better than banking
+// two — there was nothing to think about after the first decision.
+void testThePopulationCapHolds() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = 100000.0f;
+
+    game.driver.hold(SDL_SCANCODE_1);
+    game.driver.step(60 * 20);  // far more presses than the cap allows
+    game.driver.release(SDL_SCANCODE_1);
+
+    check(lanebattle::countUnits(game.world, true) <= lanebattle::kPopulationCap,
+          "you can never field more than the cap");
+    check(lanebattle::countUnits(game.world, true) == lanebattle::kPopulationCap,
+          "and with money and time you reach it");
+
+    // A slot freed by a death is a slot you get back.
+    for (Entity entity : game.world.entities()) {
+        if (Unit* unit = game.world.getComponent<Unit>(entity)) {
+            unit->health = 0.0f;
+            break;
+        }
+    }
+    game.driver.step(4);
+    check(lanebattle::countUnits(game.world, true) < lanebattle::kPopulationCap,
+          "a death frees a slot");
+}
+
+// Units queue instead of standing inside one another. Before this, an entire
+// army occupied a single pixel and fought as one enormous unit, which is
+// exactly what made massing unconditionally correct.
+void testUnitsHoldRank() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    // One soldier stopped at the enemy castle, another walking into its back.
+    const Entity front = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const Entity behind = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const Entity castle = lanebattle::findCastle(game.world, false);
+    const float castleX = game.world.getComponent<Transform>(castle)->x;
+
+    game.world.getComponent<Transform>(front)->x =
+        castleX - stats(kSoldier).range;
+    game.world.getComponent<Transform>(behind)->x =
+        castleX - stats(kSoldier).range - 200.0f;
+
+    game.driver.step(60 * 5);
+
+    const float frontX = game.world.getComponent<Transform>(front)->x;
+    const float behindX = game.world.getComponent<Transform>(behind)->x;
+    const float gap = frontX - behindX - stats(kSoldier).width;
+
+    check(behindX < frontX, "the second unit stays behind the first");
+    check(gap > lanebattle::kRankGap - 2.0f,
+          "and keeps a rank's worth of clear space rather than standing in it");
+}
+
+// The one comparison that makes ranged units support rather than a trap: a
+// friendly only blocks you if its reach is no longer than yours. Without it,
+// the first archer sent walls in every melee unit behind it.
+void testMeleeWalksPastItsOwnArchers() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const Entity archer = lanebattle::spawnUnit(game.world, true, kArcher);
+    const Entity soldier = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const Entity castle = lanebattle::findCastle(game.world, false);
+    const float castleX = game.world.getComponent<Transform>(castle)->x;
+
+    // Archer already parked at its standoff, soldier coming up behind it.
+    game.world.getComponent<Transform>(archer)->x =
+        castleX - stats(kArcher).range;
+    game.world.getComponent<Transform>(soldier)->x =
+        castleX - stats(kArcher).range - 120.0f;
+
+    game.driver.step(60 * 6);
+
+    const float archerX = game.world.getComponent<Transform>(archer)->x;
+    const float soldierX = game.world.getComponent<Transform>(soldier)->x;
+
+    check(soldierX > archerX + 60.0f,
+          "a soldier walks past its own archers to reach the enemy");
+    check(std::fabs(game.world.getComponent<Velocity>(soldier)->dx) < 0.01f,
+          "and stops because the castle is in reach, not because a friend is");
+}
+
+void testArchersOutrangeSoldiers() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const Entity archer = lanebattle::spawnUnit(game.world, true, kArcher);
+    const Entity victim = lanebattle::spawnUnit(game.world, false, kSoldier);
+
+    // Placed inside the archer's reach but well outside the soldier's.
+    game.world.getComponent<Transform>(archer)->x = 400.0f;
+    game.world.getComponent<Transform>(victim)->x =
+        400.0f + stats(kArcher).range - 10.0f;
+
+    game.driver.step(2);
+
+    check(game.world.getComponent<Unit>(victim)->health < stats(kSoldier).health,
+          "an archer hits from beyond a soldier's reach");
+    check(std::fabs(game.world.getComponent<Unit>(archer)->health -
+                    stats(kArcher).health) < 0.01f,
+          "and takes nothing back while it does");
+}
+
+// Income alone cannot break a symmetry: two competent sides earn identically
+// no matter what happens on the field, so a won fight buys nothing. Paying for
+// kills is what turns an advantage on the ground into an advantage in the
+// purse. Without it, measurement showed every good strategy drawing and every
+// bad one losing, with nothing in between.
+void testKillsPayGold() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const Entity mine = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const Entity theirs = lanebattle::spawnUnit(game.world, false, kArcher);
+    game.world.getComponent<Transform>(mine)->x = 400.0f;
+    game.world.getComponent<Transform>(theirs)->x =
+        400.0f + stats(kSoldier).range - 4.0f;
+    game.world.getComponent<Unit>(theirs)->health = 1.0f;
+
+    const float before = game.session().gold;
+    game.driver.step(5);
+
+    check(lanebattle::countUnits(game.world, false) == 0, "the archer died");
+
+    // Income accrues over those frames too, so this checks the bounty arrived
+    // rather than the exact total.
+    const float expected = stats(kArcher).cost * lanebattle::kKillRewardFraction;
+    const float gained = game.session().gold - before;
+    check(gained > expected * 0.9f, "killing it paid a bounty");
+    check(std::fabs(gained - expected) < 5.0f,
+          "and the bounty is a share of what the casualty cost");
+
+    // The bounty goes to the killer, not to whoever owned the casualty.
+    const float enemyBefore = game.session().enemyGold;
+    game.world.getComponent<Unit>(mine)->health = 0.0f;
+    game.driver.step(3);
+    check(game.session().enemyGold - enemyBefore >
+              stats(kSoldier).cost * lanebattle::kKillRewardFraction * 0.9f,
+          "and it is the other side that gets paid when you lose one");
+}
+
 // --- Can the game actually be played? --------------------------------------
+
+// Plays a whole battle on a fixed composition, sending each unit as soon as it
+// is affordable. Returns +1 for a win, -1 for a loss, 0 for neither inside the
+// time limit.
+int playBattle(Game& game, const int* cycle, int cycleLength) {
+    const SDL_Scancode keys[] = {SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3};
+    int index = 0;
+    SDL_Scancode holding = SDL_SCANCODE_UNKNOWN;
+
+    for (int frame = 0; frame < 60 * 400; ++frame) {
+        if (holding != SDL_SCANCODE_UNKNOWN) {
+            game.driver.release(holding);
+            holding = SDL_SCANCODE_UNKNOWN;
+        }
+        const int kind = cycle[index % cycleLength];
+        if (game.session().spawnCooldown <= 0.0f &&
+            game.session().gold >= stats(kind).cost) {
+            holding = keys[kind];
+            game.driver.hold(holding);
+            index = (index + 1) % cycleLength;
+        }
+        game.driver.step();
+        if (game.session().gameOver) return game.session().playerWon ? 1 : -1;
+    }
+    return 0;
+}
 //
 // Every test above checks a rule in isolation: this one checks that the rules
 // add up to a game that ends. It exists because nothing did, and the gap hid
@@ -592,27 +868,45 @@ void testTheMinimapTracksTheFrontLines() {
 // finding about the DESIGN rather than a bug. What is pinned here is only the
 // part that must never stop being true: that the battle can be won at all.
 void testABattleCanBeWon() {
+    static const int mixed[] = {kSoldier, kSoldier, kArcher};
     Game game;
     game.startPlaying();
 
-    bool dumping = false;
-    for (int frame = 0; frame < 60 * 150; ++frame) {
-        // Bank two units' worth, then spend it all: the cheapest strategy
-        // that is not simply mirroring the opponent.
-        if (!dumping && game.session().gold >= lanebattle::kUnitCost * 2.0f) {
-            dumping = true;
-            game.driver.hold(SDL_SCANCODE_A);
-        } else if (dumping && game.session().gold < lanebattle::kUnitCost) {
-            dumping = false;
-            game.driver.release(SDL_SCANCODE_A);
-        }
+    const int outcome = playBattle(game, mixed, 3);
+    check(outcome != 0, "a battle fought with a mixed force ends");
+    check(outcome == 1, "and a front line with archers behind it wins");
+}
 
-        game.driver.step();
-        if (game.session().gameOver) break;
-    }
+// The design guard for the whole slice.
+//
+// Slices 1 and 2 had one unit type, and measuring showed the consequence: the
+// only decision was when to spend, both sides traded evenly, and a player who
+// mirrored the opponent deadlocked the field forever. The point of a roster is
+// that no single row of it is a strategy.
+//
+// This test asserts a balance property rather than a rule, which makes it the
+// most fragile thing in this file — and that is deliberate. If a retune ever
+// makes one unit type sufficient on its own, the slice's reason for existing
+// is gone and this should be what says so.
+void testOneUnitTypeIsNotEnough() {
+    static const int onlySoldiers[] = {kSoldier};
+    static const int onlyRunners[] = {kRunner};
+    static const int onlyArchers[] = {kArcher};
 
-    check(game.session().gameOver, "a battle played with banked waves ends");
-    check(game.session().playerWon, "and massing units wins it");
+    Game soldiers;
+    soldiers.startPlaying();
+    check(playBattle(soldiers, onlySoldiers, 1) == -1,
+          "an army of nothing but soldiers loses");
+
+    Game runners;
+    runners.startPlaying();
+    check(playBattle(runners, onlyRunners, 1) == -1,
+          "an army of nothing but runners loses");
+
+    Game archers;
+    archers.startPlaying();
+    check(playBattle(archers, onlyArchers, 1) == -1,
+          "and archers with nobody to hide behind lose fastest of all");
 }
 
 }  // namespace
@@ -631,6 +925,8 @@ int main() {
     testBreakingTheCastleWinsTheBattle();
     testLosingYourOwnCastle();
     testTheEnemySpawnsOnItsOwn();
+    testTheEnemyBanksBeforeSpending();
+    testTheEnemyMixesItsWave();
     testTheEnemyPaysForItsUnits();
     testTheEconomiesAreSymmetric();
     testPauseFreezesTheBattle();
@@ -644,7 +940,17 @@ int main() {
     testFreeLookRespectsTheWorldEdges();
     testTheHudIgnoresTheCamera();
     testTheMinimapTracksTheFrontLines();
+
+    testEachKeySendsItsOwnKind();
+    testKindsCostWhatTheTableSays();
+    testThePopulationCapHolds();
+    testUnitsHoldRank();
+    testMeleeWalksPastItsOwnArchers();
+    testArchersOutrangeSoldiers();
+    testKillsPayGold();
+
     testABattleCanBeWon();
+    testOneUnitTypeIsNotEnough();
 
     if (failures == 0) {
         std::printf("all %d checks passed\n", checks);

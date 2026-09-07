@@ -43,7 +43,20 @@ constexpr float kLeftCastleX = kCastleMargin;
 constexpr float kRightCastleX = kWorldWidth - kCastleMargin - kCastleWidth;
 
 constexpr float kLeftSpawnX = kLeftCastleX + kCastleWidth + 4.0f;
-constexpr float kRightSpawnX = kRightCastleX - kUnitWidth - 4.0f;
+constexpr float kRightSpawnX = kRightCastleX - kMaxUnitWidth - 4.0f;
+
+// Clamped so a bad index can never index off the end of the table. Every read
+// of a unit's stats goes through here.
+const UnitKind& kindOf(int kind) {
+    if (kind < 0) return kUnitKinds[0];
+    if (kind >= kUnitKindCount) return kUnitKinds[kUnitKindCount - 1];
+    return kUnitKinds[kind];
+}
+
+const UnitKind& kindOf(World& world, Entity entity) {
+    const Unit* unit = world.getComponent<Unit>(entity);
+    return kindOf(unit ? unit->kind : 1);
+}
 
 // --- Sound -----------------------------------------------------------------
 
@@ -136,12 +149,12 @@ float facing(bool leftSide) { return leftSide ? 1.0f : -1.0f; }
 // engine_bench will say so and the answer will be a spatial grid; guessing at
 // that now would be optimising a number nobody has measured.
 Entity findTargetAhead(World& world, Entity attacker, bool leftSide,
-                       float attackerX) {
+                       float attackerX, const UnitKind& stats) {
     const float direction = facing(leftSide);
-    const float attackerCenter = attackerX + kUnitWidth / 2.0f;
+    const float attackerCenter = attackerX + stats.width / 2.0f;
 
     Entity best = kInvalidEntity;
-    float bestGap = kUnitRange;
+    float bestGap = stats.range;
 
     for (Entity other : world.entities()) {
         if (other == attacker) continue;
@@ -169,13 +182,62 @@ Entity findTargetAhead(World& world, Entity attacker, bool leftSide,
         const float centreAhead = (targetCenter - attackerCenter) * direction;
         if (centreAhead < 0.0f) continue;  // behind us
 
-        const float gap = centreAhead - (kUnitWidth + targetWidth) / 2.0f;
+        const float gap = centreAhead - (stats.width + targetWidth) / 2.0f;
         if (gap > bestGap) continue;
 
         bestGap = gap;
         best = other;
     }
     return best;
+}
+
+// Is a friendly standing in the way?
+//
+// Without this the whole army occupies one pixel and fights as a single
+// enormous unit, which is exactly why massing was unconditionally correct in
+// slice 2. Queuing means only the front few are ever in contact, so a tenth
+// unit is worth much less than a second one — the diminishing return that
+// makes composition matter more than count.
+//
+// Two details carry all the behaviour:
+//
+//   - Only STOPPED friendlies block. A column in transit flows freely, so a
+//     fast runner can overtake a marching soldier; the queue only forms where
+//     the fighting is.
+//   - A friendly only blocks you if its reach is no longer than yours. That is
+//     what lets a soldier walk past its own archers to reach the enemy, while
+//     archers — which stop far short — never obstruct anybody. Without that
+//     one comparison, the first archer sent would wall in every melee unit
+//     behind it and ranged units would be a trap rather than a support.
+bool blockedByFriendly(World& world, Entity mover, bool leftSide, float moverX,
+                       const UnitKind& stats) {
+    const float direction = facing(leftSide);
+    const float moverCenter = moverX + stats.width / 2.0f;
+
+    for (Entity other : world.entities()) {
+        if (other == mover) continue;
+
+        Unit* otherUnit = world.getComponent<Unit>(other);
+        Team* team = world.getComponent<Team>(other);
+        if (!otherUnit || !team || team->leftSide != leftSide) continue;
+
+        const UnitKind& otherStats = kindOf(otherUnit->kind);
+        if (otherStats.range > stats.range) continue;  // it stops well short of me
+
+        Velocity* velocity = world.getComponent<Velocity>(other);
+        if (!velocity || std::fabs(velocity->dx) > 0.01f) continue;  // still moving
+
+        Transform* transform = world.getComponent<Transform>(other);
+        if (!transform) continue;
+
+        const float otherCenter = transform->x + otherStats.width / 2.0f;
+        const float centreAhead = (otherCenter - moverCenter) * direction;
+        if (centreAhead < 0.0f) continue;  // behind me
+
+        const float gap = centreAhead - (stats.width + otherStats.width) / 2.0f;
+        if (gap < kRankGap) return true;
+    }
+    return false;
 }
 
 void spawnShards(World& world, float x, float y, unsigned char r,
@@ -228,9 +290,15 @@ Entity findCastle(World& world, bool leftSide) {
 }
 
 int countUnits(World& world, bool leftSide) {
+    return countUnitsOfKind(world, leftSide, -1);
+}
+
+int countUnitsOfKind(World& world, bool leftSide, int kind) {
     int count = 0;
     for (Entity entity : world.entities()) {
-        if (!world.hasComponent<Unit>(entity)) continue;
+        Unit* unit = world.getComponent<Unit>(entity);
+        if (!unit) continue;
+        if (kind >= 0 && unit->kind != kind) continue;
         Team* team = world.getComponent<Team>(entity);
         if (team && team->leftSide == leftSide) ++count;
     }
@@ -278,28 +346,38 @@ float frontLineX(World& world, bool leftSide) {
     return leftSide ? kLeftCastleX : kRightCastleX;
 }
 
-Entity spawnUnit(World& world, bool leftSide) {
+Entity spawnUnit(World& world, bool leftSide, int kind) {
+    const UnitKind& stats = kindOf(kind);
     const float x = leftSide ? kLeftSpawnX : kRightSpawnX;
 
     Entity unit = world.createEntity();
-    world.addComponent(unit, Transform{x, kGroundY - kUnitHeight, 0.0f});
-    world.addComponent(unit, Velocity{kUnitSpeed * facing(leftSide), 0.0f});
+    world.addComponent(unit, Transform{x, kGroundY - stats.height, 0.0f});
+    world.addComponent(unit, Velocity{stats.speed * facing(leftSide), 0.0f});
 
     Sprite sprite;
-    sprite.width = static_cast<int>(kUnitWidth);
-    sprite.height = static_cast<int>(kUnitHeight);
+    sprite.width = static_cast<int>(stats.width);
+    sprite.height = static_cast<int>(stats.height);
     if (leftSide) {
-        sprite.r = 110; sprite.g = 190; sprite.b = 240;
+        sprite.r = stats.leftR; sprite.g = stats.leftG; sprite.b = stats.leftB;
     } else {
-        sprite.r = 235; sprite.g = 130; sprite.b = 110;
+        sprite.r = stats.rightR; sprite.g = stats.rightG; sprite.b = stats.rightB;
     }
     sprite.layer = kFieldLayer;
     world.addComponent(unit, sprite);
 
     world.addComponent(unit, Team{leftSide});
-    world.addComponent(unit, Unit{});
 
-    playSpawn();
+    Unit component;
+    component.kind = kind;
+    component.health = stats.health;  // the table is the only source of health
+    world.addComponent(unit, component);
+
+    // A different pitch per kind, so you can hear what you just sent without
+    // looking away from the front line.
+    if (audioDevice) {
+        audioDevice->play(Waveform::Square, 240.0f + 60.0f * static_cast<float>(kind),
+                          0.05f, 0.12f);
+    }
     return unit;
 }
 
@@ -389,13 +467,26 @@ public:
         hud_.push_back(goldText_);
         hud_.push_back(leftHealthText_);
         hud_.push_back(rightHealthText_);
-        // The old hint read "A SPAWNS", which taught the one strategy that
-        // cannot win: spending the instant you can afford to is exactly what
-        // the opponent does, and mirroring it deadlocks the field forever.
-        // Banking for a wave is the actual game, so the hint says so.
-        hud_.push_back(createText(world,
-                                  "A SENDS - SAVE FOR A WAVE - ARROWS LOOK - P PAUSES",
-                                  16, kWindowHeight - 30, 2, 150, 150, 175,
+        popText_ = createText(world, "", 16, 78, 2, 170, 170, 195, kHudLayer);
+        hud_.push_back(popText_);
+
+        // The roster, one line per row of the table, coloured as the units
+        // are. This is the whole interface until slice 4 replaces it with a
+        // clickable bar — and it is the only place the player can learn what
+        // the three types cost.
+        for (int kind = 0; kind < kUnitKindCount; ++kind) {
+            const UnitKind& stats = kUnitKinds[kind];
+            const std::string label = std::to_string(kind + 1) + " " +
+                                      stats.name + " " +
+                                      std::to_string(static_cast<int>(stats.cost));
+            rosterText_[kind] =
+                createText(world, label, 16 + kind * 150, kWindowHeight - 52, 2,
+                           stats.leftR, stats.leftG, stats.leftB, kHudLayer);
+            hud_.push_back(rosterText_[kind]);
+        }
+
+        hud_.push_back(createText(world, "ARROWS LOOK - P PAUSES", 16,
+                                  kWindowHeight - 28, 2, 150, 150, 175,
                                   kHudLayer));
 
         buildMinimap(world);
@@ -423,6 +514,7 @@ public:
         snapCameraToTarget(world);
         overlayShown_ = false;
         shownGold_ = -1;
+        shownPopulation_ = -1;
     }
 
     void update(World& world, InputManager& input, float dt,
@@ -516,23 +608,72 @@ private:
 
     void handleSpawning(World& world, Session& session, InputManager& input,
                         float dt) {
+        handlePlayerSpawning(world, session, input, dt);
+        handleEnemySpawning(world, session, dt);
+    }
+
+    void handlePlayerSpawning(World& world, Session& session,
+                              InputManager& input, float dt) {
         session.spawnCooldown -= dt;
-        if (input.isKeyDown(SDL_SCANCODE_A) && session.spawnCooldown <= 0.0f &&
-            session.gold >= kUnitCost) {
-            session.gold -= kUnitCost;
+        if (session.spawnCooldown > 0.0f) return;
+        if (countUnits(world, true) >= kPopulationCap) return;
+
+        // One key per row of the table, so adding a fourth unit type is a
+        // table row and one scancode rather than a change to any rule.
+        static const SDL_Scancode keys[] = {SDL_SCANCODE_1, SDL_SCANCODE_2,
+                                            SDL_SCANCODE_3, SDL_SCANCODE_4};
+        for (int kind = 0; kind < kUnitKindCount && kind < 4; ++kind) {
+            if (!input.isKeyDown(keys[kind])) continue;
+            if (session.gold < kUnitKinds[kind].cost) continue;
+
+            session.gold -= kUnitKinds[kind].cost;
             session.spawnCooldown = kSpawnCooldown;
-            spawnUnit(world, true);
+            spawnUnit(world, true, kind);
+            return;  // one per cooldown, whatever else is held down
+        }
+    }
+
+    // The opponent, playing by the same rules from the same purse.
+    //
+    // It banks for a whole wave before spending any of it, because measuring
+    // slice 2 showed that spending on sight loses to anyone who doesn't: the
+    // two front lines mirror each other and nothing ever moves. Now that both
+    // sides bank, the player has to beat it on composition instead.
+    void handleEnemySpawning(World& world, Session& session, float dt) {
+        session.enemySpawnTimer -= dt;
+
+        if (session.enemyWaveRemaining <= 0) {
+            if (session.enemyGold >= waveCost(session)) {
+                session.enemyWaveRemaining = kEnemyWaveSize;
+            }
+            return;
         }
 
-        // The opponent, playing by the same rules from the same purse. Its
-        // whole strategy is "spend as soon as you can", which is a decent
-        // baseline and leaves difficulty as one multiplier on its income.
-        session.enemySpawnTimer -= dt;
-        if (session.enemySpawnTimer <= 0.0f && session.enemyGold >= kUnitCost) {
-            session.enemyGold -= kUnitCost;
-            session.enemySpawnTimer = kSpawnCooldown;
-            spawnUnit(world, false);
+        if (session.enemySpawnTimer > 0.0f) return;
+        if (countUnits(world, false) >= kPopulationCap) return;
+
+        const int kind = kEnemyComposition[session.enemyWaveIndex %
+                                           kEnemyCompositionLength];
+        if (session.enemyGold < kUnitKinds[kind].cost) return;
+
+        session.enemyGold -= kUnitKinds[kind].cost;
+        session.enemySpawnTimer = kSpawnCooldown;
+        session.enemyWaveIndex =
+            (session.enemyWaveIndex + 1) % kEnemyCompositionLength;
+        --session.enemyWaveRemaining;
+        spawnUnit(world, false, kind);
+    }
+
+    // What the next whole wave costs, reading forward through the cycle from
+    // wherever it currently is.
+    static float waveCost(const Session& session) {
+        float total = 0.0f;
+        for (int step = 0; step < kEnemyWaveSize; ++step) {
+            const int index = (session.enemyWaveIndex + step) %
+                              kEnemyCompositionLength;
+            total += kUnitKinds[kEnemyComposition[index]].cost;
         }
+        return total;
     }
 
     // Each unit either walks or fights, never both.
@@ -552,12 +693,17 @@ private:
             Velocity* velocity = world.getComponent<Velocity>(attacker);
             if (!unit || !team || !at || !velocity) continue;
 
+            const UnitKind& stats = kindOf(unit->kind);
             const Entity target =
-                findTargetAhead(world, attacker, team->leftSide, at->x);
+                findTargetAhead(world, attacker, team->leftSide, at->x, stats);
 
             if (target == kInvalidEntity) {
-                // Nothing in reach: march. The engine does the moving.
-                velocity->dx = kUnitSpeed * facing(team->leftSide);
+                // Nothing in reach. March, unless one of our own is in the
+                // way — in which case wait our turn rather than standing
+                // inside them.
+                const bool queued = blockedByFriendly(world, attacker,
+                                                      team->leftSide, at->x, stats);
+                velocity->dx = queued ? 0.0f : stats.speed * facing(team->leftSide);
                 continue;
             }
 
@@ -565,13 +711,13 @@ private:
             unit->timeUntilAttack -= dt;
             if (unit->timeUntilAttack > 0.0f) continue;
 
-            unit->timeUntilAttack = kUnitAttackDelay;
+            unit->timeUntilAttack = stats.attackDelay;
 
             if (Unit* victim = world.getComponent<Unit>(target)) {
-                victim->health -= kUnitDamage;
+                victim->health -= stats.damage;
                 playHit();
             } else if (Castle* castle = world.getComponent<Castle>(target)) {
-                castle->health -= kUnitDamage;
+                castle->health -= stats.damage;
                 playCastleHit();
                 if (castle->health <= 0.0f) {
                     Team* castleTeam = world.getComponent<Team>(target);
@@ -585,15 +731,27 @@ private:
     }
 
     void removeTheDead(World& world, Session& session) {
-        (void)session;
         for (Entity entity : world.entities()) {
             Unit* unit = world.getComponent<Unit>(entity);
             if (!unit || unit->health > 0.0f) continue;
 
+            // Whoever killed it gets paid. The bounty is a share of what the
+            // casualty cost its owner, so trading cheap units for expensive
+            // ones is profitable and trading the other way is not.
+            const float bounty = kindOf(unit->kind).cost * kKillRewardFraction;
+            if (Team* team = world.getComponent<Team>(entity)) {
+                if (team->leftSide) {
+                    session.enemyGold += bounty;
+                } else {
+                    session.gold += bounty;
+                }
+            }
+
             if (Transform* at = world.getComponent<Transform>(entity)) {
+                const UnitKind& stats = kindOf(unit->kind);
                 Sprite* sprite = world.getComponent<Sprite>(entity);
-                spawnShards(world, at->x + kUnitWidth / 2.0f,
-                            at->y + kUnitHeight / 2.0f,
+                spawnShards(world, at->x + stats.width / 2.0f,
+                            at->y + stats.height / 2.0f,
                             sprite ? sprite->r : 200, sprite ? sprite->g : 200,
                             sprite ? sprite->b : 200);
             }
@@ -718,6 +876,28 @@ private:
             shownGold_ = gold;
         }
 
+        const int fielded = countUnits(world, true);
+        if (fielded != shownPopulation_) {
+            if (Text* text = world.getComponent<Text>(popText_)) {
+                text->value = "UNITS " + std::to_string(fielded) + "/" +
+                              std::to_string(kPopulationCap);
+            }
+            shownPopulation_ = fielded;
+        }
+
+        // Dim whatever you cannot currently buy, so affordability is readable
+        // without doing arithmetic against the gold counter.
+        for (int kind = 0; kind < kUnitKindCount; ++kind) {
+            Text* text = world.getComponent<Text>(rosterText_[kind]);
+            if (!text) continue;
+            const UnitKind& stats = kUnitKinds[kind];
+            const bool affordable = session.gold >= stats.cost &&
+                                    fielded < kPopulationCap;
+            text->r = affordable ? stats.leftR : 90;
+            text->g = affordable ? stats.leftG : 90;
+            text->b = affordable ? stats.leftB : 105;
+        }
+
         updateHealthText(world, leftHealthText_, "YOU  ", true);
         updateHealthText(world, rightHealthText_, "ENEMY ", false);
     }
@@ -738,6 +918,8 @@ private:
     Entity sessionEntity_ = kInvalidEntity;
     Entity cameraEntity_ = kInvalidEntity;
     Entity goldText_ = kInvalidEntity;
+    Entity popText_ = kInvalidEntity;
+    Entity rosterText_[kUnitKindCount] = {};
     Entity leftHealthText_ = kInvalidEntity;
     Entity rightHealthText_ = kInvalidEntity;
     Entity minimapLeftCastle_ = kInvalidEntity;
@@ -747,6 +929,7 @@ private:
     std::vector<Entity> field_;
     std::vector<Entity> hud_;
     int shownGold_ = -1;
+    int shownPopulation_ = -1;
     bool overlayShown_ = false;
 };
 
@@ -755,10 +938,12 @@ public:
     void onEnter(World& world) override {
         owned_.push_back(createCenteredText(world, "LANE BATTLE", 110, 8,
                                             220, 200, 140, kHudLayer));
-        owned_.push_back(createCenteredText(world, "SEND UNITS RIGHT", 220, 2,
-                                            200, 200, 215, kHudLayer));
+        owned_.push_back(createCenteredText(world, "1 RUNNER  2 SOLDIER  3 ARCHER",
+                                            210, 2, 200, 200, 215, kHudLayer));
+        owned_.push_back(createCenteredText(world, "ARCHERS NEED A FRONT LINE",
+                                            240, 2, 170, 170, 195, kHudLayer));
         owned_.push_back(createCenteredText(world, "BREAK THE ENEMY CASTLE",
-                                            250, 2, 170, 170, 195, kHudLayer));
+                                            270, 2, 170, 170, 195, kHudLayer));
         owned_.push_back(createCenteredText(world, "SPACE TO START", 350, 3,
                                             235, 235, 235, kHudLayer));
         owned_.push_back(createCenteredText(world, "Q TO QUIT", 400, 2,
