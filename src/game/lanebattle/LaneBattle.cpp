@@ -58,9 +58,6 @@ const UnitKind& kindOf(World& world, Entity entity) {
 
 // --- Sound -----------------------------------------------------------------
 
-void playSpawn() {
-    if (audioDevice) audioDevice->play(Waveform::Square, 300.0f, 0.05f, 0.12f);
-}
 
 void playHit() {
     if (audioDevice) audioDevice->play(Waveform::Noise, 0.0f, 0.04f, 0.07f);
@@ -221,6 +218,17 @@ Entity findTargetAhead(World& world, Entity attacker, bool leftSide,
         const float gap = centreAhead - (stats.width + targetWidth) / 2.0f;
         if (gap > bestGap) return;
 
+        // An exact tie goes to the lower entity id rather than to whichever
+        // the pool happened to yield first.
+        //
+        // These pools are hash maps, so "first" is an implementation detail
+        // that differs between standard libraries — the same battle could pick
+        // a different target on Linux than on Windows. Nothing currently
+        // depends on the choice, which is exactly why it would have been an
+        // unpleasant surprise later: the bug would arrive on a platform this
+        // machine cannot run, in a test that passes here every time.
+        if (gap == bestGap && best != kInvalidEntity && other > best) return;
+
         bestGap = gap;
         best = other;
     };
@@ -372,6 +380,12 @@ namespace {
 std::vector<UnitKind> gUnitKinds(std::begin(kDefaultUnitKinds),
                                  std::end(kDefaultUnitKinds));
 
+// A fixed array rather than a vector, because a file can retune an upgrade but
+// never add one — see the note in the header about what a data file is allowed
+// to change and why.
+UpgradeKind gUpgrades[kUpgradeCount] = {
+    kDefaultUpgrades[0], kDefaultUpgrades[1], kDefaultUpgrades[2]};
+
 // Names are matched case-sensitively and exactly. A file naming a unit that
 // does not exist is adding one, not misspelling one — there is no way to tell
 // the difference, so the friendlier reading wins.
@@ -387,8 +401,6 @@ int indexOfName(const std::string& name) {
 std::vector<std::unique_ptr<std::string>> gLoadedNames;
 }  // namespace
 
-const std::vector<UnitKind>& unitKinds() { return gUnitKinds; }
-
 const UnitKind& unitKind(int kind) {
     if (kind < 0) return gUnitKinds.front();
     if (static_cast<std::size_t>(kind) >= gUnitKinds.size()) {
@@ -402,6 +414,9 @@ int unitKindCount() { return static_cast<int>(gUnitKinds.size()); }
 void resetBalance() {
     gUnitKinds.assign(std::begin(kDefaultUnitKinds), std::end(kDefaultUnitKinds));
     gLoadedNames.clear();
+    for (int index = 0; index < kUpgradeCount; ++index) {
+        gUpgrades[index] = kDefaultUpgrades[index];
+    }
 }
 
 bool loadBalance(const std::string& path) {
@@ -442,6 +457,24 @@ bool loadBalance(const std::string& path) {
         kind.rightR = channel(*section, "right_r", kind.rightR);
         kind.rightG = channel(*section, "right_g", kind.rightG);
         kind.rightB = channel(*section, "right_b", kind.rightB);
+    }
+
+    // Upgrades are matched by name against a fixed set rather than appended:
+    // each one has its own rule in code, so a file naming an upgrade the game
+    // does not have is a typo, not a new feature, and is ignored.
+    for (const DataSection* section : file.all("upgrade")) {
+        const std::string name = section->text("name", "");
+        for (int index = 0; index < kUpgradeCount; ++index) {
+            if (name != gUpgrades[index].name) continue;
+
+            gUpgrades[index].baseCost =
+                section->number("cost", gUpgrades[index].baseCost);
+            gUpgrades[index].costGrowth =
+                section->number("growth", gUpgrades[index].costGrowth);
+            gUpgrades[index].effect =
+                section->number("effect", gUpgrades[index].effect);
+            break;
+        }
     }
     return true;
 }
@@ -550,9 +583,15 @@ void animateUnits(World& world, float dt) {
 
 // --- Upgrades --------------------------------------------------------------
 
+const UpgradeKind& upgradeKind(int upgrade) {
+    if (upgrade < 0) return gUpgrades[0];
+    if (upgrade >= kUpgradeCount) return gUpgrades[kUpgradeCount - 1];
+    return gUpgrades[upgrade];
+}
+
 float upgradeCost(int upgrade, int owned) {
     if (upgrade < 0 || upgrade >= kUpgradeCount) return 0.0f;
-    const UpgradeKind& kind = kDefaultUpgrades[upgrade];
+    const UpgradeKind& kind = upgradeKind(upgrade);
 
     float cost = kind.baseCost;
     for (int level = 0; level < owned; ++level) cost *= kind.costGrowth;
@@ -571,17 +610,23 @@ const int* upgradesOf(const Session& session, bool leftSide) {
 
 float goldPerSecondFor(const Session& session, bool leftSide) {
     const int levels = upgradesOf(session, leftSide)[static_cast<int>(Upgrade::Income)];
-    return kGoldPerSecond + kIncomePerLevel * static_cast<float>(levels);
+    return kGoldPerSecond +
+           upgradeKind(static_cast<int>(Upgrade::Income)).effect *
+               static_cast<float>(levels);
 }
 
 int populationCapFor(const Session& session, bool leftSide) {
     const int levels = upgradesOf(session, leftSide)[static_cast<int>(Upgrade::Supply)];
-    return kPopulationCap + kSupplyPerLevel * levels;
+    return kPopulationCap +
+           static_cast<int>(upgradeKind(static_cast<int>(Upgrade::Supply)).effect) *
+               levels;
 }
 
 float castleMaxHealthFor(const Session& session, bool leftSide) {
     const int levels = upgradesOf(session, leftSide)[static_cast<int>(Upgrade::Walls)];
-    return kCastleHealth + kWallsPerLevel * static_cast<float>(levels);
+    return kCastleHealth +
+           upgradeKind(static_cast<int>(Upgrade::Walls)).effect *
+               static_cast<float>(levels);
 }
 
 int upgradeAt(float screenX, float screenY) {
@@ -1085,7 +1130,7 @@ private:
         if (index == static_cast<int>(Upgrade::Walls)) {
             const Entity castle = findCastle(world, leftSide);
             if (Castle* health = world.getComponent<Castle>(castle)) {
-                health->health += kWallsPerLevel;
+                health->health += upgradeKind(index).effect;
             }
         }
 
@@ -1569,7 +1614,7 @@ private:
             const bool affordable = session.gold >= cost;
 
             if (Text* text = world.getComponent<Text>(upgradeText_[index])) {
-                text->value = std::string(kDefaultUpgrades[index].name) + " " +
+                text->value = std::string(upgradeKind(index).name) + " " +
                               std::to_string(owned) + "  " +
                               std::to_string(static_cast<int>(cost));
                 text->r = affordable ? 210 : 95;

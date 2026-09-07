@@ -268,17 +268,30 @@ void Engine::drawTextComponent(World& world, Entity entity,
         text.scale, SDL_Color{text.r, text.g, text.b, text.a});
 }
 
-// Draws a string one font pixel at a time, each as a filled rectangle — the
-// same call used for sprites, so text needs no texture and no font file.
+// Draws a string as filled rectangles, one per lit font pixel — the same call
+// used for sprites, so text needs no texture and no font file.
 //
-// This is not how you'd draw a page of text: a 20-character line at scale 3
-// is a few hundred draw calls. For a score and a couple of menu labels that
-// is irrelevant, and the fix when it stops being irrelevant is well trodden
-// (batch the rects into one SDL_RenderFillRects call, or bake the glyphs into
-// a texture atlas once at startup).
+// The rects for a whole string are gathered first and handed to SDL in ONE
+// call. That was not the original shape: it drew each pixel with its own
+// SDL_RenderFillRect, and a comment here said the fix was well trodden and not
+// yet worth doing. It became worth doing when the fourth game's HUD reached
+// about 187 characters on screen at once — roughly 3,200 draw calls a frame,
+// or 190,000 a second, to render a scoreboard.
+//
+// Batching turns that into one call per string, about 17 of them. The pixels
+// drawn are identical; only the number of times SDL is asked to draw them
+// changes. The other well-trodden fix — baking the glyphs into a texture atlas
+// at startup — would be faster still and is not worth the machinery: this is
+// now far below the cost of everything else on screen.
+//
+// The scratch buffer is a member rather than a local so the allocation happens
+// once rather than once per string per frame.
 void Engine::drawText(const std::string& text, int x, int y, int scale,
                       SDL_Color color) {
     SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
+
+    glyphRects_.clear();
+    glyphRects_.reserve(text.size() * kGlyphWidth * kGlyphHeight);
 
     int cursorX = x;
     for (char character : text) {
@@ -287,14 +300,16 @@ void Engine::drawText(const std::string& text, int x, int y, int scale,
         for (int row = 0; row < kGlyphHeight; ++row) {
             for (int col = 0; col < kGlyphWidth; ++col) {
                 if (!glyphPixel(glyph, col, row)) continue;
-
-                SDL_Rect pixel{cursorX + col * scale, y + row * scale, scale,
-                               scale};
-                SDL_RenderFillRect(renderer_, &pixel);
+                glyphRects_.push_back(SDL_Rect{cursorX + col * scale,
+                                               y + row * scale, scale, scale});
             }
         }
         cursorX += (kGlyphWidth + kGlyphSpacing) * scale;
     }
+
+    if (glyphRects_.empty()) return;  // an empty string, or all spaces
+    SDL_RenderFillRects(renderer_, glyphRects_.data(),
+                        static_cast<int>(glyphRects_.size()));
 }
 
 void Engine::run(World& world, const UpdateFn& onUpdate) {

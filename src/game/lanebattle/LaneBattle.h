@@ -106,7 +106,6 @@ constexpr int kDefaultUnitKindCount =
 
 // The live roster. A file may override rows and append new ones, so both the
 // contents and the count are runtime values now.
-const std::vector<UnitKind>& unitKinds();
 const UnitKind& unitKind(int kind);  // clamped; never indexes off the end
 int unitKindCount();
 
@@ -203,6 +202,13 @@ constexpr float kCannonGravity = 900.0f;  // pixels per second per second
 // opponent with a different economy made slice 1 unwinnable, and an opponent
 // with no strategy made slice 3 a mirror. An opponent that cannot upgrade
 // would lose every long game by construction.
+// The roster is a runtime list because a data file may add unit types: the
+// game treats every row the same way, so a fourth kind needs a table row and
+// nothing else. Upgrades are not like that. Each one has its own rule written
+// in code — INCOME changes a rate, WALLS heals a castle, SUPPLY raises a cap —
+// and there is no generic "apply upgrade N". So their COUNT is fixed while
+// their NUMBERS are data, and that is a distinction rather than an
+// inconsistency: what a file can change is what the code treats uniformly.
 enum class Upgrade { Income, Walls, Supply, Count };
 constexpr int kUpgradeCount = static_cast<int>(Upgrade::Count);
 
@@ -210,17 +216,18 @@ struct UpgradeKind {
     const char* name;
     float baseCost;
     float costGrowth;  // multiplied in per level already bought
+    float effect;      // per level: gold/second, castle health, or unit slots
 };
 
 constexpr UpgradeKind kDefaultUpgrades[] = {
-    {"INCOME", 120.0f, 1.65f},
-    {"WALLS",  150.0f, 1.70f},
-    {"SUPPLY", 200.0f, 1.85f},
+    {"INCOME", 120.0f, 1.65f,   4.0f},   // extra gold per second
+    {"WALLS",  150.0f, 1.70f, 260.0f},   // extra castle health, healed on purchase
+    {"SUPPLY", 200.0f, 1.85f,   3.0f},   // extra population slots
 };
 
-constexpr float kIncomePerLevel = 4.0f;      // extra gold per second
-constexpr float kWallsPerLevel = 260.0f;     // extra castle health, healed on purchase
-constexpr int kSupplyPerLevel = 3;           // extra population slots
+// The live upgrade table, which `assets/lanebattle/units.txt` may retune
+// through `[upgrade]` sections exactly as it retunes units.
+const UpgradeKind& upgradeKind(int upgrade);
 
 // How many units one side may have on the field at once, before SUPPLY.
 //

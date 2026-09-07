@@ -320,6 +320,75 @@ or not the shot could reach. The test was measuring the lead error, not the
 clamp. It now aims with lead, so the only thing that stops the shell is the
 range it was supposed to be testing.
 
+## An audit before slice 9
+
+Eight slices in, a pass over the whole thing looking for what was broken or
+slow. The headline is that **nothing needed optimising**, and that is a
+measurement rather than an opinion:
+
+    a full 195-second battle: 11672 frames in 484 ms
+    = 0.0415 ms per frame = 0.25% of a 16.6 ms budget
+    peak 141 entities, peak 16 units
+
+`engine_bench` says nothing useful about this game — it measures
+`CollisionSystem`, which Lane Battle deliberately does not use. The O(n²)
+targeting scan that slice 13 earmarks for a spatial grid costs a quarter of one
+percent of a frame. **That slice is not owed and will not be until unit counts
+are ten times higher.**
+
+Five things were fixed.
+
+**1. Text rendering was batched.** The bitmap font drew one
+`SDL_RenderFillRect` per lit pixel, and a comment in `Engine.cpp` had said for
+four games that the fix was well trodden and not yet worth doing. It became
+worth doing when the fourth game's HUD reached about 187 characters on screen —
+roughly 3,200 draw calls a frame, 190,000 a second, to render a scoreboard. The
+rects for a string are now gathered and handed to SDL in one
+`SDL_RenderFillRects`: about 17 calls a frame instead of 3,200, drawing exactly
+the same pixels. This is the only part of the audit that could not be measured
+here, because there is no window in a test.
+
+**2. Two pieces of dead code removed.** `playSpawn()` was orphaned in slice 3
+when spawn sounds became per-unit-kind; `unitKinds()` was an accessor added in
+slice 7 that nothing ever called. Neither produced a compiler warning.
+
+**3. Target ties are now decided by the lower entity id.** The targeting scans
+walk hash maps, so "the first one found" is an implementation detail that
+differs between standard libraries — the same battle could pick a different
+target on Linux than on Windows. Nothing depended on it, which is exactly why
+it would have been unpleasant later: the bug arrives on a platform this machine
+cannot run, in a test that passes here every time.
+
+The first test written for this was worthless and the mutation said so. It ran
+the same scenario six times and checked the answers agreed — which they did
+with or without the rule, because hash order on one machine is already stable.
+The test now asserts the guarantee itself: the lower id wins, with padding
+entities to shift the pair between attempts.
+
+**4. Upgrade numbers moved into the data file**, alongside the unit stats, via
+`[upgrade]` sections. Their COUNT stays fixed, and that is a distinction rather
+than an inconsistency: the roster can grow because the game treats every unit
+row the same way, whereas each upgrade has its own rule in code — INCOME
+changes a rate, WALLS heals a castle, SUPPLY raises a cap — and there is no
+generic "apply upgrade N". A file naming an upgrade the game does not have is
+a typo, not a feature, and is ignored.
+
+**5. `testTheShippedRosterIsSane` was reconsidered and left alone.** The worry
+was that it depends on CMake copying assets next to the test binary, verified
+only on Windows. Re-reading it, a failed copy produces exactly one clear
+failure — "the shipped roster file is where the game expects it" — and the
+content checks then run against the compiled defaults and pass. The failure
+mode was already precise. The risk was overstated.
+
+Two things were looked at and deliberately not changed:
+
+- **`TickTimer` has no live consumer.** Snake used it and Snake is archived.
+  It is tested, it is v1.0, and a fixed timestep is real engine knowledge;
+  deleting it would tidy away the thing the archive exists to preserve.
+- **`frontLineX`'s final fallback is unreachable and mutation-proof.** It is a
+  `return` the compiler requires, and it is commented as such rather than left
+  looking covered.
+
 ## The open question, answered — and then answered again
 
 **Slice 2's verdict: it was not fun, and the reason was not the camera.**

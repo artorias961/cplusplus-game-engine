@@ -70,3 +70,32 @@ left_b       = 210
 right_r      = 200
 right_g      = 95
 right_b      = 130
+
+# ---------------------------------------------------------------------------
+# The in-battle upgrades. Unlike units these cannot be added — each one has its
+# own rule in code (INCOME changes a rate, WALLS heals a castle, SUPPLY raises
+# the population cap), so a name the game does not know is ignored rather than
+# creating a fourth upgrade that would do nothing.
+#
+#   cost   what the first level costs
+#   growth what each level multiplies the next one's price by
+#   effect what one level is worth: gold/second, castle health, or unit slots
+# ---------------------------------------------------------------------------
+
+[upgrade]
+name   = INCOME
+cost   = 120
+growth = 1.65
+effect = 4
+
+[upgrade]
+name   = WALLS
+cost   = 150
+growth = 1.70
+effect = 260
+
+[upgrade]
+name   = SUPPLY
+cost   = 200
+growth = 1.85
+effect = 3

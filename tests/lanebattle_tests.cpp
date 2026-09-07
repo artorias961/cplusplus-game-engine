@@ -10,6 +10,7 @@
 // the game yet, so every test here is exactly reproducible.
 // ---------------------------------------------------------------------------
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -778,6 +779,44 @@ void testMeleeWalksPastItsOwnArchers() {
           "a soldier walks past its own archers to reach the enemy");
     check(std::fabs(game.world.getComponent<Velocity>(soldier)->dx) < 0.01f,
           "and stops because the castle is in reach, not because a friend is");
+}
+
+// Two identical enemies at exactly the same distance: whichever is chosen, the
+// choice must not depend on hash order. It would differ between standard
+// libraries, so the same battle could play out differently on Linux than on
+// Windows — a bug that arrives on a platform this machine cannot run, in a
+// test that passes here every time.
+// Checking that repeated runs agree proves nothing: on any one machine the
+// hash order is already stable, so a run-to-run test passes with or without
+// the rule. What is actually guaranteed — and what differs between standard
+// libraries if it is not — is WHICH of the two is picked. So this asserts the
+// rule itself: the lower entity id wins. Padding shifts the ids between
+// attempts so the pair is not the same two numbers each time.
+void testTargetTiesGoToTheLowerEntityId() {
+    for (int padding = 0; padding < 5; ++padding) {
+        Game game;
+        game.startPlaying();
+        game.suppressEnemySpawns();
+
+        for (int pad = 0; pad < padding; ++pad) game.world.createEntity();
+
+        const Entity attacker = lanebattle::spawnUnit(game.world, true, kSoldier);
+        const Entity first = lanebattle::spawnUnit(game.world, false, kSoldier);
+        const Entity second = lanebattle::spawnUnit(game.world, false, kSoldier);
+
+        game.world.getComponent<Transform>(attacker)->x = 500.0f;
+        game.world.getComponent<Transform>(first)->x = 520.0f;
+        game.world.getComponent<Transform>(second)->x = 520.0f;
+        game.driver.step(2);
+
+        const Entity lower = std::min(first, second);
+        const Entity higher = std::max(first, second);
+        check(game.world.getComponent<Unit>(lower)->health < stats(kSoldier).health,
+              "an exact tie is decided in favour of the lower entity id");
+        check(std::fabs(game.world.getComponent<Unit>(higher)->health -
+                        stats(kSoldier).health) < 0.01f,
+              "and the other one is left alone");
+    }
 }
 
 void testArchersOutrangeSoldiers() {
@@ -1892,6 +1931,68 @@ void testBuyingWallsHealsTheCastle() {
 
 // An opponent that cannot upgrade loses every long game by construction — the
 // same shape of asymmetry that made slice 1 unwinnable.
+// Upgrade numbers are data, exactly as unit stats are. What a file may NOT do
+// is add an upgrade: each one has its own rule in code, so a name the game
+// does not know is a typo rather than a fourth feature.
+void testUpgradesAreDataDriven() {
+    lanebattle::resetBalance();
+    const float defaultCost = lanebattle::upgradeCost(0, 0);
+
+    const std::string path = writeRoster("lb_upgrades.txt", R"(
+[upgrade]
+name   = INCOME
+cost   = 40
+effect = 11
+
+[upgrade]
+name   = NOT_A_REAL_UPGRADE
+cost   = 1
+)");
+    check(lanebattle::loadBalance(path), "the file loaded");
+
+    const int income = static_cast<int>(lanebattle::Upgrade::Income);
+    check(lanebattle::upgradeCost(income, 0) == 40.0f,
+          "a file can retune what an upgrade costs");
+    check(lanebattle::upgradeKind(income).effect == 11.0f,
+          "and what one level of it is worth");
+    check(lanebattle::upgradeKind(income).costGrowth ==
+              lanebattle::kDefaultUpgrades[income].costGrowth,
+          "while a field it does not mention keeps its value");
+    check(lanebattle::kUpgradeCount == 3,
+          "and an unrecognised upgrade name adds nothing");
+
+    lanebattle::resetBalance();
+    check(lanebattle::upgradeCost(0, 0) == defaultCost,
+          "resetting puts the upgrade table back too");
+}
+
+// The effect a file sets is the effect the game plays with, not just the one
+// the panel prints. Worth its own case: reading the table in the UI and
+// hard-coding it in the rules would look right and play wrong.
+void testARetunedUpgradeActuallyChangesTheGame() {
+    lanebattle::resetBalance();
+    const std::string path = writeRoster("lb_bigsupply.txt", R"(
+[upgrade]
+name   = SUPPLY
+effect = 25
+)");
+    check(lanebattle::loadBalance(path), "the file loaded");
+
+    World world;
+    SceneStack scenes;
+    harness::Harness driver(world, scenes);
+    scenes.push(lanebattle::makePlayScene());
+    driver.step(2);
+
+    Session* session = lanebattle::findSession(world);
+    const int base = lanebattle::populationCapFor(*session, true);
+    session->upgrades[static_cast<int>(lanebattle::Upgrade::Supply)] = 1;
+    check(lanebattle::populationCapFor(*session, true) == base + 25,
+          "one level of a retuned SUPPLY is worth what the file says");
+
+    lanebattle::resetBalance();
+}
+
 void testTheEnemyUpgradesToo() {
     Game game;
     game.startPlaying();
@@ -2029,6 +2130,7 @@ int main() {
     testUnitsHoldRank();
     testMeleeWalksPastItsOwnArchers();
     testArchersOutrangeSoldiers();
+    testTargetTiesGoToTheLowerEntityId();
     testKillsPayGold();
 
     testButtonHitTesting();
@@ -2077,6 +2179,8 @@ int main() {
     testUpgradeHitTesting();
     testIncomeSupplyAndWallsAllDoSomething();
     testBuyingWallsHealsTheCastle();
+    testUpgradesAreDataDriven();
+    testARetunedUpgradeActuallyChangesTheGame();
     testTheEnemyUpgradesToo();
 
     testABattleCanBeWon();

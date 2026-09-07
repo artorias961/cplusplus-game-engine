@@ -102,6 +102,7 @@ private:
     // reuse their capacity instead of reallocating sixty times a second.
     std::vector<DrawItem> drawList_;
     std::vector<SDL_FPoint> polygonPoints_;
+    std::vector<SDL_Rect> glyphRects_;  // one string's pixels, drawn in one call
 };
 
 }  // namespace engine

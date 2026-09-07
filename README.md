@@ -73,7 +73,7 @@ engine_project/
 │   ├── DataFile.h      Reading balance tables out of a text file
 │   ├── View.h          World coordinates -> screen coordinates, given a Camera
 │   ├── Scene.h         Scene + SceneStack (menu / playing / paused / ...)
-│   ├── Font.h          A 5x7 bitmap font, built into the binary
+│   ├── Font.h          A 5x7 bitmap font, built into the binary (batched draws)
 │   ├── Audio.h         Sound synthesised in code; no files, no SDL_mixer
 │   ├── Resources.h     TextureCache (load each image once, own it)
 │   ├── Input.h         InputManager (keys and mouse: held, and just pressed)
@@ -99,7 +99,7 @@ engine_project/
 ├── run.sh              The same, for Linux and macOS
 ├── assets/
 │   ├── asteroids.png   Ship icon + rock, for the HUD and title screen
-│   └── lanebattle/units.txt   Lane Battle's roster; edit it, no rebuild
+│   └── lanebattle/units.txt   Lane Battle's roster and upgrades; edit, no rebuild
 └── archive/
     ├── version_1/      Snake: the first engine, frozen
     └── version2/       This release (v1.0), frozen
@@ -732,9 +732,16 @@ camera's movement, and in front of them grass at 1.30 — faster than the ground
 which is what sells depth in the other direction.
 
 The roster lives in `assets/lanebattle/units.txt`. Edit it and run the game —
-no compiler involved. It can change any stat of any unit and add whole new unit
-types; anything it leaves out keeps the value compiled into the header, and
-deleting the file entirely just puts everything back to those defaults.
+no compiler involved. It can change any stat of any unit, add whole new unit
+types, and retune what the three upgrades cost and are worth. Anything it
+leaves out keeps the value compiled into the header, and deleting the file
+entirely just puts everything back to those defaults.
+
+It can add units but not upgrades, which is a distinction rather than an
+oversight: every unit row is handled the same way by the same code, whereas
+each upgrade has its own rule — one changes a rate, one heals a castle, one
+raises a cap. A file can change what those rules are worth, not invent a
+fourth one.
 
 The cannon only reaches 420 pixels from your own castle, so it is a defence
 rather than a way to shell the enemy from home — and each shot costs gold you
