@@ -52,6 +52,15 @@ target_link_libraries(breakout_lib PUBLIC engine)
 add_executable(breakout "${CMAKE_SOURCE_DIR}/src/game/breakout/main.cpp")
 target_link_libraries(breakout PRIVATE breakout_lib)
 
+add_library(lanebattle_lib STATIC
+    "${CMAKE_SOURCE_DIR}/src/game/lanebattle/LaneBattle.cpp")
+target_include_directories(lanebattle_lib PUBLIC
+    "${CMAKE_SOURCE_DIR}/src/game/lanebattle")
+target_link_libraries(lanebattle_lib PUBLIC engine)
+
+add_executable(lanebattle "${CMAKE_SOURCE_DIR}/src/game/lanebattle/main.cpp")
+target_link_libraries(lanebattle PRIVATE lanebattle_lib)
+
 # --- Tests ------------------------------------------------------------------
 add_executable(engine_tests "${CMAKE_SOURCE_DIR}/tests/engine_tests.cpp")
 target_link_libraries(engine_tests PRIVATE engine)
@@ -66,6 +75,10 @@ target_link_libraries(breakout_tests PRIVATE breakout_lib)
 add_executable(engine_bench "${CMAKE_SOURCE_DIR}/tests/engine_bench.cpp")
 target_link_libraries(engine_bench PRIVATE engine)
 
+add_executable(lanebattle_tests "${CMAKE_SOURCE_DIR}/tests/lanebattle_tests.cpp")
+target_include_directories(lanebattle_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")
+target_link_libraries(lanebattle_tests PRIVATE lanebattle_lib)
+
 add_executable(asteroids_tests "${CMAKE_SOURCE_DIR}/tests/asteroids_tests.cpp")
 target_include_directories(asteroids_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")
 target_link_libraries(asteroids_tests PRIVATE asteroids_lib)
@@ -76,9 +89,11 @@ enable_testing()
 add_test(NAME engine_tests COMMAND engine_tests)
 add_test(NAME breakout_tests COMMAND breakout_tests)
 add_test(NAME asteroids_tests COMMAND asteroids_tests)
+add_test(NAME lanebattle_tests COMMAND lanebattle_tests)
 
 foreach(target engine asteroids_lib asteroids breakout_lib breakout
-                engine_tests breakout_tests asteroids_tests engine_bench)
+                lanebattle_lib lanebattle engine_tests breakout_tests
+                asteroids_tests lanebattle_tests engine_bench)
     if (MSVC)
         target_compile_options(${target} PRIVATE /W4)
     else()
@@ -134,6 +149,7 @@ if (SDL2_FOUND)
     if (TARGET SDL2::SDL2main)
         target_link_libraries(asteroids PRIVATE SDL2::SDL2main)
         target_link_libraries(breakout PRIVATE SDL2::SDL2main)
+        target_link_libraries(lanebattle PRIVATE SDL2::SDL2main)
     endif()
 else()
     find_package(PkgConfig REQUIRED)

@@ -9,6 +9,7 @@ rem
 rem From a terminal you can skip the menu:
 rem     run.bat asteroids
 rem     run.bat breakout
+rem     run.bat lanebattle
 rem     run.bat tests
 rem     run.bat clean       (throws the build folder away and stops)
 rem ---------------------------------------------------------------------------
@@ -59,13 +60,15 @@ rem --- Ask which game -------------------------------------------------------
 echo.
 echo   [1] Asteroids
 echo   [2] Breakout
-echo   [3] Run the tests
+echo   [3] Lane Battle
+echo   [4] Run the tests
 echo.
 set "CHOICE="
-set /p "CHOICE=Choose 1-3: "
+set /p "CHOICE=Choose 1-4: "
 if "%CHOICE%"=="1" set "GAME=asteroids"
 if "%CHOICE%"=="2" set "GAME=breakout"
-if "%CHOICE%"=="3" set "GAME=tests"
+if "%CHOICE%"=="3" set "GAME=lanebattle"
+if "%CHOICE%"=="4" set "GAME=tests"
 if "%GAME%"=="" goto menu
 
 rem --- Run ------------------------------------------------------------------
@@ -78,7 +81,7 @@ if /i "%GAME%"=="tests" (
 if not exist "build\Release\%GAME%.exe" (
     echo.
     echo Could not find build\Release\%GAME%.exe
-    echo Expected one of: asteroids, breakout, tests
+    echo Expected one of: asteroids, breakout, lanebattle, tests
     goto fail
 )
 

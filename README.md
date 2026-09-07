@@ -19,12 +19,13 @@ handling, box and circle collision with contact normals, procedural audio,
 fixed-tick timing and a scene stack — each in its own file with heavy comments
 explaining *why*, not just *what*.
 
-Three games are built on it: **Asteroids** and **Breakout** in `src/game/`, and
-**Snake**, kept as a frozen snapshot in `archive/version_1/`. That's on purpose
-— an engine with only one game is a hypothesis, not an engine, and each of the
-three needed something the previous one didn't: Snake wanted fixed ticks and
+Four games are built on it: **Asteroids**, **Breakout** and **Lane Battle** in
+`src/game/`, plus **Snake**, kept as a frozen snapshot in `archive/version_1/`.
+That's on purpose — an engine with only one game is a hypothesis, not an engine
+— and each needed something the last one didn't: Snake wanted fixed ticks and
 box collision, Asteroids wanted rotation and circles, Breakout wanted contact
-normals and sub-frame movement.
+normals and sub-frame movement. Lane Battle, so far, has needed nothing new at
+all, which is its own kind of result.
 
 It is **not** trying to be fast, complete, or production-ready. Storage uses
 `std::unordered_map` instead of packed arrays, there's no batching, no scene
@@ -32,18 +33,22 @@ graph, collision compares every pair, and the asset handling is one cache that
 loads PNGs. Those are deliberate: every one of them is a place where the simple
 version is easier to read and nothing here is slow enough to care.
 
-## Status: finished
+## Status
 
-This is complete, not abandoned. It set out to be the smallest readable version
-of the architecture real engines use, and every part of that architecture is
-present and exercised by two live games plus an archived third, building and
-testing on Windows, Linux and macOS, with tests that prove the games' rules and
-a benchmark that says whether an optimisation is worth doing.
+**v1.0 is finished** — complete, not abandoned — and frozen in
+`archive/version2/`. It set out to be the smallest readable version of the
+architecture real engines use, and every part of that architecture is present
+and exercised by independent games, building and testing on Windows, Linux and
+macOS, with tests that prove the games' rules and a benchmark that says whether
+an optimisation is worth doing.
+
+**The live tree is now growing a fourth game**, Lane Battle, and the engine
+grows only where that game demands it — the same rule that produced everything
+in v1.0. So far it has demanded nothing, which is exactly what the first slice
+of a game should demand.
 
 The list at the bottom is **exercises, not debt**. Nothing on it is missing in
-the sense of being needed; each is a next thing to learn if you want one. The
-project works as it stands, and knowing when to stop is part of what it was
-built to teach.
+the sense of being needed; each is a next thing to learn if you want one.
 
 ## What's in the box
 
@@ -66,12 +71,14 @@ engine_project/
 │   └── Engine.cpp      SDL setup, the loop, and the built-in render system
 ├── src/game/
 │   ├── asteroids/      Asteroids.h/.cpp + a 3-line main.cpp
-│   └── breakout/       Breakout.h/.cpp + a 3-line main.cpp
+│   ├── breakout/       Breakout.h/.cpp + a 3-line main.cpp
+│   └── lanebattle/     LaneBattle.h/.cpp + a 3-line main.cpp
 ├── tests/
 │   ├── Harness.h             Drives scenes headlessly, no window needed
 │   ├── engine_tests.cpp      Asserts about the engine's pure logic
 │   ├── asteroids_tests.cpp   Asserts about Asteroids' rules
 │   ├── breakout_tests.cpp    Asserts about Breakout's rules
+│   ├── lanebattle_tests.cpp  Asserts about Lane Battle's rules
 │   └── engine_bench.cpp      Measures the naive parts; not a pass/fail test
 ├── .github/workflows/
 │   └── ci.yml          Builds and tests on Linux and macOS
@@ -91,12 +98,12 @@ The build produces these targets, and the split is the point:
 | Target | What it is |
 | --- | --- |
 | `engine` | A static library. Knows nothing about any particular game. |
-| `asteroids_lib` / `breakout_lib` | Each game's rules, as a library. Link `engine`. |
-| `asteroids` / `breakout` | Each game's window and entry point. |
+| `asteroids_lib` / `breakout_lib` / `lanebattle_lib` | Each game's rules, as a library. Link `engine`. |
+| `asteroids` / `breakout` / `lanebattle` | Each game's window and entry point. |
 | `engine_tests` | Asserts about the engine. Links `engine`. |
-| `asteroids_tests` / `breakout_tests` | Asserts about each game's rules. |
+| `asteroids_tests` / `breakout_tests` / `lanebattle_tests` | Asserts about each game's rules. |
 
-Both games are shaped the same way — rules in a library, behind a three-line
+Every game is shaped the same way — rules in a library, behind a three-line
 `main.cpp`. That split exists for one reason: a game whose logic lives inside
 `main.cpp` cannot be tested, because reaching any of it means opening a window.
 With the rules in a library, the test binaries link the same code the player
@@ -672,6 +679,17 @@ returning.
 | --- | --- |
 | Left / Right | Move the paddle |
 | Space | Launch the ball |
+
+**Lane Battle** (`.\build\Release\lanebattle.exe`)
+
+| Key | Action |
+| --- | --- |
+| A | Spend gold to send a unit |
+
+Gold accrues on its own. Units march right, stop when an enemy is in reach,
+and fight until one falls. Break the enemy castle to win, and lose if yours
+falls first. The opponent plays by exactly the same economy — same purse, same
+income, same unit cost — so difficulty is one multiplier rather than a fudge.
 
 The ball rides the paddle until you launch it, so you choose where each rally
 starts. Where it lands across the paddle's face angles the bounce — that's the

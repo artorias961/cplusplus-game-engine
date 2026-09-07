@@ -8,6 +8,7 @@
 #     ./run.sh              ask which game
 #     ./run.sh asteroids
 #     ./run.sh breakout
+#     ./run.sh lanebattle
 #     ./run.sh tests
 #     ./run.sh clean        throw the build folder away and stop
 #
@@ -48,14 +49,16 @@ if [ -z "$game" ]; then
     echo
     echo "  [1] Asteroids"
     echo "  [2] Breakout"
-    echo "  [3] Run the tests"
+    echo "  [3] Lane Battle"
+    echo "  [4] Run the tests"
     echo
     while [ -z "$game" ]; do
-        read -r -p "Choose 1-3: " choice
+        read -r -p "Choose 1-4: " choice
         case "$choice" in
             1) game="asteroids" ;;
             2) game="breakout" ;;
-            3) game="tests" ;;
+            3) game="lanebattle" ;;
+            4) game="tests" ;;
         esac
     done
 fi
@@ -77,5 +80,5 @@ for candidate in "build/$game" "build/Release/$game"; do
 done
 
 echo "Could not find an executable for '$game'." >&2
-echo "Expected one of: asteroids, breakout, tests" >&2
+echo "Expected one of: asteroids, breakout, lanebattle, tests" >&2
 exit 1
