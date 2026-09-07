@@ -149,7 +149,11 @@ void parseComposition(const char* text, Session& session) {
             continue;
         }
 
-        if (haveDigits && count < kMaxComposition && value < unitKindCount()) {
+        // The hero is filtered out of stage compositions. It is one per battle
+        // by rule, and a wave cycle asking for one would field a stream of
+        // them — which is a different game, and not the one being built.
+        if (haveDigits && count < kMaxComposition && value < unitKindCount() &&
+            value != heroKindIndex()) {
             session.composition[count++] = value;
         }
         value = 0;
@@ -881,16 +885,50 @@ int countCannonballs(World& world) {
     return count;
 }
 
+int heroKindIndex() {
+    for (int kind = 0; kind < unitKindCount(); ++kind) {
+        if (std::string(unitKind(kind).name) == kHeroName) return kind;
+    }
+    return -1;
+}
+
+// Which unit kind a bar slot sells, or -1 if that slot is empty.
+//
+// The bar SKIPS the hero rather than stopping at it. Stopping was simpler and
+// wrong: the hero is the last row of the built-in roster, so a data file that
+// added a unit after it would put that unit permanently out of reach — a file
+// that silently does nothing is worse than one that fails.
+int kindForButton(int slot) {
+    const int hero = heroKindIndex();
+    int seen = 0;
+    for (int kind = 0; kind < unitKindCount(); ++kind) {
+        if (kind == hero) continue;
+        if (seen == slot) return kind;
+        ++seen;
+    }
+    return -1;
+}
+
 int visibleButtonCount() {
-    return std::min(unitKindCount(), kMaxVisibleButtons);
+    const int hero = heroKindIndex();
+    const int sellable = unitKindCount() - (hero >= 0 ? 1 : 0);
+    return std::min(sellable, kMaxVisibleButtons);
+}
+
+bool heroButtonHit(float screenX, float screenY) {
+    if (screenY < kButtonY || screenY > kButtonY + kButtonHeight) return false;
+    return screenX >= kHeroButtonX &&
+           screenX <= kHeroButtonX + kHeroButtonWidth;
 }
 
 int buttonAt(float screenX, float screenY) {
     if (screenY < kButtonY || screenY > kButtonY + kButtonHeight) return -1;
 
-    for (int index = 0; index < visibleButtonCount(); ++index) {
-        const float left = buttonLeft(index);
-        if (screenX >= left && screenX <= left + kButtonWidth) return index;
+    for (int slot = 0; slot < visibleButtonCount(); ++slot) {
+        const float left = buttonLeft(slot);
+        if (screenX >= left && screenX <= left + kButtonWidth) {
+            return kindForButton(slot);
+        }
     }
     return -1;
 }
@@ -1082,6 +1120,7 @@ public:
         hud_.push_back(popText_);
 
         buildSpawnBar(world);
+        buildHeroButton(world);
         buildUpgradePanel(world);
 
         cannonText_ = createText(world, "", 16, 112, 2, 220, 200, 140, kHudLayer);
@@ -1445,14 +1484,60 @@ private:
             if (trySpawn(world, session, kind)) return;
         }
 
+        // The hero: one summon a battle, on its own key and its own button.
+        // Not part of the number-key loop above, because it is not bought and
+        // has no cooldown — the only thing standing between you and it is
+        // whether you have already used it.
+        if (input.wasKeyPressed(SDL_SCANCODE_H)) {
+            summonHero(world, session);
+        }
+
         // A click on the bar does exactly what its key does. `wasMousePressed`
         // rather than `isMouseDown`, or one held click would empty the purse
         // one unit per cooldown for as long as the finger stayed down.
         if (!input.wasMousePressed()) return;
 
-        const int kind = buttonAt(static_cast<float>(input.mouseX()),
-                                  static_cast<float>(input.mouseY()));
+        const float mouseX = static_cast<float>(input.mouseX());
+        const float mouseY = static_cast<float>(input.mouseY());
+
+        if (heroButtonHit(mouseX, mouseY)) {
+            summonHero(world, session);
+            return;
+        }
+
+        const int kind = buttonAt(mouseX, mouseY);
         if (kind >= 0) trySpawn(world, session, kind);
+    }
+
+    // Puts the hero on the field, once.
+    //
+    // No cost and no cooldown: the only limit is that there is exactly one of
+    // them per battle. That makes the question purely *when* — early and it
+    // fights alone and dies for nothing, late and the field it was meant to
+    // win may already be lost.
+    void summonHero(World& world, Session& session) {
+        const int kind = heroKindIndex();
+        if (kind < 0) return;
+        if (session.heroSummoned) return;
+        if (countUnits(world, true) >= populationCapFor(session, true)) return;
+
+        session.heroSummoned = true;
+
+        const Entity hero = spawnUnit(world, true, kind);
+        world.addComponent(hero, Hero{});
+
+        // CHAMPION is permanent, so it is applied on the way out of the gate
+        // rather than to the roster: the table stays the hero everyone has,
+        // and the perk is what this particular player has made of it.
+        const float scale =
+            1.0f + perks_[static_cast<int>(Perk::Champion)] *
+                       perkKind(static_cast<int>(Perk::Champion)).effect;
+        if (Unit* unit = world.getComponent<Unit>(hero)) {
+            unit->health *= scale;
+        }
+        heroDamageScale_ = scale;
+
+        if (audioDevice) audioDevice->play(Waveform::Sine, 180.0f, 0.35f, 0.20f);
     }
 
     // Buys one unit if it can be afforded, and reports whether it did. The one
@@ -1582,8 +1667,14 @@ private:
             // WEAPONS is the player.s perk, so only the player.s units swing
             // harder for it. Scaling every blow would have handed the
             // opponent every upgrade the player ever bought.
-            const float damage =
-                stats.damage * (team->leftSide ? damageScale_ : 1.0f);
+            //
+            // CHAMPION stacks on top for the hero alone, which is what makes
+            // it worth buying separately from WEAPONS.
+            float damage = stats.damage;
+            if (team->leftSide) {
+                damage *= damageScale_;
+                if (world.hasComponent<Hero>(attacker)) damage *= heroDamageScale_;
+            }
 
             if (Unit* victim = world.getComponent<Unit>(target)) {
                 victim->health -= damage;
@@ -1651,6 +1742,11 @@ private:
                             sprite ? sprite->r : 200, sprite ? sprite->g : 200,
                             sprite ? sprite->b : 200);
             }
+            // The hero falling is remembered, because it is the whole rule:
+            // no respawn, no second summon, not until the stage is finished
+            // or started again.
+            if (world.hasComponent<Hero>(entity)) session.heroFallen = true;
+
             playDeath();
             world.destroyLater(entity);
             if (unit->figure != kInvalidEntity) world.destroyLater(unit->figure);
@@ -1867,60 +1963,64 @@ private:
         buttonName_.assign(shown, kInvalidEntity);
         buttonCost_.assign(shown, kInvalidEntity);
 
-        for (int kind = 0; kind < shown; ++kind) {
+        for (int slot = 0; slot < shown; ++slot) {
+            const int kind = kindForButton(slot);
+            if (kind < 0) continue;
             const UnitKind& stats = unitKind(kind);
-            const float left = buttonLeft(kind);
+            const float left = buttonLeft(slot);
 
             // Three pieces per button: the plate, a fill that shrinks as the
             // cooldown runs, and the label. The fill is drawn over the plate
             // and under the text, which the layer sort already guarantees
             // because entity ids increase in creation order within a layer.
-            buttonPlate_[kind] =
+            buttonPlate_[slot] =
                 makeScreenRect(world, left, kButtonY, kButtonWidth,
                                kButtonHeight, 34, 38, 48, kHudLayer);
-            buttonFill_[kind] =
+            buttonFill_[slot] =
                 makeScreenRect(world, left, kButtonY + kButtonHeight - 4.0f,
                                kButtonWidth, 4.0f, stats.leftR, stats.leftG,
                                stats.leftB, kHudLayer);
 
             const std::string label =
                 std::to_string(kind + 1) + " " + stats.name;
-            buttonName_[kind] = createText(
+            buttonName_[slot] = createText(
                 world, label, static_cast<int>(left) + 8,
                 static_cast<int>(kButtonY) + 8, 2, stats.leftR, stats.leftG,
                 stats.leftB, kHudLayer);
-            buttonCost_[kind] = createText(
+            buttonCost_[slot] = createText(
                 world, std::to_string(static_cast<int>(stats.cost)),
                 static_cast<int>(left) + 8, static_cast<int>(kButtonY) + 26, 2,
                 220, 200, 140, kHudLayer);
 
-            world.getComponent<Text>(buttonName_[kind])->screenSpace = true;
-            world.getComponent<Text>(buttonCost_[kind])->screenSpace = true;
+            world.getComponent<Text>(buttonName_[slot])->screenSpace = true;
+            world.getComponent<Text>(buttonCost_[slot])->screenSpace = true;
 
-            hud_.push_back(buttonPlate_[kind]);
-            hud_.push_back(buttonFill_[kind]);
-            hud_.push_back(buttonName_[kind]);
-            hud_.push_back(buttonCost_[kind]);
+            hud_.push_back(buttonPlate_[slot]);
+            hud_.push_back(buttonFill_[slot]);
+            hud_.push_back(buttonName_[slot]);
+            hud_.push_back(buttonCost_[slot]);
         }
     }
 
     void refreshSpawnBar(World& world, const Session& session, int fielded) {
-        for (int kind = 0; kind < visibleButtonCount(); ++kind) {
+        for (int slot = 0; slot < visibleButtonCount(); ++slot) {
+            const int kind = kindForButton(slot);
+            if (kind < 0) continue;
             const UnitKind& stats = unitKind(kind);
             const bool affordable = session.gold >= stats.cost &&
-                                    fielded < kPopulationCap;
+                                    fielded < populationCapFor(session, true);
 
-            if (Text* name = world.getComponent<Text>(buttonName_[kind])) {
+            if (Text* name = world.getComponent<Text>(buttonName_[slot])) {
                 name->r = affordable ? stats.leftR : 95;
                 name->g = affordable ? stats.leftG : 95;
                 name->b = affordable ? stats.leftB : 110;
             }
-            if (Text* cost = world.getComponent<Text>(buttonCost_[kind])) {
+            if (Text* cost = world.getComponent<Text>(buttonCost_[slot])) {
                 cost->r = affordable ? 220 : 95;
                 cost->g = affordable ? 200 : 95;
                 cost->b = affordable ? 140 : 110;
             }
-            if (Sprite* plate = world.getComponent<Sprite>(buttonPlate_[kind])) {
+            if (Sprite* plate = world.getComponent<Sprite>(buttonPlate_[slot])) {
                 plate->r = affordable ? 44 : 28;
                 plate->g = affordable ? 50 : 32;
                 plate->b = affordable ? 64 : 40;
@@ -1929,7 +2029,7 @@ private:
             // The fill is THIS kind.s own cooldown draining left to right, so
             // the bar shows when you can send each unit rather than one
             // shared timer that told you nothing about which button to press.
-            if (Sprite* fill = world.getComponent<Sprite>(buttonFill_[kind])) {
+            if (Sprite* fill = world.getComponent<Sprite>(buttonFill_[slot])) {
                 const float total = std::max(kMinSpawnCooldown, stats.cooldown);
                 const float left = kind < kMaxUnitKinds
                                        ? std::max(0.0f, session.spawnCooldowns[kind])
@@ -1937,6 +2037,64 @@ private:
                 fill->width =
                     static_cast<int>(kButtonWidth * (1.0f - left / total));
             }
+        }
+    }
+
+    // --- The hero button ---------------------------------------------------
+
+    void buildHeroButton(World& world) {
+        if (heroKindIndex() < 0) return;
+
+        heroPlate_ = makeScreenRect(world, kHeroButtonX, kButtonY,
+                                    kHeroButtonWidth, kButtonHeight,
+                                    52, 46, 30, kHudLayer);
+        heroText_ = createText(world, "", static_cast<int>(kHeroButtonX) + 8,
+                               static_cast<int>(kButtonY) + 8, 2,
+                               250, 235, 140, kHudLayer);
+        world.getComponent<Text>(heroText_)->screenSpace = true;
+
+        heroHint_ = createText(world, "H", static_cast<int>(kHeroButtonX) + 8,
+                               static_cast<int>(kButtonY) + 26, 2,
+                               170, 160, 120, kHudLayer);
+        world.getComponent<Text>(heroHint_)->screenSpace = true;
+
+        hud_.push_back(heroPlate_);
+        hud_.push_back(heroText_);
+        hud_.push_back(heroHint_);
+    }
+
+    // Three states, and they have to look different: never used, out there
+    // fighting, and gone for good. Collapsing the last two into "unavailable"
+    // would hide the only thing the player can do anything about.
+    void refreshHeroButton(World& world, const Session& session) {
+        if (heroText_ == kInvalidEntity) return;
+
+        const char* label = "HERO READY";
+        const char* hint = "H";
+        unsigned char r = 250, g = 235, b = 140;
+        unsigned char plateR = 62, plateG = 56, plateB = 34;
+
+        if (session.heroFallen) {
+            label = "HERO FALLEN";
+            hint = "NOT THIS BATTLE";
+            r = 130; g = 100; b = 100;
+            plateR = 40; plateG = 28; plateB = 28;
+        } else if (session.heroSummoned) {
+            label = "HERO OUT";
+            hint = "ON THE FIELD";
+            r = 200; g = 190; b = 130;
+            plateR = 52; plateG = 48; plateB = 32;
+        }
+
+        if (Text* text = world.getComponent<Text>(heroText_)) {
+            text->value = label;
+            text->r = r; text->g = g; text->b = b;
+        }
+        if (Text* text = world.getComponent<Text>(heroHint_)) {
+            text->value = hint;
+        }
+        if (Sprite* plate = world.getComponent<Sprite>(heroPlate_)) {
+            plate->r = plateR; plate->g = plateG; plate->b = plateB;
         }
     }
 
@@ -2063,6 +2221,7 @@ private:
         // without doing arithmetic against the gold counter.
         refreshSpawnBar(world, session, fielded);
         refreshUpgradePanel(world, session);
+        refreshHeroButton(world, session);
 
         if (Text* text = world.getComponent<Text>(cannonText_)) {
             const bool ready = session.cannonCooldown <= 0.0f &&
@@ -2101,6 +2260,7 @@ private:
     // so buying something between battles cannot change a fight in progress.
     int perks_[kPerkCount] = {};
     float damageScale_ = 1.0f;
+    float heroDamageScale_ = 1.0f;
     Entity sessionEntity_ = kInvalidEntity;
     Entity cameraEntity_ = kInvalidEntity;
     Entity goldText_ = kInvalidEntity;
@@ -2113,6 +2273,9 @@ private:
     Entity leftHealthText_ = kInvalidEntity;
     Entity rightHealthText_ = kInvalidEntity;
     Entity cannonText_ = kInvalidEntity;
+    Entity heroPlate_ = kInvalidEntity;
+    Entity heroText_ = kInvalidEntity;
+    Entity heroHint_ = kInvalidEntity;
     Entity upgradePlate_[kUpgradeCount] = {};
     Entity upgradeText_[kUpgradeCount] = {};
     Entity minimapLeftCastle_ = kInvalidEntity;

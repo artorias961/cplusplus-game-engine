@@ -102,6 +102,30 @@ struct UnitKind {
 // component is a worse thing to own than a documented limit.
 constexpr int kMaxUnitKinds = 16;
 
+// --- The hero --------------------------------------------------------------
+//
+// One summon per battle, and if it falls it stays fallen until the stage is
+// finished or restarted. No respawn, no second chance.
+//
+// That single rule is what makes it interesting. A hero you can re-summon is
+// an ability on a cooldown, and the only question is whether it is off
+// cooldown. A hero you get once is a decision: send it early and it fights
+// alone and dies for very little, hold it too long and you may have already
+// lost the field it was meant to win.
+constexpr const char* kHeroName = "HERO";
+
+// The roster index of the hero, or -1 if a data file removed it. Found by
+// name, so reordering the roster or adding units in front of it cannot
+// silently promote a soldier to a champion.
+int heroKindIndex();
+
+// Marks the one hero entity. Used to notice when it dies.
+struct Hero {};
+
+// The hero button's position is defined with the spawn bar it must not
+// overlap, further down.
+bool heroButtonHit(float screenX, float screenY);
+
 // The three roles the genre is built on, and the shape of each:
 //
 //   RUNNER  — cheap and fast, dies to anything, wins on gold-for-damage.
@@ -121,6 +145,12 @@ constexpr UnitKind kDefaultUnitKinds[] = {
     {"RUNNER",   35.0f, 60.0f,  8.0f,  30.0f, 0.45f, 150.0f, 1.1f, 16.0f, 26.0f, 150, 215, 255, 255, 175, 150},
     {"SOLDIER",  60.0f, 110.0f, 14.0f, 34.0f, 0.60f,  95.0f, 1.9f, 24.0f, 36.0f, 110, 190, 240, 235, 130, 110},
     {"ARCHER",   95.0f, 55.0f,  20.0f, 135.0f, 0.95f,  70.0f, 3.0f, 18.0f, 34.0f,  90, 140, 210, 200,  95, 130},
+    // The hero. A roster row like any other, so it walks, fights, queues,
+    // animates and is targeted by the same code as everything else — but it is
+    // NOT sold from the spawn bar, does not take a number key, and never
+    // appears in a stage's composition. Those exclusions are what make it a
+    // hero rather than an expensive soldier.
+    {"HERO",      0.0f, 620.0f, 46.0f,  44.0f, 0.50f,  88.0f, 0.0f, 30.0f, 48.0f, 250, 235, 140, 255, 120,  90},
 };
 constexpr int kDefaultUnitKindCount =
     static_cast<int>(sizeof(kDefaultUnitKinds) / sizeof(kDefaultUnitKinds[0]));
@@ -337,7 +367,7 @@ int stageCount();
 //
 // Three of them, deliberately touching things the in-battle upgrades do not,
 // so the two systems are not the same choice at different speeds.
-enum class Perk { Damage, Fortify, Purse, Count };
+enum class Perk { Damage, Fortify, Purse, Champion, Count };
 constexpr int kPerkCount = static_cast<int>(Perk::Count);
 
 struct PerkKind {
@@ -349,9 +379,10 @@ struct PerkKind {
 };
 
 constexpr PerkKind kDefaultPerks[] = {
-    {"WEAPONS",  "+10% DAMAGE",   200.0f, 1.55f, 0.10f},
-    {"RAMPARTS", "+150 CASTLE",   180.0f, 1.55f, 150.0f},
+    {"WEAPONS",  "+10% DAMAGE",    200.0f, 1.55f, 0.10f},
+    {"RAMPARTS", "+150 CASTLE",    180.0f, 1.55f, 150.0f},
     {"TREASURY", "+40 START GOLD", 160.0f, 1.55f, 40.0f},
+    {"CHAMPION", "+25% HERO",      240.0f, 1.60f, 0.25f},
 };
 
 const PerkKind& perkKind(int perk);
@@ -468,17 +499,36 @@ constexpr float buttonLeft(int index) {
     return kButtonX + static_cast<float>(index) * (kButtonWidth + kButtonGap);
 }
 
-// How many buttons fit across the bottom before they run off the edge. The
-// roster's length is a runtime value now, so this is a real limit rather than
-// an arithmetic curiosity: a data file with ten unit types would otherwise
-// draw four of them into the void.
+// The hero button sits at the right-hand end of the bottom row, and the spawn
+// bar is sized to stop before it.
+//
+// Both of these used to be independent constants, and they overlapped: the
+// hero button covered what would have been the fourth and fifth spawn slots.
+// With the built-in roster there is no fourth slot, so nothing showed it —
+// but a data file adding one more unit type would have put its button
+// underneath the hero's, and since the hero is hit-tested first, clicking that
+// unit would have summoned the hero instead. Derived from each other now, so
+// they cannot drift apart again.
+constexpr float kHeroButtonWidth = 168.0f;
+constexpr float kHeroButtonX =
+    static_cast<float>(kWindowWidth) - kHeroButtonWidth - 16.0f;
+
+// How many buttons fit across the bottom before they reach the hero's. The
+// roster's length is a runtime value, so this is a real limit rather than an
+// arithmetic curiosity: a data file with ten unit types would otherwise draw
+// four of them into the void, or worse, underneath something else.
 constexpr int kMaxVisibleButtons =
-    static_cast<int>((static_cast<float>(kWindowWidth) - kButtonX + kButtonGap) /
+    static_cast<int>((kHeroButtonX - kButtonGap - kButtonX) /
                      (kButtonWidth + kButtonGap));
 
 // The roster clamped to what fits. Buttons past this have no plate, no label
 // and no hit box — but their number keys still work, so nothing is unreachable.
 int visibleButtonCount();
+
+// Which unit kind a bar slot sells, or -1 for an empty slot. The bar skips the
+// hero, so slot and kind are not the same number — exposed for the same reason
+// `buttonAt` is, so a test can point at a button without re-deriving the rule.
+int kindForButton(int slot);
 
 // Dragging the field scrolls the view, which is the genre's other mouse verb.
 // A few pixels of slop before a press counts as a drag, so a slightly shaky
@@ -611,6 +661,12 @@ struct Session {
     // than read from the stage table on every use, so a battle is decided by
     // one snapshot taken at the start — and so a test can set up a fight
     // without inventing a stage to hold it.
+    // The hero: summoned at most once, and once it has fallen it stays
+    // fallen. Two flags rather than one, because "not yet summoned" and
+    // "summoned and dead" have to look different on the button.
+    bool heroSummoned = false;
+    bool heroFallen = false;
+
     int composition[kMaxComposition] = {1, 1, 2, 0, 1, 0};
     int compositionLength = 6;
     int enemyWaveSize = 3;

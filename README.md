@@ -710,9 +710,16 @@ economy, a different castle and — the part that actually changes the fight —
 different army.
 
 Winning pays gold into a bank, double the first time you clear a stage. The
-armoury down the left of the stage list spends it on WEAPONS, RAMPARTS and
-TREASURY, which are permanent. All of it is saved the moment it is earned, to
-a plain text file in your user folder that you can read and correct by hand.
+armoury down the left of the stage list spends it on WEAPONS, RAMPARTS,
+TREASURY and CHAMPION, which are permanent. All of it is saved the moment it
+is earned, to a plain text file in your user folder that you can read and
+correct by hand.
+
+You also have a **hero**: far stronger than any unit, summoned once per
+battle, and gone for good if it falls. When you spend it is the whole
+decision — on the last stage, summoning it on the opening frame loses exactly
+as surely as never summoning it at all, because a hero with no line to fight
+behind is surrounded and killed for nothing.
 
 | Input | Action |
 | --- | --- |
@@ -724,6 +731,7 @@ a plain text file in your user folder that you can read and correct by hand.
 | Drag the field | Scroll the view |
 | Left / Right | Look up and down the field; lets go after a moment |
 | Click an upgrade | Buy INCOME, WALLS or SUPPLY; each costs more than the last |
+| H, or the hero button | Summon your hero — **once per battle** |
 | Enter | On the stage list, plays the furthest battle you have reached |
 
 Gold accrues on its own, and killing something pays you a share of what it cost

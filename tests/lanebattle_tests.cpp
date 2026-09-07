@@ -1179,10 +1179,15 @@ float buttonCenterY() {
 }
 
 void testButtonHitTesting() {
-    for (int kind = 0; kind < lanebattle::unitKindCount(); ++kind) {
-        check(lanebattle::buttonAt(buttonCenterX(kind), buttonCenterY()) == kind,
-              "the centre of a button is that button");
+    // Slots, not kinds. The bar skips the hero, so the two stopped being the
+    // same number when the hero joined the roster.
+    for (int slot = 0; slot < lanebattle::visibleButtonCount(); ++slot) {
+        check(lanebattle::buttonAt(buttonCenterX(slot), buttonCenterY()) ==
+                  lanebattle::kindForButton(slot),
+              "the centre of a button is the unit that button sells");
     }
+    check(lanebattle::kindForButton(0) != lanebattle::heroKindIndex(),
+          "and none of them sells the hero");
 
     check(lanebattle::buttonAt(buttonCenterX(0), buttonCenterY() - 200.0f) == -1,
           "the battlefield above the bar is not a button");
@@ -1204,14 +1209,45 @@ void testClickingAButtonSendsItsUnit() {
     game.suppressEnemySpawns();
     game.session().gold = 10000.0f;
 
-    for (int kind = 0; kind < lanebattle::unitKindCount(); ++kind) {
-        game.driver.clickAt(static_cast<int>(buttonCenterX(kind)),
+    // By SLOT, not by roster index. The bar skips the hero, so the two are
+    // different numbers, and iterating roster indices clicked an empty slot.
+    for (int slot = 0; slot < lanebattle::visibleButtonCount(); ++slot) {
+        const int kind = lanebattle::kindForButton(slot);
+        check(kind >= 0, "every visible slot sells something");
+
+        game.driver.clickAt(static_cast<int>(buttonCenterX(slot)),
                             static_cast<int>(buttonCenterY()));
         game.driver.step(2);
         check(lanebattle::countUnitsOfKind(game.world, true, kind) == 1,
               "clicking a button sends that button's unit");
-        game.driver.step(30);  // clear the shared cooldown
+        game.driver.step(60 * 4);  // let that kind's own cooldown clear
     }
+}
+
+// The hero button and the spawn bar must never sit on top of each other.
+//
+// They did. Both positions were independent constants, and the hero's covered
+// what would have been the fourth and fifth spawn slots. With the built-in
+// roster there is no fourth slot, so nothing showed it — but a data file
+// adding one more unit type would have put its button underneath the hero's,
+// and since the hero is hit-tested first, clicking that unit would have
+// summoned the hero instead. The two are derived from each other now; this
+// checks they stay that way.
+void testTheHeroButtonNeverCoversASpawnSlot() {
+    for (int slot = 0; slot < lanebattle::kMaxVisibleButtons; ++slot) {
+        const float left = lanebattle::buttonLeft(slot);
+        const float right = left + lanebattle::kButtonWidth;
+
+        check(right <= lanebattle::kHeroButtonX,
+              "every slot the bar can ever draw ends before the hero button");
+        check(!lanebattle::heroButtonHit(left + 1.0f,
+                                         lanebattle::kButtonY + 4.0f),
+              "and no point inside one is read as the hero button");
+    }
+
+    check(lanebattle::kHeroButtonX + lanebattle::kHeroButtonWidth <=
+              static_cast<float>(lanebattle::kWindowWidth),
+          "and the hero button itself stays on the screen");
 }
 
 // One physical click buys one unit. Without the pressed-this-frame edge, a
@@ -1760,10 +1796,19 @@ health = 200
           "a unit type that came from a file can be sent");
     check(world.getComponent<Unit>(spawned)->health == 200.0f,
           "and fights with the health the file gave it");
-    check(lanebattle::buttonAt(
-              lanebattle::buttonLeft(knight) + lanebattle::kButtonWidth / 2.0f,
-              lanebattle::kButtonY + 4.0f) == knight,
-          "and has a button on the spawn bar");
+    // Found by slot rather than assumed to be at its own index: the bar skips
+    // the hero, so a unit added after it sits one slot to the left of where
+    // its roster index would suggest.
+    int knightSlot = -1;
+    for (int slot = 0; slot < lanebattle::visibleButtonCount(); ++slot) {
+        if (lanebattle::kindForButton(slot) == knight) knightSlot = slot;
+    }
+    check(knightSlot >= 0, "a unit added by a file gets a slot on the bar");
+    check(knightSlot >= 0 &&
+              lanebattle::buttonAt(
+                  lanebattle::buttonLeft(knightSlot) + lanebattle::kButtonWidth / 2.0f,
+                  lanebattle::kButtonY + 4.0f) == knight,
+          "and that slot sells it");
 
     lanebattle::resetBalance();
 }
@@ -1802,7 +1847,11 @@ void testTheShippedRosterIsSane() {
 
     for (int kind = 0; kind < lanebattle::unitKindCount(); ++kind) {
         const lanebattle::UnitKind& row = stats(kind);
-        check(row.cost > 0.0f && row.health > 0.0f && row.damage > 0.0f,
+
+        // The hero is free and has no cooldown by design — it is limited by
+        // being one per battle, not by a price. Everything else must cost.
+        const bool isHero = kind == lanebattle::heroKindIndex();
+        check((isHero || row.cost > 0.0f) && row.health > 0.0f && row.damage > 0.0f,
               "every shipped unit costs something and can fight");
         check(row.speed > 0.0f && row.range > 0.0f && row.attackDelay > 0.0f,
               "and can move and reach and swing");
@@ -2543,6 +2592,340 @@ void testPerksChangeTheBattle() {
           "and does nothing whatever for theirs");
 }
 
+// --- The hero --------------------------------------------------------------
+//
+// One summon per battle. If it falls, it stays fallen until the stage is
+// finished or started again. That single rule is the whole design: a hero you
+// can re-summon is an ability on a cooldown, and the only question is whether
+// it is off cooldown. A hero you get once is a decision about when.
+
+int countHeroes(World& world) {
+    int count = 0;
+    for (Entity entity : world.entities()) {
+        if (world.hasComponent<lanebattle::Hero>(entity)) ++count;
+    }
+    return count;
+}
+
+void testTheHeroIsNotSoldOnTheBar() {
+    check(lanebattle::heroKindIndex() >= 0, "there is a hero in the roster");
+
+    for (int slot = 0; slot < lanebattle::visibleButtonCount(); ++slot) {
+        check(lanebattle::kindForButton(slot) != lanebattle::heroKindIndex(),
+              "no spawn-bar slot sells the hero");
+    }
+
+    // Nor does a number key. The keys walk the bar's slots, so this follows
+    // from the above — but it is the property that matters, so it is stated.
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.session().gold = 10000.0f;
+
+    for (SDL_Scancode key : {SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3,
+                             SDL_SCANCODE_4}) {
+        game.driver.tap(key);
+        game.driver.step(2);
+        game.driver.step(60 * 4);  // clear any cooldown
+    }
+    check(countHeroes(game.world) == 0, "and no number key summons one");
+}
+
+void testSummoningTheHero() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    check(!game.session().heroSummoned, "the hero starts unsummoned");
+    check(countHeroes(game.world) == 0, "and is not on the field");
+
+    game.driver.tap(SDL_SCANCODE_H);
+    game.driver.step(2);
+
+    check(countHeroes(game.world) == 1, "H puts the hero on the field");
+    check(game.session().heroSummoned, "and marks it summoned");
+    check(!game.session().heroFallen, "and it has not fallen");
+
+    // It is a real unit: it walks, and it is strong.
+    Entity hero = kInvalidEntity;
+    for (Entity entity : game.world.entities()) {
+        if (game.world.hasComponent<lanebattle::Hero>(entity)) hero = entity;
+    }
+    check(hero != kInvalidEntity, "the hero exists");
+    check(game.world.getComponent<Unit>(hero)->health >
+              stats(kSoldier).health * 3.0f,
+          "and is worth several soldiers");
+    check(game.world.getComponent<Velocity>(hero)->dx > 0.0f,
+          "and marches like anything else");
+}
+
+// The rule, stated three ways because it is the whole feature.
+void testTheHeroCanOnlyBeSummonedOnce() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    game.driver.tap(SDL_SCANCODE_H);
+    game.driver.step(2);
+    check(countHeroes(game.world) == 1, "the first summon works");
+
+    // Again, immediately.
+    game.driver.tap(SDL_SCANCODE_H);
+    game.driver.step(2);
+    check(countHeroes(game.world) == 1, "a second summon does nothing");
+
+    // And again much later, in case anything resembling a cooldown crept in.
+    game.driver.step(60 * 20);
+    game.driver.tap(SDL_SCANCODE_H);
+    game.driver.step(2);
+    check(countHeroes(game.world) == 1,
+          "and no amount of waiting brings a second one");
+}
+
+void testAFallenHeroStaysFallen() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    game.driver.tap(SDL_SCANCODE_H);
+    game.driver.step(2);
+
+    Entity hero = kInvalidEntity;
+    for (Entity entity : game.world.entities()) {
+        if (game.world.hasComponent<lanebattle::Hero>(entity)) hero = entity;
+    }
+    check(hero != kInvalidEntity, "the hero is out");
+
+    game.world.getComponent<Unit>(hero)->health = 0.0f;
+    game.driver.step(3);
+
+    check(countHeroes(game.world) == 0, "the hero can die");
+    check(game.session().heroFallen, "and the battle remembers that it did");
+
+    game.driver.tap(SDL_SCANCODE_H);
+    game.driver.step(2);
+    check(countHeroes(game.world) == 0,
+          "and it cannot be summoned again this battle");
+
+    game.driver.step(60 * 30);
+    game.driver.tap(SDL_SCANCODE_H);
+    game.driver.step(2);
+    check(countHeroes(game.world) == 0, "not after half a minute either");
+}
+
+// Retrying a stage is a fresh battle, so the hero comes back. Losing it would
+// otherwise make a failed attempt permanently worse than a fresh one, which
+// punishes the player twice for the same mistake.
+void testRetryingAStageReturnsTheHero() {
+    Game game;
+    game.startStage(3);
+    game.suppressEnemySpawns();
+
+    game.driver.tap(SDL_SCANCODE_H);
+    game.driver.step(2);
+    Entity hero = kInvalidEntity;
+    for (Entity entity : game.world.entities()) {
+        if (game.world.hasComponent<lanebattle::Hero>(entity)) hero = entity;
+    }
+    game.world.getComponent<Unit>(hero)->health = 0.0f;
+    game.driver.step(3);
+    check(game.session().heroFallen, "the hero fell");
+
+    // Lose, and retry.
+    game.world.getComponent<Castle>(lanebattle::findCastle(game.world, true))
+        ->health = 0.0f;
+    game.session().gameOver = true;
+    game.driver.step(4);
+    game.driver.tap(SDL_SCANCODE_R);
+    game.driver.step(4);
+
+    check(!game.session().heroFallen, "a retry gives the hero back");
+    check(!game.session().heroSummoned, "unsummoned, ready to be spent again");
+
+    game.driver.tap(SDL_SCANCODE_H);
+    game.driver.step(2);
+    check(countHeroes(game.world) == 1, "and it can be summoned in the retry");
+}
+
+void testTheHeroButtonSaysWhichOfTheThreeStatesItIsIn() {
+    check(lanebattle::heroButtonHit(
+              lanebattle::kHeroButtonX + 10.0f,
+              lanebattle::kButtonY + 10.0f),
+          "the hero button is where the layout says");
+    check(!lanebattle::heroButtonHit(buttonCenterX(0), buttonCenterY()),
+          "and the spawn bar beside it is not the hero button");
+    check(!lanebattle::heroButtonHit(lanebattle::kHeroButtonX + 10.0f, 200.0f),
+          "nor is the battlefield above it");
+
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    game.driver.clickAt(static_cast<int>(lanebattle::kHeroButtonX) + 10,
+                        static_cast<int>(lanebattle::kButtonY) + 10);
+    game.driver.step(3);
+    check(countHeroes(game.world) == 1, "clicking it summons the hero");
+}
+
+// The enemy never fields a hero, however a stage is written. One per battle is
+// the player's rule, and a wave cycle asking for heroes would field a stream.
+void testStagesCannotFieldHeroes() {
+    lanebattle::resetBalance();
+    const int hero = lanebattle::heroKindIndex();
+
+    const std::string path = writeRoster("lb_herostage.txt",
+        ("[stage]\nname = HERO RUSH\ncomposition = " + std::to_string(hero) +
+         "," + std::to_string(hero) + ",1\n").c_str());
+    check(lanebattle::loadBalance(path), "the file loaded");
+
+    Game game;
+    lanebattle::loadBalance(path);   // the Game constructor reset it
+    game.startStage(0);
+
+    for (int index = 0; index < game.session().compositionLength; ++index) {
+        check(game.session().composition[index] != hero,
+              "a stage asking for heroes gets none");
+    }
+    check(game.session().compositionLength >= 1,
+          "and is left with the units it can have");
+
+    lanebattle::resetBalance();
+}
+
+// CHAMPION is bought between battles and makes the hero, and only the hero,
+// stronger. Reading it in the shop and forgetting it in the rules would look
+// right and play identically.
+void testTheChampionPerkStrengthensTheHero() {
+    Game plain;
+    plain.startPlaying();
+    plain.suppressEnemySpawns();
+    plain.driver.tap(SDL_SCANCODE_H);
+    plain.driver.step(2);
+
+    float plainHealth = 0.0f;
+    for (Entity entity : plain.world.entities()) {
+        if (plain.world.hasComponent<lanebattle::Hero>(entity)) {
+            plainHealth = plain.world.getComponent<Unit>(entity)->health;
+        }
+    }
+
+    Game strong;
+    strong.scenes.push(lanebattle::makeTitleScene());
+    strong.driver.step();
+    lanebattle::campaignOf(strong.world)
+        .perks[static_cast<int>(lanebattle::Perk::Champion)] = 3;
+    strong.driver.tap(SDL_SCANCODE_SPACE);
+    strong.driver.step(2);
+    strong.driver.tap(SDL_SCANCODE_RETURN);
+    strong.driver.step(2);
+    strong.suppressEnemySpawns();
+    strong.driver.tap(SDL_SCANCODE_H);
+    strong.driver.step(2);
+
+    float strongHealth = 0.0f;
+    Entity strongHero = kInvalidEntity;
+    for (Entity entity : strong.world.entities()) {
+        if (strong.world.hasComponent<lanebattle::Hero>(entity)) {
+            strongHealth = strong.world.getComponent<Unit>(entity)->health;
+            strongHero = entity;
+        }
+    }
+
+    check(plainHealth > 0.0f && strongHealth > plainHealth * 1.5f,
+          "CHAMPION gives the hero more health");
+
+    // And more damage — but only the hero's. A regular soldier alongside it
+    // must be untouched.
+    const Entity victim = lanebattle::spawnUnit(strong.world, false, kSoldier);
+    strong.world.getComponent<Transform>(strongHero)->x = 500.0f;
+    strong.world.getComponent<Transform>(victim)->x = 520.0f;
+    strong.world.getComponent<Unit>(victim)->health = 100000.0f;
+    strong.driver.step(2);
+
+    const float dealt =
+        100000.0f - strong.world.getComponent<Unit>(victim)->health;
+    check(dealt > stats(lanebattle::heroKindIndex()).damage * 1.5f,
+          "and makes its blows land harder than the roster says");
+
+    // And does NOTHING for an ordinary soldier standing right beside it.
+    //
+    // Checking only that the hero hits harder left "CHAMPION boosts every unit"
+    // passing cleanly, which would have made a hero perk into a second WEAPONS
+    // and the two upgrades into the same purchase.
+    const Entity soldier = lanebattle::spawnUnit(strong.world, true, kSoldier);
+    const Entity target = lanebattle::spawnUnit(strong.world, false, kSoldier);
+    strong.world.getComponent<Transform>(soldier)->x = 1200.0f;
+    strong.world.getComponent<Transform>(target)->x = 1220.0f;
+    strong.world.getComponent<Unit>(target)->health = 100000.0f;
+    strong.driver.step(2);
+
+    const float soldierDealt =
+        100000.0f - strong.world.getComponent<Unit>(target)->health;
+    check(std::fabs(soldierDealt - stats(kSoldier).damage) < 0.01f,
+          "while an ordinary soldier hits for exactly what the roster says");
+}
+
+// Plays a battle with a mixed army, summoning the hero after `summonAtSecond`
+// seconds. -1 never summons it.
+int playWithHero(Game& game, int summonAtSecond) {
+    static const int mix[] = {kSoldier, kSoldier, kArcher};
+    const SDL_Scancode keys[] = {SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3};
+    int index = 0;
+    SDL_Scancode holding = SDL_SCANCODE_UNKNOWN;
+
+    for (int frame = 0; frame < 60 * 400; ++frame) {
+        if (holding != SDL_SCANCODE_UNKNOWN) {
+            game.driver.release(holding);
+            holding = SDL_SCANCODE_UNKNOWN;
+        }
+        if (summonAtSecond >= 0 && frame == summonAtSecond * 60) {
+            game.driver.tap(SDL_SCANCODE_H);
+        }
+        for (int step = 0; step < 3; ++step) {
+            const int kind = mix[(index + step) % 3];
+            if (game.session().spawnCooldowns[kind] > 0.0f) continue;
+            if (game.session().gold < stats(kind).cost) continue;
+            holding = keys[kind];
+            game.driver.hold(holding);
+            index = (index + step + 1) % 3;
+            break;
+        }
+        game.driver.step();
+        if (game.session().gameOver) return game.session().playerWon ? 1 : -1;
+    }
+    return 0;
+}
+
+// The whole reason the hero is one-per-battle rather than an ability on a
+// cooldown: WHEN you spend it decides whether it was worth anything.
+//
+// Measured on the last stage, where the margin is thin enough to show it:
+// summoning on the opening frame is exactly as good as never summoning at
+// all, because a hero with no line to fight behind is surrounded and killed
+// for nothing. Ten seconds later, the same hero wins the stage.
+//
+// This is a balance assertion and therefore fragile, deliberately. If it ever
+// fails, the hero has stopped being a decision and become a button you press
+// when it lights up.
+void testWhenYouSpendTheHeroDecidesWhetherItWasWorthIt() {
+    const int last = lanebattle::stageCount() - 1;
+
+    Game never;
+    never.startStage(last);
+    check(playWithHero(never, -1) == -1,
+          "the last stage is lost without the hero");
+
+    Game immediately;
+    immediately.startStage(last);
+    check(playWithHero(immediately, 0) == -1,
+          "and lost just the same if the hero is thrown out on frame one");
+
+    Game timed;
+    timed.startStage(last);
+    check(playWithHero(timed, 20) == 1,
+          "but won if it is held until there is a line for it to fight behind");
+}
+
 // --- Can the game actually be played? --------------------------------------
 
 // Plays a whole battle on a fixed composition, sending each unit as soon as it
@@ -2881,6 +3264,7 @@ int main() {
 
     testButtonHitTesting();
     testClickingAButtonSendsItsUnit();
+    testTheHeroButtonNeverCoversASpawnSlot();
     testHoldingTheMouseDoesNotEmptyThePurse();
     testClickingTheFieldBuysNothing();
     testAnUnaffordableButtonDoesNothing();
@@ -2949,6 +3333,16 @@ int main() {
     testAPerkYouCannotAffordIsNotSold();
     testPerkHitTesting();
     testPerksChangeTheBattle();
+
+    testTheHeroIsNotSoldOnTheBar();
+    testSummoningTheHero();
+    testTheHeroCanOnlyBeSummonedOnce();
+    testAFallenHeroStaysFallen();
+    testRetryingAStageReturnsTheHero();
+    testTheHeroButtonSaysWhichOfTheThreeStatesItIsIn();
+    testStagesCannotFieldHeroes();
+    testTheChampionPerkStrengthensTheHero();
+    testWhenYouSpendTheHeroDecidesWhetherItWasWorthIt();
 
     testABattleCanBeWon();
     testOneUnitTypeIsNotEnough();

@@ -107,6 +107,42 @@ cost   = 200
 growth = 1.85
 effect = 3
 
+
+# ---------------------------------------------------------------------------
+# The hero. One summon per battle, and if it falls it stays fallen until the
+# stage is finished or restarted.
+#
+# It is a roster row like any other so it walks, fights, queues and animates
+# with the same code as everything else — but it is never sold on the spawn
+# bar, never takes a number key, and is filtered out of stage compositions.
+# Those three exclusions are what make it a hero rather than a rich soldier.
+#
+# cost and cooldown are zero on purpose: what limits it is that there is one.
+# ---------------------------------------------------------------------------
+
+[unit]
+name         = HERO
+cost         = 0
+health       = 620
+damage       = 46
+range        = 44
+attack_delay = 0.50
+speed        = 88
+cooldown     = 0
+width        = 30
+height       = 48
+left_r       = 250
+left_g       = 235
+left_b       = 140
+right_r      = 255
+right_g      = 120
+right_b      = 90
+
+[upgrade]
+name   = CHAMPION
+cost   = 240
+growth = 1.60
+effect = 0.25
 # ---------------------------------------------------------------------------
 # The campaign. Unlike units, these REPLACE the built-in list rather than
 # merging into it: a campaign is an ordered sequence, so a file describing

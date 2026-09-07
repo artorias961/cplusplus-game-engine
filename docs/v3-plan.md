@@ -513,6 +513,76 @@ cannot be told apart. There is now a test that wins an already-cleared stage
 and checks it pays the ordinary rate — and still pays *something*, so farming
 stays possible and stops being the best way to earn.
 
+### The hero
+
+Not a roadmap slice. The roadmap was built by reading the reference game's
+asset structure, which shows units and animation but does not shout "one of
+these is under the player's control" — so the mechanic its subtitle is named
+after was missing from the plan entirely.
+
+**One summon per battle. If it falls, it stays fallen** until the stage is
+finished or started again. No respawn, no second chance, no cost and no
+cooldown.
+
+That single rule is the whole design, and it is a deliberate change from the
+reference. A hero you can re-summon is an ability on a timer, and the only
+question is whether the timer has run out. A hero you get *once* is a decision
+about when to spend it — which is the interesting question, and the one this
+version asks.
+
+It is a roster row like any other, so it walks, fights, queues, animates and is
+targeted by the same code as everything else. Three exclusions are what make it
+a hero rather than a rich soldier: it is never sold on the spawn bar, never
+takes a number key, and is filtered out of stage compositions — a wave cycle
+asking for heroes would field a stream of them.
+
+A fourth permanent upgrade, CHAMPION, makes the hero and only the hero
+stronger. It stacks on top of WEAPONS rather than replacing it, so the two are
+not the same purchase.
+
+#### Measuring it found the thing that makes it work
+
+Played on the last stage, where the margin is thin enough to show:
+
+| Hero summoned | Result |
+| --- | --- |
+| never | **Lost** |
+| on the opening frame | **Lost** |
+| after ten seconds or more | **Won** |
+
+**Throwing the hero out immediately is exactly as good as never using it.**
+With no line to fight behind it is surrounded and killed for nothing; held
+until the front has formed, the same hero wins a stage that a good army loses.
+That is the decision the one-summon rule exists to create, and it was not
+designed in — it fell out of the rule and was found by playing it.
+
+`testWhenYouSpendTheHeroDecidesWhetherItWasWorthIt` pins all three rows. It is
+a balance assertion and fragile on purpose: if it ever fails, the hero has
+stopped being a decision and become a button you press when it lights up.
+
+#### Three bugs it exposed, and one mutation that survived
+
+- **The spawn bar stopped at the hero instead of skipping it.** Simpler, and
+  wrong: the hero is the last built-in row, so a data file adding a unit after
+  it would have put that unit permanently out of reach. Slots and roster
+  indices are now different numbers, which is why `kindForButton` exists.
+- **The shipped-roster sanity test required every unit to cost something.**
+  The hero costs nothing by design — what limits it is that there is one.
+- **"CHAMPION boosts every unit" passed cleanly.** The test checked the hero
+  hit harder but never that an ordinary soldier did not, which would have made
+  the hero perk into a second WEAPONS.
+- **The hero button sat on top of the spawn bar.** Both positions were
+  independent constants and the hero's covered what would have been the fourth
+  and fifth spawn slots. With the built-in roster there is no fourth slot, so
+  nothing showed it — but a data file adding one more unit type would have put
+  its button underneath the hero's, and the hero is hit-tested first, so
+  clicking that unit would have summoned the hero instead. Found by looking
+  again rather than by any test, which is the uncomfortable part: it was
+  latent, it was one data file away from being real, and the suite was green.
+  The two constants are derived from each other now, and a test walks every
+  slot the bar can ever draw and checks none of them is read as the hero.
+
+
 ## Between slices: an audit, and closing the last untested gaps
 
 ### The audit
