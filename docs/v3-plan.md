@@ -330,11 +330,23 @@ measurement rather than an opinion:
     = 0.0415 ms per frame = 0.25% of a 16.6 ms budget
     peak 141 entities, peak 16 units
 
-`engine_bench` says nothing useful about this game — it measures
-`CollisionSystem`, which Lane Battle deliberately does not use. The O(n²)
-targeting scan that slice 13 earmarks for a spatial grid costs a quarter of one
-percent of a frame. **That slice is not owed and will not be until unit counts
-are ten times higher.**
+`engine_bench` could not answer this, which was itself a defect: it measured
+`CollisionSystem`, which Lane Battle deliberately does not use, so deciding
+"does the targeting scan need a spatial grid yet?" meant writing a throwaway
+probe. It now has a `scan` column measuring the shape the game actually runs —
+for each entity, walk them all and keep the nearest one ahead:
+
+    entities | collision ms | scan ms
+         100 |        0.592 |   0.017
+         400 |       11.588 |   0.357
+         800 |       43.514 |   2.429
+        1600 |      183.293 |  15.016
+
+Asking about distance rather than overlap is about thirty times cheaper at
+every size. At Lane Battle.s hundred-and-forty entities the scan costs roughly
+0.03ms. **The spatial grid is owed somewhere north of eight hundred entities,
+not one hundred and forty**, and that is now a command anyone can run rather
+than a probe I wrote and deleted.
 
 Five things were fixed.
 
@@ -388,6 +400,72 @@ Two things were looked at and deliberately not changed:
 - **`frontLineX`'s final fallback is unreachable and mutation-proof.** It is a
   `return` the compiler requires, and it is commented as such rather than left
   looking covered.
+
+## The renderer is tested now
+
+The audit ended by admitting one thing could not be verified: rendering. There
+is no window in a test, so for four games the part that decides what a player
+actually *sees* was checked by looking at it. A sign error in the camera, a
+layer sorted the wrong way, a parallax factor on the wrong axis — each would
+have shipped until a human noticed.
+
+That is closed. **`tests/render_tests.cpp` draws real frames and reads the
+pixels back**, using SDL's `dummy` video driver and the software renderer:
+no window, no GPU, no display, but a real back buffer that
+`SDL_RenderReadPixels` can return as a grid of numbers. It is a ctest test like
+any other, so CI already runs it — no new job, no new step.
+
+The engine gained two public methods for it, and both are worth having anyway:
+
+- `drawWorld(World&)` — everything `render()` does except presenting, so the
+  frame stays readable.
+- `captureFrame(width, height)` — the back buffer as ARGB pixels. This is a
+  screenshot function; that it is also what makes rendering testable is the
+  happy part.
+
+Thirty-two checks now pin things nothing could previously state:
+
+- a sprite paints its colour at its position, and nothing outside its edges;
+- the camera shifts world sprites by its negative and leaves `screenSpace`
+  ones alone — the rule `View.h` exists to state, checked against pixels
+  rather than against itself;
+- parallax 0.5 shifts by half the camera and 1.5 by half again;
+- a higher layer covers a lower one, and swapping them swaps the answer;
+- alpha actually blends, four games after the blend mode was set up;
+- **a drawn glyph matches the font table pixel for pixel** — which is what
+  finally proves the batched text path draws the same picture the
+  one-rect-per-pixel path did;
+- entities with a drawable but no `Transform` are skipped rather than
+  dereferenced.
+
+### The tests were then attacked, and two rounds were needed
+
+Six deliberate breaks of the renderer:
+
+| Mutation | Caught |
+| --- | --- |
+| Camera sign flipped | yes |
+| Parallax ignored | yes |
+| Layer order reversed | yes |
+| Sprites without a Transform no longer skipped | yes — segfault |
+| Alpha blending turned off | yes |
+| Scale dropped from a glyph's x offset | **no**, first time |
+
+The last one is the interesting failure. The scale check probed the first lit
+column of the letter `I`, which is column zero — where `col * scale` and `col`
+are both nought. A renderer that squashed every string to a third of its width
+passed. Spacing is only visible in the *distance between* columns, so the test
+now measures the glyph's painted width instead of probing one pixel of it.
+
+Correcting it broke it in the opposite direction first: the width scan swept
+far enough to swallow the second character and measured both glyphs as one,
+failing against a perfectly correct renderer. Narrowing the scan to where the
+next character begins fixed it, and the mutation is now caught.
+
+Which is the same lesson as the data-file slice, for the third time: **a test
+that exercises a code path is not the same as a test that would notice the path
+being wrong.** The only reliable way to tell the two apart is to break the code
+on purpose and watch.
 
 ## The open question, answered — and then answered again
 

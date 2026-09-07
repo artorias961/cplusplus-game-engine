@@ -65,6 +65,12 @@ target_link_libraries(lanebattle PRIVATE lanebattle_lib)
 add_executable(engine_tests "${CMAKE_SOURCE_DIR}/tests/engine_tests.cpp")
 target_link_libraries(engine_tests PRIVATE engine)
 
+# The renderer, checked against real pixels rather than by eye. It opens a
+# window through SDL's "dummy" video driver, which needs no display, so this
+# runs anywhere the other tests do.
+add_executable(render_tests "${CMAKE_SOURCE_DIR}/tests/render_tests.cpp")
+target_link_libraries(render_tests PRIVATE engine)
+
 add_executable(breakout_tests "${CMAKE_SOURCE_DIR}/tests/breakout_tests.cpp")
 target_include_directories(breakout_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")
 target_link_libraries(breakout_tests PRIVATE breakout_lib)
@@ -90,10 +96,16 @@ add_test(NAME engine_tests COMMAND engine_tests)
 add_test(NAME breakout_tests COMMAND breakout_tests)
 add_test(NAME asteroids_tests COMMAND asteroids_tests)
 add_test(NAME lanebattle_tests COMMAND lanebattle_tests)
+add_test(NAME render_tests COMMAND render_tests)
+
+# Belt and braces: render_tests sets this itself if it is unset, but saying it
+# here means a developer running the binary by hand on a desktop gets the same
+# headless behaviour CI does, rather than a window flashing up.
+set_tests_properties(render_tests PROPERTIES ENVIRONMENT "SDL_VIDEODRIVER=dummy")
 
 foreach(target engine asteroids_lib asteroids breakout_lib breakout
                 lanebattle_lib lanebattle engine_tests breakout_tests
-                asteroids_tests lanebattle_tests engine_bench)
+                asteroids_tests lanebattle_tests render_tests engine_bench)
     if (MSVC)
         target_compile_options(${target} PRIVATE /W4)
     else()

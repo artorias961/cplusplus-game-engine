@@ -105,6 +105,14 @@ void Engine::processEvents() {
 }
 
 void Engine::render(World& world) {
+    drawWorld(world);
+    SDL_RenderPresent(renderer_);
+}
+
+// Everything render() does except presenting. Split out so a test can draw a
+// frame and then read it back before it is thrown at the screen — see the note
+// on drawWorld/captureFrame in Engine.h.
+void Engine::drawWorld(World& world) {
     // Clear to a dark background color.
     SDL_SetRenderDrawColor(renderer_, 24, 24, 32, 255);
     SDL_RenderClear(renderer_);
@@ -166,8 +174,32 @@ void Engine::render(World& world) {
                 break;
         }
     }
+}
 
-    SDL_RenderPresent(renderer_);
+std::vector<Uint32> Engine::captureFrame(int& width, int& height) {
+    width = 0;
+    height = 0;
+    if (SDL_GetRendererOutputSize(renderer_, &width, &height) != 0) return {};
+    if (width <= 0 || height <= 0) return {};
+
+    std::vector<Uint32> pixels(static_cast<std::size_t>(width) *
+                               static_cast<std::size_t>(height));
+    if (SDL_RenderReadPixels(renderer_, nullptr, SDL_PIXELFORMAT_ARGB8888,
+                             pixels.data(),
+                             width * static_cast<int>(sizeof(Uint32))) != 0) {
+        return {};
+    }
+    return pixels;
+}
+
+Uint32 Engine::pixelAt(int x, int y) {
+    int width = 0;
+    int height = 0;
+    const std::vector<Uint32> pixels = captureFrame(width, height);
+    if (pixels.empty()) return 0;
+    if (x < 0 || y < 0 || x >= width || y >= height) return 0;
+    return pixels[static_cast<std::size_t>(y) * static_cast<std::size_t>(width) +
+                  static_cast<std::size_t>(x)];
 }
 
 void Engine::drawSprite(World& world, Entity entity, const Camera& camera) {

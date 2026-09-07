@@ -90,6 +90,7 @@ engine_project/
 │   ├── asteroids_tests.cpp   Asserts about Asteroids' rules
 │   ├── breakout_tests.cpp    Asserts about Breakout's rules
 │   ├── lanebattle_tests.cpp  Asserts about Lane Battle's rules
+│   ├── render_tests.cpp      Draws frames headlessly and checks the pixels
 │   └── engine_bench.cpp      Measures the naive parts; not a pass/fail test
 ├── .github/workflows/
 │   └── ci.yml          Builds and tests on Linux and macOS
@@ -114,6 +115,7 @@ The build produces these targets, and the split is the point:
 | `asteroids` / `breakout` / `lanebattle` | Each game's window and entry point. |
 | `engine_tests` | Asserts about the engine. Links `engine`. |
 | `asteroids_tests` / `breakout_tests` / `lanebattle_tests` | Asserts about each game's rules. |
+| `render_tests` | Draws real frames through SDL's `dummy` video driver and asserts on the pixels read back. No window, no GPU. |
 
 Every game is shaped the same way — rules in a library, behind a three-line
 `main.cpp`. That split exists for one reason: a game whose logic lives inside

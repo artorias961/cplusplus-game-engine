@@ -8,8 +8,10 @@
 // list of things that must be true and a non-zero exit code when one isn't.
 // `check(...)` is the whole harness.
 //
-// What is NOT covered: anything that needs a window or a GPU. Rendering is
-// verified by looking at the screen. Everything below runs headless in
+// What is NOT covered here: rendering. That used to mean it was not covered
+// anywhere, and was checked by looking at the screen; it now lives in
+// render_tests.cpp, which draws real frames through SDL's "dummy" video driver
+// and asserts on the pixels it reads back. Everything below runs headless in
 // milliseconds, which is what makes it worth running on every build.
 //
 // Run it with `ctest` from the build directory, or just run the binary.

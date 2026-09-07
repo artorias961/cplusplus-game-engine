@@ -33,6 +33,11 @@ jobs:
       - name: Build
         run: cmake --build build --config Release
 
+      # render_tests draws real frames through SDL's "dummy" video driver and
+      # reads the pixels back, so the renderer is covered on a runner with no
+      # display and no GPU. It needs no extra step: it is a ctest test like
+      # the others, and CMake sets SDL_VIDEODRIVER=dummy for it.
+      #
       # Repeated on purpose. The first real failure this pipeline caught was a
       # test that crashed roughly one run in twelve, because it depended on
       # where randomly placed rocks happened to drift. It passed CI twice
@@ -65,6 +70,11 @@ jobs:
       - name: Build
         run: cmake --build build --config Release
 
+      # render_tests draws real frames through SDL's "dummy" video driver and
+      # reads the pixels back, so the renderer is covered on a runner with no
+      # display and no GPU. It needs no extra step: it is a ctest test like
+      # the others, and CMake sets SDL_VIDEODRIVER=dummy for it.
+      #
       # Repeated on purpose. The first real failure this pipeline caught was a
       # test that crashed roughly one run in twelve, because it depended on
       # where randomly placed rocks happened to drift. It passed CI twice

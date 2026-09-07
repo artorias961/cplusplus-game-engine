@@ -69,6 +69,35 @@ public:
     // platform layer, and it must be closed before SDL shuts down.
     AudioDevice& audio() { return *audio_; }
 
+    // --- Drawing a frame without running the loop --------------------------
+    //
+    // These two exist because for four games nothing verified the renderer at
+    // all. Every other part of the engine had tests; the one part that decides
+    // what a player actually sees was checked by looking at it, which meant a
+    // sign error in the camera or a layer sorted the wrong way could only be
+    // caught by a human noticing.
+    //
+    // Together they make a frame inspectable: draw a World into the back
+    // buffer, then read the pixels back and assert on them. With SDL's `dummy`
+    // video driver that needs no window, no GPU and no display, so it runs in
+    // CI like anything else.
+    //
+    // `captureFrame` is also just a screenshot, which is a feature worth
+    // having on its own.
+
+    // Draws every visible component of `world` into the back buffer. Does NOT
+    // present: the frame stays readable, which is the whole point.
+    void drawWorld(World& world);
+
+    // Reads the back buffer back as 32-bit pixels, row by row, in
+    // SDL_PIXELFORMAT_ARGB8888. Returns an empty vector if the read fails.
+    std::vector<Uint32> captureFrame(int& width, int& height);
+
+    // The colour at one pixel of the last drawn frame, as 0xAARRGGBB. Costs a
+    // full read-back, so a test checking many pixels should call
+    // captureFrame() once instead.
+    Uint32 pixelAt(int x, int y);
+
 private:
     // Sprites, polygons and text share one sorted draw list, so a layer means
     // the same thing to all three.
