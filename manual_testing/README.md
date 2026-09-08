@@ -133,11 +133,41 @@ bump the timestamp, rebuild, and confirm the suite is green before they finish.
 
 ---
 
+## campaign_probe — is the campaign asking anything?
+
+The throwaway version of this (below) got run enough times that it stopped
+being throwaway. It is now `tests/campaign_probe.cpp`, built like any other
+target and, like `engine_bench`, deliberately **not** a ctest test: it prints a
+table to read rather than passing or failing.
+
+```bash
+cmake --build build --config Release --target campaign_probe && ./build/Release/campaign_probe
+```
+
+- no arguments — every stage played seven ways, win/loss per stage
+- `--detail` — plus seconds, castle left, shots fired, upgrades bought
+- `--sweep` — the highest enemy income each player still beats, per enemy
+  composition. This is the one that makes tuning possible: it turns "make
+  stage six a bit harder" into "put stage six between AIR and HERO".
+
+**Rebuild before you believe it.** Assets are copied next to the binary at
+build time, so editing `assets/lanebattle/units.txt` and re-running without
+rebuilding measures the *previous* table and prints a perfectly plausible
+result. That cost three rounds of "my change had no effect" during the retune.
+The probe prints the table and hero stats it actually loaded before it measures
+anything, for exactly this reason — read that header first.
+
+It also counts shots fired and upgrades bought, because three of its columns
+once measured nothing at all while looking like findings about the game: a
+strategy that never bought an upgrade, one whose every-frame click never
+released and so never fired, and a sweep whose scratch stage was overwritten
+before it ran. A column that exactly matches its neighbour is the tell.
+
 ## Not scriptable, but worth knowing: balance probing
 
-The most valuable technique for the *games* isn't in these scripts, because it
-isn't a fixed command. Add a temporary function to `tests/lanebattle_tests.cpp`
-that plays whole battles under different strategies and prints the results:
+The technique the probe above grew out of, for anything it doesn't cover. Add a
+temporary function to `tests/lanebattle_tests.cpp` that plays whole battles
+under different strategies and prints the results:
 
 ```
 PROBE| mixed, nothing else        WON  195s  800 vs -12

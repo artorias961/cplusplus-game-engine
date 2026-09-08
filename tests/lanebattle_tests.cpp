@@ -1931,6 +1931,68 @@ void testTheShippedRosterIsSane() {
     lanebattle::resetBalance();
 }
 
+// The shipped file and the compiled-in defaults are two copies of one table,
+// and they have to agree.
+//
+// They are allowed to be different things in principle — the file exists to
+// override the defaults — but the file this project SHIPS is the balance this
+// project chose, and the defaults are what a player sees if it goes missing.
+// Letting those two drift means a lost data file quietly hands somebody a
+// different game, and the retune that produced these numbers had to edit both
+// by hand.
+//
+// Every other bug of this shape in this file was found by accident: the hero
+// button that overlapped the spawn bar, the number keys that ran out before
+// the bar did, the stage list that would have drawn over its own
+// instructions. Three is enough to start checking on purpose.
+void testTheShippedTableMatchesTheCompiledDefaults() {
+    lanebattle::resetBalance();
+
+    // The defaults, copied out before the file replaces them.
+    std::vector<std::string> names;
+    std::vector<float> incomes;
+    std::vector<float> castles;
+    std::vector<int> waves;
+    for (int stage = 0; stage < lanebattle::stageCount(); ++stage) {
+        names.push_back(lanebattle::stageKind(stage).name);
+        incomes.push_back(lanebattle::stageKind(stage).enemyIncome);
+        castles.push_back(lanebattle::stageKind(stage).enemyCastleHealth);
+        waves.push_back(lanebattle::stageKind(stage).waveSize);
+    }
+
+    check(lanebattle::loadBalance(lanebattle::kBalancePath),
+          "the shipped balance file loads");
+    check(lanebattle::stageCount() == static_cast<int>(names.size()),
+          "and holds the same number of stages as the defaults");
+
+    const int shared = std::min(lanebattle::stageCount(),
+                                static_cast<int>(names.size()));
+    for (int stage = 0; stage < shared; ++stage) {
+        const lanebattle::StageKind& row = lanebattle::stageKind(stage);
+        check(names[stage] == row.name, "each stage has the same name");
+        check(std::fabs(incomes[stage] - row.enemyIncome) < 0.005f,
+              "and the same enemy income");
+        check(std::fabs(castles[stage] - row.enemyCastleHealth) < 0.5f,
+              "and the same castle");
+        check(waves[stage] == row.waveSize, "and the same wave size");
+    }
+
+    // The hero too, since retuning it meant editing the same row twice.
+    const int hero = lanebattle::heroKindIndex();
+    check(hero >= 0, "the shipped roster still has a hero");
+    if (hero >= 0) {
+        const float fileHealth = lanebattle::unitKind(hero).health;
+        const float fileDamage = lanebattle::unitKind(hero).damage;
+        lanebattle::resetBalance();
+        check(std::fabs(lanebattle::unitKind(hero).health - fileHealth) < 0.5f,
+              "and the file and the defaults agree on its health");
+        check(std::fabs(lanebattle::unitKind(hero).damage - fileDamage) < 0.5f,
+              "and on its damage");
+    }
+
+    lanebattle::resetBalance();
+}
+
 // --- The castle cannon (slice 8) -------------------------------------------
 
 // Turns a world position into the screen position that would be clicked to
@@ -2986,22 +3048,31 @@ int playWithHero(Game& game, int summonAtSecond) {
 // fails, the hero has stopped being a decision and become a button you press
 // when it lights up.
 void testWhenYouSpendTheHeroDecidesWhetherItWasWorthIt() {
-    const int last = lanebattle::stageCount() - 1;
+    // Measured on the stage the hero actually decides, which is no longer the
+    // last one.
+    //
+    // This used to be fought on stage 8, back when the hero beat every
+    // composition at every income the probe could build — a win button rather
+    // than a swing. It is worth three soldiers now, not six, and stage 8 is
+    // the capstone that asks for the whole game instead. Stage 7 is where the
+    // hero is the difference between losing and winning, so that is where the
+    // claim about SPENDING it well can be measured at all.
+    constexpr int kHeroDecides = 6;
 
     Game never;
-    never.startStage(last);
+    never.startStage(kHeroDecides);
     check(playWithHero(never, -1) == -1,
-          "the last stage is lost without the hero");
+          "a good mixed army loses stage seven without the hero");
 
     Game immediately;
-    immediately.startStage(last);
+    immediately.startStage(kHeroDecides);
     check(playWithHero(immediately, 0) == -1,
-          "and lost just the same if the hero is thrown out on frame one");
+          "and loses just the same if the hero is thrown out on frame one");
 
     Game timed;
-    timed.startStage(last);
+    timed.startStage(kHeroDecides);
     check(playWithHero(timed, 20) == 1,
-          "but won if it is held until there is a line for it to fight behind");
+          "but wins if it is held until there is a line for it to fight behind");
 }
 
 
@@ -3786,6 +3857,71 @@ void testStagesFieldDifferentArmies() {
 // second put an unbeatable wall at stage three. Neither was visible in the
 // numbers; both took playing every stage to find.
 
+// The title screen is the only place that teaches the game, and it had gone
+// stale: it still read "1 RUNNER  2 SOLDIER  3 ARCHER" after the griffin, the
+// hero, the spells and the cannon had all shipped. A hand-written list is a
+// second copy of the roster, and two copies of a fact is the bug this file
+// keeps having.
+//
+// So the test is not "does it say GRIFFIN" — that would be a third copy. It is
+// "does it name everything the bar sells", which stays true when the roster
+// changes.
+void testTheTitleScreenTeachesTheWholeRoster() {
+    lanebattle::resetBalance();
+
+    World world;
+    SceneStack scenes;
+    harness::Harness driver(world, scenes);
+    scenes.push(lanebattle::makeTitleScene());
+    driver.step(2);
+
+    std::string screen;
+    for (auto& entry : world.view<Text>()) {
+        screen += entry.second.value;
+        screen += "\n";
+    }
+
+    for (int slot = 0; slot < lanebattle::visibleButtonCount(); ++slot) {
+        const int kind = lanebattle::kindForButton(slot);
+        check(kind >= 0 &&
+                  screen.find(lanebattle::unitKind(kind).name) != std::string::npos,
+              "the title screen names every unit the bar sells");
+        check(screen.find(std::to_string(slot + 1) + " " +
+                          lanebattle::unitKind(kind).name) != std::string::npos,
+              "and gives each one the key that actually sends it");
+    }
+
+    check(screen.find("HERO") != std::string::npos,
+          "and mentions the hero, which no number key reaches");
+    for (int spell = 0; spell < lanebattle::kSpellCount; ++spell) {
+        check(screen.find(lanebattle::spellKind(spell).name) != std::string::npos,
+              "and every spell");
+    }
+
+    // A unit added by a file must appear too, or the screen is stale again the
+    // moment anyone retunes the roster.
+    const std::string path = writeRoster("lb_title.txt", R"(
+[unit]
+name = LANCER
+cost = 70
+health = 130
+)");
+    check(lanebattle::loadBalance(path), "a file adds a unit");
+
+    World later;
+    SceneStack laterScenes;
+    harness::Harness laterDriver(later, laterScenes);
+    laterScenes.push(lanebattle::makeTitleScene());
+    laterDriver.step(2);
+
+    std::string laterScreen;
+    for (auto& entry : later.view<Text>()) laterScreen += entry.second.value;
+    check(laterScreen.find("LANCER") != std::string::npos,
+          "and the title screen names it without anybody editing the title screen");
+
+    lanebattle::resetBalance();
+}
+
 void testTheFirstStageIsAnOnRamp() {
     static const int onlySoldiers[] = {kSoldier};
     Game game;
@@ -3803,14 +3939,31 @@ void testTheLastStageNeedsMoreThanComposition() {
     check(playBattle(unaided, mixed, 3) == -1,
           "a good army alone does not win the last stage");
 
-    // The same army behind two income upgrades does. That is the capstone
-    // asking for the one system the earlier stages never forced you to use.
-    Game funded;
-    funded.startStage(last);
-    const int income = static_cast<int>(lanebattle::Upgrade::Income);
-    funded.session().upgrades[income] = 2;
-    check(playBattle(funded, mixed, 3) == 1,
-          "but the same army behind two income upgrades does");
+    // Nor does that army plus the hero, which every stage before this one
+    // could be beaten with.
+    Game champion;
+    champion.startStage(last);
+    check(playWithHero(champion, 20) == -1,
+          "and neither does a good army plus the hero");
+
+    // The second half of this test used to hand the player two INCOME
+    // upgrades and check that they won, which was a claim about the economy
+    // that the economy could not support.
+    //
+    // The upgrades were GIVEN, not bought. `campaign_probe` plays the same
+    // stage while actually paying for them and the outcome does not move at
+    // all: buying INCOME the moment it is affordable measures WORSE than never
+    // buying it, because the units not sent while paying for it lose a line
+    // that does not come back. So the old test passed on a fiction — a player
+    // handed 318 gold of upgrades for nothing — and asserted that the capstone
+    // was gated on a system which cannot in fact gate anything.
+    //
+    // What the capstone is really gated on is everything at once: griffins,
+    // the hero, spells and the cannon together. That is the FULL column in the
+    // probe, it is the only column that wins this stage, and it needs a
+    // driver too long to belong in a unit test. So this checks the half it can
+    // check honestly — that strong incomplete play loses — and the probe owns
+    // the other half. See docs/v3-plan.md.
 }
 
 void testWinningUnlocksTheNextStageOnly() {
@@ -3917,7 +4070,17 @@ void testOneUnitTypeIsNotEnough() {
     // teaches you to press a button. The claim being guarded here is that one
     // unit type stops being enough once the campaign gets going, so it has to
     // be measured somewhere the campaign has got going.
-    constexpr int kProvingGround = 4;
+    // Moved from stage 5 to stage 6 by the fourth tuning pass.
+    //
+    // On the retuned curve a mono-type army does not lose stages 2-5, it
+    // STALEMATES them: it holds its own ground for four hundred seconds and
+    // never breaks through. That still fails the claim being guarded — one
+    // unit type is not enough to win — but "did not win" and "lost" are
+    // different facts, and a test that says `== -1` should mean the second
+    // one. Stage 6 is where the campaign stops tolerating it outright, so the
+    // strict assertion is made where it is strictly true rather than loosened
+    // to wherever it was already pointing.
+    constexpr int kProvingGround = 5;
 
     Game soldiers;
     soldiers.startStage(kProvingGround);
@@ -4015,6 +4178,7 @@ int main() {
     testTheSpawnBarStopsAtTheEdgeOfTheWindow();
     testEveryVisibleSlotHasAKeyThatSendsIt();
     testTheShippedRosterIsSane();
+    testTheShippedTableMatchesTheCompiledDefaults();
 
     testClickingTheFieldFiresTheCannon();
     testAnEmptyPurseFiresNothing();
@@ -4042,6 +4206,7 @@ int main() {
     testTheStageListStopsBeforeTheInstructions();
     testEachStageConfiguresItsOwnBattle();
     testStagesFieldDifferentArmies();
+    testTheTitleScreenTeachesTheWholeRoster();
     testTheFirstStageIsAnOnRamp();
     testTheLastStageNeedsMoreThanComposition();
     testWinningUnlocksTheNextStageOnly();

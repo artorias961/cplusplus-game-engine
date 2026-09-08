@@ -1092,7 +1092,119 @@ happened rather than what was asked for.
   whether or not it is on screen. SDL clips, so it is correct, and the
   measured frame cost says it is not worth an early-out yet.
 
-## The campaign is flat, and the hero flattens what is left
+## The campaign re-tune, and the instrument it needed
+
+### What was wrong
+
+    stage | plain | +hero
+      1-7 |  WIN  |  WIN
+        8 | LOSS  |  WIN
+
+Seven of eight stages fell to one fixed army — soldier, soldier, archer — with
+no adaptation at all, and the hero cleared the eighth on its own. The stage
+table varies composition precisely so that stages ask different questions, and
+measuring said they did not.
+
+### The instrument
+
+`tests/campaign_probe.cpp`, built for this and kept. Not a test: it prints a
+table rather than passing, and is not registered with ctest, exactly like
+`engine_bench`. It plays every stage seven ways —
+
+    NAIVE  soldiers only              MIXED  soldier/soldier/archer
+    AIR    mixed plus griffins        ECON   mixed, buying INCOME
+    GUNS   mixed, using the cannon    HERO   mixed plus the one summon
+    FULL   all of it
+
+— and `--sweep` finds the highest enemy income each of them still beats, per
+composition. That sweep is what made the retune possible: it turns "make stage
+six a bit harder" into "put stage six between AIR and HERO."
+
+**Three of its columns were silently measuring nothing**, and each looked like
+a finding about the game rather than a bug in the probe:
+
+- **ECON** matched MIXED to the second, because the unit cycle spent the purse
+  before the upgrade check ever saw enough to buy one.
+- **GUNS** matched MIXED to the second, because a click re-issued every frame
+  never *releases* — and the cannon fires on the release. It fired nothing.
+- **The whole sweep** reported every player beating every income, because
+  `play()` reloaded the shipped roster on entry and threw away the scratch
+  stage the sweep had just written.
+
+Each produced a believable table of numbers meaning nothing. The probe now
+prints the stage table and hero stats it actually loaded before measuring
+anything, and counts shots fired and upgrades bought — the same guard
+`mutate.bat` uses when it checks its mutation applied.
+
+That guard earned itself immediately: assets are **copied next to the binary at
+build time**, so editing `units.txt` and re-running without rebuilding measures
+the previous table. That cost three rounds of "the change had no effect,"
+including a hero retune that never reached the binary.
+
+### What the measurement found
+
+- **Composition is far the stronger dial.** Giving the enemy archers drops what
+  a ground army survives from about 1.4 income to about 0.6 — a bigger swing
+  than the campaign's entire income range.
+- **The old hero was a win button.** At 620 health and 46 damage it beat every
+  composition the probe could build at every income it could reach. Retuned to
+  360 and 32: still worth about three soldiers of health and three of damage,
+  free and instant, but no longer a campaign you cannot lose.
+- **The cannon never fires.** Zero shots across every run of every strategy.
+  Its range is 420 from your own castle, so it only reaches an enemy that has
+  already arrived at your gate — and this game's collapses are unrecoverable.
+  Slice 8 is, as balanced, unreachable content.
+- **INCOME cannot decide a stage.** Bought greedily it is worse than not buying
+  at all; bought only while winning it arrives after the outcome is settled.
+- **Outcomes are a step function, and not a monotonic one.** A stage is held
+  untouched or lost outright with almost nothing between, and a stronger player
+  can lose a stage a weaker one wins. This is why the table cannot be tuned by
+  reading it, and why the sweep's numbers are lower bounds rather than true
+  thresholds.
+
+### The result
+
+    stage  asks for                    NAIVE MIXED AIR  ECON GUNS HERO FULL
+    1      nothing - learn the button   WIN   WIN  WIN   WIN  WIN  WIN  WIN
+    2-4    a mixed army                draw   WIN  WIN   WIN  WIN  WIN  WIN
+    5      the sky                     draw  draw  WIN  draw draw  WIN  WIN
+    6-7    the hero                    loss  loss loss  loss loss  WIN  WIN
+    8      all of it                   loss  loss loss  loss loss loss  WIN
+
+    stages won                            1     4    5     4    4    7    8
+
+Every column's wins turn into losses, and the turn comes later for the players
+who know more. Stages 2-5 escalate on income against one plain ground army;
+6-8 hold income roughly still and escalate on composition instead, because
+that is the dial the measurement says is strong.
+
+### What it cost the tests
+
+Three design guards encoded the old curve and had to move — and one of them was
+wrong in a way worth recording. `testTheLastStageNeedsMoreThanComposition`
+**gave** the player two INCOME upgrades and checked they won. Handed 318 gold
+of upgrades for free, they did. Paid for, the probe says they change nothing at
+all. The test passed on a fiction and asserted the capstone was gated on a
+system that cannot gate anything.
+
+The mono-type guard moved from stage 5 to stage 6 for a smaller reason with the
+same shape: on the new curve a mono-type army *stalemates* stages 2-5 rather
+than losing them. "Did not win" and "lost" are different facts, and a test
+saying `== -1` should mean the second — so the assertion moved to where it is
+strictly true instead of being loosened to fit where it already pointed.
+
+### Still open
+
+`testTheShippedTableMatchesTheCompiledDefaults` now guards the stage table and
+the hero against the file and the header drifting apart, since retuning meant
+editing both by hand — the fourth instance in this file of two copies of one
+fact, after the hero button, the number keys and the stage list.
+
+The cannon and the economy are still inert. Both are balance problems with
+real fixes — a longer cannon reach, an income upgrade that is cheap enough to
+buy early — and both are their own piece of work rather than part of this one.
+
+## The campaign was flat, and the hero flattened what was left
 
 The re-tune flagged after slice 11 now has numbers. Playing every stage with
 one fixed army — soldier, soldier, archer, no cannon, no spells, no upgrades —

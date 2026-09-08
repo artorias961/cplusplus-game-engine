@@ -2752,18 +2752,76 @@ private:
 class TitleScene : public Scene {
 public:
     void onEnter(World& world) override {
-        owned_.push_back(createCenteredText(world, "LANE BATTLE", 110, 8,
+        owned_.push_back(createCenteredText(world, "LANE BATTLE", 92, 8,
                                             220, 200, 140, kHudLayer));
-        owned_.push_back(createCenteredText(world, "1 RUNNER  2 SOLDIER  3 ARCHER",
-                                            210, 2, 200, 200, 215, kHudLayer));
+
+        // The roster line is BUILT from the roster rather than typed out.
+        //
+        // It used to read "1 RUNNER  2 SOLDIER  3 ARCHER" and had stayed that
+        // way through the griffin, the hero, the spells and the cannon — so
+        // the only screen whose job is teaching the game taught three of its
+        // five units and none of its verbs. A hand-written list is a second
+        // copy of the roster, and this file has now had three bugs from two
+        // copies of a fact disagreeing. This one cannot disagree.
+        owned_.push_back(createCenteredText(world, rosterLine(), 176, 2,
+                                            200, 200, 215, kHudLayer));
+
+        if (heroKindIndex() >= 0) {
+            owned_.push_back(createCenteredText(
+                world, "H  SUMMON YOUR HERO - ONCE A BATTLE, AND ONLY ONCE",
+                200, 2, 235, 220, 150, kHudLayer));
+        }
+
+        owned_.push_back(createCenteredText(world, spellLine(), 224, 2,
+                                            180, 190, 230, kHudLayer));
+
+        owned_.push_back(createCenteredText(
+            world, "CLICK THE FIELD TO SHELL IT - DRAG TO LOOK AROUND",
+            248, 2, 180, 190, 230, kHudLayer));
+
         owned_.push_back(createCenteredText(world, "ARCHERS NEED A FRONT LINE",
-                                            240, 2, 170, 170, 195, kHudLayer));
+                                            288, 2, 170, 170, 195, kHudLayer));
+        owned_.push_back(createCenteredText(
+            world, "AND ONLY ARCHERS AND THE HERO REACH THE SKY",
+            310, 2, 170, 170, 195, kHudLayer));
         owned_.push_back(createCenteredText(world, "BREAK THE ENEMY CASTLE",
-                                            270, 2, 170, 170, 195, kHudLayer));
-        owned_.push_back(createCenteredText(world, "SPACE TO START", 350, 3,
+                                            332, 2, 170, 170, 195, kHudLayer));
+
+        owned_.push_back(createCenteredText(world, "SPACE TO START", 386, 3,
                                             235, 235, 235, kHudLayer));
-        owned_.push_back(createCenteredText(world, "Q TO QUIT", 400, 2,
+        owned_.push_back(createCenteredText(world, "Q TO QUIT", 428, 2,
                                             170, 170, 195, kHudLayer));
+    }
+
+    // "1 RUNNER  2 SOLDIER  3 ARCHER  4 GRIFFIN", from whatever the bar sells.
+    //
+    // Slots rather than roster rows, which is the same list the number keys
+    // and the spawn bar are bound to — so a unit named here is a unit you can
+    // actually send, and a roster too long for the bar does not advertise
+    // something that has no button.
+    static std::string rosterLine() {
+        std::string line;
+        for (int slot = 0; slot < visibleButtonCount(); ++slot) {
+            const int kind = kindForButton(slot);
+            if (kind < 0) continue;
+            if (!line.empty()) line += "  ";
+            line += std::to_string(slot + 1);
+            line += " ";
+            line += unitKind(kind).name;
+        }
+        return line.empty() ? "NO UNITS IN THE ROSTER" : line;
+    }
+
+    // "Z METEOR  X HEAL  C RAGE", from the spell table and its own hints.
+    static std::string spellLine() {
+        std::string line;
+        for (int spell = 0; spell < kSpellCount; ++spell) {
+            if (!line.empty()) line += "  ";
+            line += spellKind(spell).hint;
+            line += " ";
+            line += spellKind(spell).name;
+        }
+        return line;
     }
 
     void onExit(World& world) override {

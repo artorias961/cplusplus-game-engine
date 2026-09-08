@@ -176,7 +176,15 @@ constexpr UnitKind kDefaultUnitKinds[] = {
     // appears in a stage's composition. Those exclusions are what make it a
     // hero rather than an expensive soldier. It can reach the sky, because a
     // champion that loses to a bird is not much of one.
-    {"HERO",      0.0f, 620.0f, 46.0f,  44.0f, 0.50f,  88.0f, 0.0f, 30.0f, 48.0f, false, true,  250, 235, 140, 255, 120,  90},
+    // Retuned down from 620 health and 46 damage, which measurement said was
+    // not a swing but a win button: with the old numbers the hero beat every
+    // composition the probe could build at every income it could reach, and a
+    // campaign it cannot lose is a campaign the rest of the game is decoration
+    // on. At 360 and 32 it is still worth roughly three soldiers of health and
+    // three of damage, free and instant — a decision about WHEN, which is what
+    // it was always meant to be — and the probe now finds stages it does not
+    // save you from.
+    {"HERO",      0.0f, 360.0f, 32.0f,  44.0f, 0.50f,  88.0f, 0.0f, 30.0f, 48.0f, false, true,  250, 235, 140, 255, 120,  90},
 };
 constexpr int kDefaultUnitKindCount =
     static_cast<int>(sizeof(kDefaultUnitKinds) / sizeof(kDefaultUnitKinds[0]));
@@ -420,15 +428,40 @@ struct StageKind {
 // spends gold that would otherwise have bought a soldier, so the higher
 // income bought a worse army. Early stages are diluted on purpose; the last
 // ones are lean.
+// The FOURTH attempt, and the first one built from a measurement rather than
+// from a guess that was then measured. `tests/campaign_probe.cpp` plays every
+// stage seven ways and prints who beat what; these rows were placed between
+// the thresholds it found.
+//
+// What the third attempt got wrong was not a number, it was the shape. Seven
+// of its eight stages fell to a single unadapted army, and three whole systems
+// — the sky, the economy, the cannon — were needed nowhere. The campaign had
+// two gates in it and pretended to have eight.
+//
+// Each stage now asks for something, and the probe says so:
+//
+//     stage    asks for                     beaten by
+//     1        nothing - learn the button   everyone
+//     2-4      a mixed army                 MIXED and up
+//     5        the sky                      AIR and up
+//     6-7      the hero                     HERO and up
+//     8        all of it                    FULL only
+//
+// Note how the difficulty moves. Stages 2-5 escalate on INCOME against one
+// plain ground army; 6-8 hold income roughly still and escalate on
+// COMPOSITION instead. That is not a stylistic choice — measuring says the
+// composition dial is far the stronger of the two. Giving the enemy archers
+// drops what a ground army can survive from about 1.4 income to about 0.6, a
+// bigger swing than the entire income range of the campaign.
 constexpr StageKind kDefaultStages[] = {
-    {"THE BORDER",     0.40f,  350.0f, 2, "1,0"},
-    {"RIVER CROSSING", 0.55f,  450.0f, 2, "1,1,0"},
-    {"THE FOOTHILLS",  0.68f,  550.0f, 3, "1,1,0,2"},
-    {"OLD ROAD",       0.80f,  650.0f, 3, "1,1,2,0"},
-    {"THE PASS",       0.90f,  750.0f, 3, "1,1,2"},
-    {"BLACK FIELD",    1.00f,  850.0f, 4, "1,2,1,2,0"},
-    {"THE GATES",      1.05f,  900.0f, 4, "1,1,2,0,2"},
-    {"THE KEEP",       1.15f, 1000.0f, 4, "1,1,2,2"},
+    {"THE BORDER",     0.40f,  480.0f, 2, "1,0"},
+    {"RIVER CROSSING", 0.60f,  600.0f, 3, "1,1,0"},
+    {"THE FOOTHILLS",  1.00f,  740.0f, 3, "1,1,0"},
+    {"OLD ROAD",       1.25f,  860.0f, 3, "1,1,0"},
+    {"THE PASS",       1.70f,  980.0f, 3, "1,1,0"},
+    {"BLACK FIELD",    1.35f,  900.0f, 3, "1,1,2"},
+    {"THE GATES",      1.20f,  950.0f, 4, "1,2,3,0"},
+    {"THE KEEP",       2.10f, 1300.0f, 4, "1,3,1,2"},
 };
 constexpr int kDefaultStageCount =
     static_cast<int>(sizeof(kDefaultStages) / sizeof(kDefaultStages[0]));
