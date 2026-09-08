@@ -45,6 +45,7 @@
 #include <SDL.h>
 
 #include <cstdlib>
+#include <limits>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -84,8 +85,22 @@ public:
         return (end == start) ? fallback : parsed;
     }
 
+    // Clamped to what an int can hold before the cast, not after.
+    //
+    // Every data file this engine reads is a text file somebody can edit, and
+    // a float outside int's range is UNDEFINED BEHAVIOUR to cast, not a large
+    // number to reject later. `stages_unlocked = 1e20` in a save file went
+    // through this and was clamped by its caller afterwards — one step too
+    // late to matter. NaN fails both comparisons and falls through to the
+    // fallback, which is the right answer for it too.
     int integer(const std::string& key, int fallback) const {
-        return static_cast<int>(number(key, static_cast<float>(fallback)));
+        const float value = number(key, static_cast<float>(fallback));
+        constexpr float kIntMax = 2147483520.0f;   // the largest float < INT_MAX
+        constexpr float kIntMin = -2147483648.0f;
+        if (value >= kIntMax) return std::numeric_limits<int>::max();
+        if (value <= kIntMin) return std::numeric_limits<int>::min();
+        if (!(value == value)) return fallback;    // NaN
+        return static_cast<int>(value);
     }
 
     void set(std::string key, std::string value) {

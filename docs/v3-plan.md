@@ -940,6 +940,190 @@ Three lessons worth keeping:
 3. **A balance test is worth its fragility.** `testOneUnitTypeIsNotEnough` will
    break if the numbers are retuned badly, which is the point of it.
 
+## A second audit, after twelve slices
+
+The first audit found nothing that needed optimising. This one found four
+things wrong, and the useful part is what kind of wrong they were: none was
+visible by reading, all four were reachable by a player, and every one had a
+test sitting next to it that was happy.
+
+### HEAL was subtracting health from the hero
+
+`castHeal` capped healing at `kindOf(unit.kind).health` — the roster's number.
+That is the right ceiling for every unit the bar sells and the wrong one for
+exactly one thing: a hero carrying CHAMPION, whose health is scaled on the way
+out of the gate. A championed hero above the roster's number got **clamped
+down** by its own heal. Cast on a hero at 700 with a maximum of 775, HEAL took
+it to 620.
+
+Only a player who had paid for the perk could see it, which is the worst
+possible distribution for a bug. `testHealRestoresYourUnitsButNotBeyondFull`
+could not: a soldier's maximum and its roster row are the same number, so the
+case that breaks is the one case the test could not contain.
+
+The fix is a `maxHealth` field on `Unit`, set at spawn and scaled with the
+hero. A cap now asks the unit rather than the table.
+
+### The number keys and the spawn bar were different lists
+
+The keys were bound to roster rows, four of them, not skipping the hero. The
+bar is bound to slots, five of them, skipping the hero. With the shipped
+roster the two agree by coincidence.
+
+Add a sixth sellable unit type in `units.txt` and they stop agreeing: the bar
+is full and the keys have run out, so that unit is purchasable by **nothing at
+all**. `testTheSpawnBarStopsAtTheEdgeOfTheWindow` watched this happen and
+approved, because truncating the bar is what the bar should do — the question
+it never asked was whether the keyboard still covered what the bar showed.
+
+The header claimed the opposite in a comment: *"their number keys still work,
+so nothing is unreachable."* Both are fixed — the keys are bound to
+`kindForButton` now, there are five of them, and a `static_assert` ties the
+count to `kMaxVisibleButtons` so they cannot drift apart again.
+
+This is the second bug of exactly this shape, after the hero button that
+overlapped spawn slots four and five. Both were one data file away from real,
+and both came from two things deriving the same fact separately.
+
+### mutate.bat did not run
+
+The tool this project calls its most useful technique failed on **its own
+documented example**, with a wall of `'m' is not recognized as an internal or
+external command`.
+
+Line endings. `cmd.exe` does not read a batch file line by line — it seeks by
+byte offset between commands, and an LF-only `.bat` makes it land mid-line and
+run the tail of one as a command. Nothing in the error says so, and the
+obvious comparison pointed the wrong way: `verify.bat`, in the same folder and
+just as LF, runs perfectly.
+
+Worse, it worked for everyone else. `core.autocrlf` is true, so a fresh clone
+gets a CRLF copy that runs — the tool was broken only in the working tree of
+the person who wrote it. A `.gitattributes` now pins `*.bat` to CRLF.
+
+The first guess was wrong, too, and worth recording: the `^` line continuation
+looked like the culprit, removing it changed nothing, and only writing a CRLF
+copy and watching it parse settled it.
+
+### Nine full-world scans a frame
+
+Slice 6 moved `findTargetAhead` and `blockedByFriendly` off `world.entities()`
+and onto `world.view<Unit>()`, and recorded why: fifty hills and tufts,
+rejected once per unit per frame, had made the suite 60% slower on their own.
+
+Seven other queries never got the same treatment. `frontLineX` is the worst —
+the camera, both minimap markers and the enemy cannon all ask it every frame,
+and it was walking the scenery to answer. `countUnitsOfKind` runs three times
+a frame.
+
+Moving those two:
+
+    lanebattle_tests   6.10s -> 3.84s        (-37%)
+
+`fight` and `removeTheDead` were left alone **deliberately**, and the reason is
+worth more than the milliseconds. `entities()` is a vector in creation order;
+a component pool is a hash map whose order is a standard-library detail. Order
+does not matter to a count or to a coordinate, which is why the two queries
+above could move — but it decides who swings first when two blows land in the
+same frame, and therefore which of two units dies. Taking the faster pool
+there would buy a fraction of a percent of one frame and pay for it with a
+battle that can resolve differently on Linux than on Windows.
+
+`engine_bench` still says the spatial grid is not owed: at the ~140 entities
+this game peaks at, the scan column costs about 0.03 ms.
+
+### The stage list would have drawn over its own instructions
+
+Third time for this exact bug. `kMaxStages` is 24 and a data file may supply
+that many; eight rows fit above the hint text. A ninth stage draws across
+"CLICK A BATTLE, OR ENTER FOR THE LATEST", a tenth across "Q TO QUIT", and
+everything past that off the bottom of the window where it can be neither seen
+nor clicked — while `stageAt` cheerfully returned an index for rows nobody
+could see.
+
+The shipped campaign has exactly eight. One more and it is visible.
+
+`kMaxVisibleStages` is derived from the hint position now, the same way
+`kMaxVisibleButtons` is derived from the hero button. The pattern in all three
+is identical: **two constants that had to agree, written down separately.**
+
+### `integer()` cast a float to an int without checking the range
+
+Engine-level, and it affects every integer any data file has ever supplied.
+`stages_unlocked = 1e20` in a save file went through `static_cast<int>` — which
+is undefined behaviour for a value out of range, not a large number — and was
+clamped by its caller one step too late to matter. Clamped before the cast now,
+with NaN falling through to the fallback.
+
+Two smaller ones of the same shape were fixed in the game: the composition
+parser and the save loader both accumulated digits into an `int` that a long
+enough run would overflow on the way to being rejected.
+
+### The frame limiter fought vsync above 60Hz
+
+`Engine::run` slept to hit 60fps whether or not vsync was already doing it.
+Present returns after one refresh — 6.9 ms at 144 Hz — the sleep adds 9.7 ms on
+top, and the next present then waits for the following refresh boundary at
+20.8 ms. **A 144 Hz monitor ran the game at 48 fps with uneven frame times.**
+
+A 60 Hz display cannot show this: present already costs a full 16.6 ms there,
+so the sleep computes to zero. The bug was exactly invisible on the machine
+most likely to be testing for it, which is the second bug in this pass with
+that property — `mutate.bat` was the other.
+
+The renderer is asked once whether it actually got vsync, since the request can
+be granted, refused, or dropped by the fallback, and the limiter follows what
+happened rather than what was asked for.
+
+### Noted, not fixed
+
+- **Float parsing is locale-dependent.** `strtof` and `std::to_string` both
+  follow the C locale, so on a machine using a comma decimal separator every
+  fractional number in `units.txt` would silently truncate — `enemy_income =
+  0.40` becoming `0.0`, which is not a fallback and would not look like a
+  parse failure. Nothing in this project calls `setlocale`, so the locale is
+  "C" and this cannot currently happen. It is one dependency away from being
+  able to.
+- **The title screen teaches three units.** It still reads `1 RUNNER 2 SOLDIER
+  3 ARCHER` and says nothing about the griffin, the hero, the spells or the
+  cannon. Not a bug — a content decision about what a new player should be
+  told, and worth making deliberately.
+- **Nothing is culled.** Every sprite, polygon and text is drawn every frame
+  whether or not it is on screen. SDL clips, so it is correct, and the
+  measured frame cost says it is not worth an early-out yet.
+
+## The campaign is flat, and the hero flattens what is left
+
+The re-tune flagged after slice 11 now has numbers. Playing every stage with
+one fixed army — soldier, soldier, archer, no cannon, no spells, no upgrades —
+and then the same army with the hero summoned:
+
+    stage | plain | +hero
+    ------+-------+------
+        1 |  WIN  |  WIN
+        2 |  WIN  |  WIN
+        3 |  WIN  |  WIN
+        4 |  WIN  |  WIN
+        5 |  WIN  |  WIN
+        6 |  WIN  |  WIN
+        7 |  WIN  |  WIN
+        8 | LOSS  |  WIN
+
+Two things, and the second is the bigger one.
+
+**The hero wins the only stage that was asking a question.** Stage 8 is the
+one gate in the campaign, `testTheLastStageNeedsMoreThanComposition` exists to
+keep it that way, and a free one-per-battle summon clears it with nothing else
+changed. That guard still passes because it plays without the hero.
+
+**Seven stages fall to the same army with no adaptation.** The stage table
+varies composition specifically so that stages ask different questions, and
+measuring says they currently do not. The curve is flat and then a cliff, and
+the hero has now taken the cliff out.
+
+That is a re-tune of the stage table, not a bug fix, and it is the next real
+piece of work.
+
 ## Remaining slices
 
 Moved to **`docs/roadmap-cartoonwars.md`**, which lists all eleven of them

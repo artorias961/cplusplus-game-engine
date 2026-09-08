@@ -145,7 +145,12 @@ void parseComposition(const char* text, Session& session) {
 
     for (const char* cursor = text; ; ++cursor) {
         if (*cursor >= '0' && *cursor <= '9') {
-            value = value * 10 + (*cursor - '0');
+            // Clamped for the same reason the save loader is: a composition
+            // comes out of a data file, and a long run of digits would
+            // overflow on the way to being rejected. Signed overflow is
+            // undefined, so it has to be stopped before it happens rather
+            // than caught after.
+            if (value < kMaxUnitKinds) value = value * 10 + (*cursor - '0');
             haveDigits = true;
             continue;
         }
@@ -483,10 +488,17 @@ const StageKind& stageKind(int stage) {
 
 int stageCount() { return static_cast<int>(gStages.size()); }
 
+int visibleStageCount() {
+    return std::min(stageCount(), kMaxVisibleStages);
+}
+
 int stageAt(float screenX, float screenY) {
     if (screenX < kStageX || screenX > kStageX + kStageWidth) return -1;
 
-    for (int index = 0; index < stageCount(); ++index) {
+    // Only the rows that are actually drawn are clickable. Walking every stage
+    // instead would hand back an index for a row sitting on top of the
+    // instructions, or off the bottom of the window entirely.
+    for (int index = 0; index < visibleStageCount(); ++index) {
         const float top = stageTop(index);
         if (screenY >= top && screenY <= top + kStageHeight) return index;
     }
@@ -577,7 +589,13 @@ bool loadCampaign(Campaign& campaign) {
     for (std::size_t at = 0; at <= cleared.size(); ++at) {
         const char c = at < cleared.size() ? cleared[at] : ',';
         if (c >= '0' && c <= '9') {
-            value = value * 10 + (c - '0');
+            // Stopped rather than allowed to wrap. A save is a text file a
+            // player can edit, and a run of twenty digits would overflow a
+            // signed int on the way to being rejected — which is undefined
+            // behaviour, not a rejection. Clamping keeps the value nonsense
+            // and keeps it defined, and the `< kMaxStages` test below still
+            // throws it away.
+            if (value < kMaxStages) value = value * 10 + (c - '0');
             digits = true;
             continue;
         }
@@ -776,10 +794,12 @@ int countUnits(World& world, bool leftSide) {
 
 int countUnitsOfKind(World& world, bool leftSide, int kind) {
     int count = 0;
-    for (Entity entity : world.entities()) {
-        Unit* unit = world.getComponent<Unit>(entity);
-        if (!unit) continue;
-        if (kind >= 0 && unit->kind != kind) continue;
+    // The unit pool, not the whole world. Same reasoning as findTargetAhead:
+    // this runs three times a frame against a world that is mostly scenery.
+    // A count does not care what order it visits things in, so nothing about
+    // determinism changes with the iteration order.
+    for (auto& [entity, unit] : world.view<Unit>()) {
+        if (kind >= 0 && unit.kind != kind) continue;
         Team* team = world.getComponent<Team>(entity);
         if (team && team->leftSide == leftSide) ++count;
     }
@@ -978,8 +998,16 @@ float frontLineX(World& world, bool leftSide) {
 
     bool found = false;
     float front = 0.0f;
-    for (Entity entity : world.entities()) {
-        if (!world.hasComponent<Unit>(entity)) continue;
+    // The unit pool. This is the most-called query in the game — the camera,
+    // the minimap's two markers and the enemy cannon all ask it every frame —
+    // and it was walking the scenery to answer.
+    //
+    // The answer is a coordinate rather than an entity, so a tie between two
+    // units standing on the same x returns the same number whichever the pool
+    // yields first. That is the reason this one is safe to move and `fight`
+    // is not: see the note there.
+    for (auto& [entity, unitRef] : world.view<Unit>()) {
+        (void)unitRef;
         Team* team = world.getComponent<Team>(entity);
         Transform* transform = world.getComponent<Transform>(entity);
         if (!team || team->leftSide != leftSide || !transform) continue;
@@ -1037,6 +1065,7 @@ Entity spawnUnit(World& world, bool leftSide, int kind) {
     Unit component;
     component.kind = kind;
     component.health = stats.health;  // the table is the only source of health
+    component.maxHealth = stats.health;
     world.addComponent(unit, component);
     world.getComponent<Unit>(unit)->figure = createFigure(world, unit, sprite);
 
@@ -1516,13 +1545,31 @@ private:
 
         if (countUnits(world, true) >= populationCapFor(session, true)) return;
 
-        // One key per row of the table, so adding a fourth unit type is a
-        // table row and one scancode rather than a change to any rule.
+        // One key per SLOT of the spawn bar, not per row of the roster.
+        //
+        // Those were different lists, and the difference was a bug waiting on
+        // a data file. The bar skips the hero and stops at the window's edge;
+        // the keys did neither, so they counted rows the bar had already
+        // passed over. With the built-in roster the two happened to agree —
+        // and a file adding a sixth unit type would have produced one the bar
+        // was too short to show and the keys had already run out of, leaving
+        // it purchasable by nothing at all.
+        //
+        // Asking `kindForButton` means there is now one answer to "what can
+        // the player send", and the keyboard and the mouse cannot drift apart
+        // again. `visibleButtonCount()` is bounded by kMaxVisibleButtons,
+        // which is five, which is why there are five keys.
         static const SDL_Scancode keys[] = {SDL_SCANCODE_1, SDL_SCANCODE_2,
-                                            SDL_SCANCODE_3, SDL_SCANCODE_4};
-        for (int kind = 0; kind < unitKindCount() && kind < 4; ++kind) {
-            if (!input.isKeyDown(keys[kind])) continue;
-            if (trySpawn(world, session, kind)) return;
+                                            SDL_SCANCODE_3, SDL_SCANCODE_4,
+                                            SDL_SCANCODE_5};
+        constexpr int kKeyCount = static_cast<int>(sizeof(keys) / sizeof(keys[0]));
+        static_assert(kKeyCount >= kMaxVisibleButtons,
+                      "every slot the bar shows needs a key to reach it");
+
+        for (int slot = 0; slot < visibleButtonCount() && slot < kKeyCount; ++slot) {
+            if (!input.isKeyDown(keys[slot])) continue;
+            const int kind = kindForButton(slot);
+            if (kind >= 0 && trySpawn(world, session, kind)) return;
         }
 
         // The hero: one summon a battle, on its own key and its own button.
@@ -1575,6 +1622,9 @@ private:
                        perkKind(static_cast<int>(Perk::Champion)).effect;
         if (Unit* unit = world.getComponent<Unit>(hero)) {
             unit->health *= scale;
+            // Its ceiling moves with it, or HEAL would clamp the hero back
+            // down to the roster's number the first time it was cast.
+            unit->maxHealth *= scale;
         }
         heroDamageScale_ = scale;
 
@@ -1672,6 +1722,16 @@ private:
         // Gathered first, because attacking creates shards and killing blows
         // queue deletions — neither of which should happen while iterating
         // the live entity list.
+        //
+        // Gathered from `entities()` rather than from `view<Unit>()`, which
+        // would be the faster pool and is the wrong one HERE. entities() is a
+        // vector in creation order; the pool is a hash map whose order is a
+        // standard-library detail. Order does not matter to a count or to a
+        // coordinate — which is why the queries above could move — but it
+        // decides who swings first when two blows land in the same frame, and
+        // therefore which of two units dies. Taking the cheaper pool would buy
+        // a fraction of a percent of one frame and pay for it with a battle
+        // that can resolve differently on Linux than on Windows.
         std::vector<Entity> units;
         for (Entity entity : world.entities()) {
             if (world.hasComponent<Unit>(entity)) units.push_back(entity);
@@ -1705,7 +1765,7 @@ private:
             unit->timeUntilAttack = stats.attackDelay;
             unit->swing = 1.0f;  // starts the arm through its arc
 
-            // WEAPONS is the player.s perk, so only the player.s units swing
+            // WEAPONS is the player's perk, so only the player's units swing
             // harder for it. Scaling every blow would have handed the
             // opponent every upgrade the player ever bought.
             //
@@ -1895,10 +1955,16 @@ private:
     // Healing is capped at what the unit started with: a heal that overfilled
     // would make a wounded veteran better than a fresh one, and turn the spell
     // into a permanent stat upgrade you cast repeatedly.
+    //
+    // At the unit's OWN maximum, not at its roster row. The two are the same
+    // number for everything the bar sells and differ for exactly one thing —
+    // a hero carrying CHAMPION — which is why capping at the table looked
+    // right for four slices and was quietly subtracting health from the one
+    // unit a player had paid extra for.
     void castHeal(World& world, const SpellKind& kind, float x, float y) {
         const float power = kind.power;
         forUnitsNear(world, true, x, y, kind.radius, [power](Unit& unit) {
-            unit.health = std::min(unit.health + power, kindOf(unit.kind).health);
+            unit.health = std::min(unit.health + power, unit.maxHealth);
         });
 
         spawnShards(world, x, y, 150, 255, 190);
@@ -2202,7 +2268,7 @@ private:
                 plate->b = affordable ? 64 : 40;
             }
 
-            // The fill is THIS kind.s own cooldown draining left to right, so
+            // The fill is THIS kind's own cooldown draining left to right, so
             // the bar shows when you can send each unit rather than one
             // shared timer that told you nothing about which button to press.
             if (Sprite* fill = world.getComponent<Sprite>(buttonFill_[slot])) {
@@ -2540,7 +2606,7 @@ public:
         owned_.push_back(createCenteredText(world, "CHOOSE A BATTLE", 60, 4,
                                             220, 200, 140, kHudLayer));
 
-        for (int stage = 0; stage < stageCount(); ++stage) {
+        for (int stage = 0; stage < visibleStageCount(); ++stage) {
             const bool unlocked = stage < campaign.stagesUnlocked;
             const float top = stageTop(stage);
 

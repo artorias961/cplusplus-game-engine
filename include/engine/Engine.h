@@ -124,6 +124,11 @@ private:
     std::unique_ptr<AudioDevice> audio_;
     InputManager input_;
     bool running_ = true;
+
+    // Whether the renderer we actually got honours vsync. Asked once at
+    // construction, because the frame limiter must not sleep on top of it:
+    // see the note in run().
+    bool vsync_ = false;
     // Set by the scene-driven run(); null means "always simulate".
     std::function<bool()> shouldSimulate_;
 

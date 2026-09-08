@@ -1837,6 +1837,76 @@ void testTheSpawnBarStopsAtTheEdgeOfTheWindow() {
     lanebattle::resetBalance();
 }
 
+// Every slot the bar shows has a key that sends the same thing.
+//
+// The keys used to be bound to ROSTER ROWS while the bar was bound to slots,
+// and the two lists differ: the bar skips the hero and stops at the window's
+// edge. With the shipped roster they agreed by coincidence, so nothing showed
+// it — but a file adding a sixth sellable kind produced one with no button
+// (the bar was full) and no key (there were only four), purchasable by
+// nothing at all. The test that checked the bar truncates was happy to watch
+// that happen, because truncating IS what the bar should do; the missing
+// question was whether the keyboard covered what the bar showed.
+void testEveryVisibleSlotHasAKeyThatSendsIt() {
+    lanebattle::resetBalance();
+    std::string contents;
+    for (int extra = 0; extra < 4; ++extra) {
+        contents += "[unit]\nname = EXTRA" + std::to_string(extra) +
+                    "\ncost = 5\nhealth = 40\ncooldown = 0.1\n\n";
+    }
+    const std::string path = writeRoster("lb_keys.txt", contents.c_str());
+    check(lanebattle::loadBalance(path), "a roster longer than the bar loads");
+    check(lanebattle::visibleButtonCount() == lanebattle::kMaxVisibleButtons,
+          "and fills every slot the bar has");
+
+    // Deliberately NOT using Game, whose constructor resets the roster.
+    World world;
+    SceneStack scenes;
+    harness::Harness driver(world, scenes);
+    scenes.push(lanebattle::makePlayScene());
+    driver.step(2);
+
+    Session* session = lanebattle::findSession(world);
+    check(session != nullptr, "the battle started");
+
+    static const SDL_Scancode keys[] = {SDL_SCANCODE_1, SDL_SCANCODE_2,
+                                        SDL_SCANCODE_3, SDL_SCANCODE_4,
+                                        SDL_SCANCODE_5};
+
+    for (int slot = 0; slot < lanebattle::visibleButtonCount(); ++slot) {
+        const int kind = lanebattle::kindForButton(slot);
+
+        // A clean field and a full purse, so the only thing being measured is
+        // whether the key reaches this slot's kind.
+        for (Entity entity : world.entities()) {
+            if (world.hasComponent<Unit>(entity)) world.destroyLater(entity);
+        }
+        driver.step();
+        for (int k = 0; k < lanebattle::kMaxUnitKinds; ++k) {
+            session->spawnCooldowns[k] = 0.0f;
+            session->enemySpawnCooldowns[k] = 1.0e9f;
+        }
+        session->gold = 5000.0f;
+
+        driver.hold(keys[slot]);
+        driver.step(2);
+        driver.release(keys[slot]);
+        driver.step();
+
+        check(kind >= 0 && lanebattle::countUnitsOfKind(world, true, kind) >= 1,
+              "the key for a bar slot sends exactly what that slot sells");
+    }
+
+    // And the hero is still not on it. It has its own key and its own button
+    // precisely because it is not bought.
+    for (int slot = 0; slot < lanebattle::visibleButtonCount(); ++slot) {
+        check(lanebattle::kindForButton(slot) != lanebattle::heroKindIndex(),
+              "and no slot sells the hero");
+    }
+
+    lanebattle::resetBalance();
+}
+
 // The file the player actually receives, not just the parser that reads it.
 // Copied next to the test binary by CMake for exactly this.
 void testTheShippedRosterIsSane() {
@@ -1966,7 +2036,7 @@ void testAShotDamagesEnemiesAndSparesFriends() {
         game.suppressEnemySpawns();
         game.session().gold = 500.0f;
 
-        // Inside the cannon.s reach: it fires from x=65 and reaches 420, so a
+        // Inside the cannon's reach: it fires from x=65 and reaches 420, so a
         // target past 485 is clamped short and the shell lands nowhere near it.
         // That is correct behaviour and it is what this test got wrong first
         // time, by standing the victim at 800.
@@ -3145,6 +3215,57 @@ void testHealRestoresYourUnitsButNotBeyondFull() {
           "and never heals the opponent");
 }
 
+// The hero is the one unit whose maximum is NOT the number in the roster:
+// CHAMPION scales it on the way out of the gate. Capping a heal at the table
+// instead of at the unit's own maximum therefore SUBTRACTED health from a
+// championed hero — a heal that hurt, and only for the player who had paid
+// for the perk.
+//
+// The test above could never see it, because a soldier's maximum and its
+// roster row are the same number.
+void testHealingAChampionedHeroDoesNotShrinkIt() {
+    Game game;
+    game.scenes.push(lanebattle::makeTitleScene());
+    game.driver.step();
+    lanebattle::campaignOf(game.world)
+        .perks[static_cast<int>(lanebattle::Perk::Champion)] = 3;
+    game.driver.tap(SDL_SCANCODE_SPACE);
+    game.driver.step(2);
+    game.driver.tap(SDL_SCANCODE_RETURN);
+    game.driver.step(2);
+    game.suppressEnemySpawns();
+
+    game.driver.tap(SDL_SCANCODE_H);
+    game.driver.step(2);
+
+    Entity hero = kInvalidEntity;
+    for (Entity entity : game.world.entities()) {
+        if (game.world.hasComponent<lanebattle::Hero>(entity)) hero = entity;
+    }
+    check(hero != kInvalidEntity, "the hero is on the field");
+
+    const float rosterHealth = stats(lanebattle::heroKindIndex()).health;
+    const float summonedWith = game.world.getComponent<Unit>(hero)->health;
+    check(summonedWith > rosterHealth,
+          "and CHAMPION put it above what the roster says");
+
+    // Wounded, but still above the roster's number — the window where the old
+    // cap did its damage.
+    const float wounded = (summonedWith + rosterHealth) / 2.0f;
+    game.world.getComponent<Unit>(hero)->health = wounded;
+    game.world.getComponent<Transform>(hero)->x = 700.0f;
+    game.session().mana = lanebattle::kMaxMana;
+
+    game.driver.tap(SDL_SCANCODE_X);
+    game.driver.step(2);
+    game.driver.clickAt(screenXFor(game, 715.0f), kFieldClickY);
+    game.driver.step(kFireFrames);
+
+    const float after = game.world.getComponent<Unit>(hero)->health;
+    check(after > wounded, "healing a championed hero heals it");
+    check(after <= summonedWith + 0.01f, "and still never past ITS full");
+}
+
 void testRageIsTemporaryAndOnlyYours() {
     Game game;
     game.startPlaying();
@@ -3561,6 +3682,54 @@ void testStageHitTesting() {
           "and the margin beside the list is not one");
 }
 
+// The stage list must stop before the instructions underneath it.
+//
+// This is the third constant in this game that was fine for the data it
+// shipped with and one row away from being wrong: the hero button covered
+// spawn slots four and five, the number keys ran out before the bar did, and
+// the stage list would have drawn its ninth row across "CLICK A BATTLE, OR
+// ENTER FOR THE LATEST" and everything past the tenth off the bottom of the
+// window. `kMaxStages` is 24, so a data file could ask for all of it.
+void testTheStageListStopsBeforeTheInstructions() {
+    lanebattle::resetBalance();
+
+    // Nothing is drawn on top of the hints, and nothing off the window.
+    for (int row = 0; row < lanebattle::kMaxVisibleStages; ++row) {
+        check(lanebattle::stageTop(row) + lanebattle::kStageHeight <=
+                  lanebattle::kStageHintY,
+              "every visible stage row sits above the instructions");
+    }
+    check(lanebattle::stageTop(lanebattle::kMaxVisibleStages) +
+                  lanebattle::kStageHeight >
+              lanebattle::kStageHintY,
+          "and one more row would not");
+
+    // The shipped campaign fits, so this fix changes nothing visible today.
+    check(lanebattle::stageCount() <= lanebattle::kMaxVisibleStages,
+          "the shipped campaign fits in the list");
+
+    // A longer campaign is clamped rather than drawn over the furniture.
+    std::string contents;
+    for (int extra = 0; extra < 20; ++extra) {
+        contents += "[stage]\nname = EXTRA" + std::to_string(extra) +
+                    "\nenemy_income = 1.0\nenemy_castle_health = 600\n"
+                    "wave_size = 3\ncomposition = 1,1,2\n\n";
+    }
+    const std::string path = writeRoster("lb_manystages.txt", contents.c_str());
+    check(lanebattle::loadBalance(path), "a long campaign loads");
+    check(lanebattle::stageCount() > lanebattle::kMaxVisibleStages,
+          "and has more stages than the list can show");
+    check(lanebattle::visibleStageCount() == lanebattle::kMaxVisibleStages,
+          "the list shows as many as fit and no more");
+
+    const float pastTheEnd =
+        lanebattle::stageTop(lanebattle::kMaxVisibleStages) + 8.0f;
+    check(lanebattle::stageAt(lanebattle::kStageX + 10.0f, pastTheEnd) == -1,
+          "and a click where the next row would be picks nothing");
+
+    lanebattle::resetBalance();
+}
+
 // Each stage sets the opponent's three levers. If they were not actually
 // applied, every stage would be the same fight with a different name — which
 // is the failure mode a stage table invites.
@@ -3616,6 +3785,7 @@ void testStagesFieldDifferentArmies() {
 // of the stage table left THREE stages that no strategy could win, and the
 // second put an unbeatable wall at stage three. Neither was visible in the
 // numbers; both took playing every stage to find.
+
 void testTheFirstStageIsAnOnRamp() {
     static const int onlySoldiers[] = {kSoldier};
     Game game;
@@ -3843,6 +4013,7 @@ int main() {
     testAFileCanAddAUnitType();
     testAddedUnitsAreReachableInGame();
     testTheSpawnBarStopsAtTheEdgeOfTheWindow();
+    testEveryVisibleSlotHasAKeyThatSendsIt();
     testTheShippedRosterIsSane();
 
     testClickingTheFieldFiresTheCannon();
@@ -3868,6 +4039,7 @@ int main() {
     testTheCampaignStartsWithOneStageOpen();
     testTheStageListOnlyLetsYouPlayWhatIsUnlocked();
     testStageHitTesting();
+    testTheStageListStopsBeforeTheInstructions();
     testEachStageConfiguresItsOwnBattle();
     testStagesFieldDifferentArmies();
     testTheFirstStageIsAnOnRamp();
@@ -3902,6 +4074,7 @@ int main() {
     testArmingCanBeCancelled();
     testTheMeteorDamagesEnemiesInItsArea();
     testHealRestoresYourUnitsButNotBeyondFull();
+    testHealingAChampionedHeroDoesNotShrinkIt();
     testRageIsTemporaryAndOnlyYours();
     testSpellHitTesting();
     testClickingASpellPanelRowArmsIt();

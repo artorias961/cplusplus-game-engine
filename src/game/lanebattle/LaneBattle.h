@@ -600,8 +600,18 @@ constexpr int kMaxVisibleButtons =
     static_cast<int>((kHeroButtonX - kButtonGap - kButtonX) /
                      (kButtonWidth + kButtonGap));
 
-// The roster clamped to what fits. Buttons past this have no plate, no label
-// and no hit box — but their number keys still work, so nothing is unreachable.
+// The roster clamped to what fits. Kinds past this have no plate, no label,
+// no hit box and no key: the bar is the only way to send anything, and the
+// number keys are bound to its SLOTS rather than to roster rows.
+//
+// That used to read "their number keys still work, so nothing is unreachable",
+// which was wrong in a way no shipped roster could show. The keys stopped at
+// four and counted rows including the hero, while the bar stopped at five and
+// skipped it, so a file with six sellable kinds produced one that neither
+// could reach. Binding both to the same list is what makes the sentence above
+// true rather than hopeful — and it means a roster longer than the bar is a
+// genuine limit, which is the honest thing for it to be until there is a way
+// to choose which units you bring.
 int visibleButtonCount();
 
 // Which unit kind a bar slot sells, or -1 for an empty slot. The bar skips the
@@ -666,6 +676,17 @@ struct Team {
 struct Unit {
     int kind = 1;  // an index into kUnitKinds
     float health = 0.0f;
+
+    // What full health means for THIS unit, which is not always what the
+    // roster says. The hero is scaled by CHAMPION on the way out of the gate,
+    // so its maximum is a property of the individual rather than of its row —
+    // and anything that has to cap health has to ask the unit, not the table.
+    //
+    // Healing asked the table, which meant a heal cast on a championed hero
+    // clamped it DOWN to the roster's number: a spell that hurt, and only for
+    // the player who had paid for the perk.
+    float maxHealth = 0.0f;
+
     float timeUntilAttack = 0.0f;
 
     // Where the walk cycle has got to, advanced by distance travelled rather
@@ -872,6 +893,32 @@ constexpr float kStageGap = 6.0f;
 constexpr float stageTop(int index) {
     return kStageY + static_cast<float>(index) * (kStageHeight + kStageGap);
 }
+
+// Where the two lines of instructions sit under the list. The list has to stop
+// before them.
+constexpr float kStageHintY = 470.0f;
+
+// How many stage rows fit above the instructions.
+//
+// Derived rather than assumed, for the third time in this file — the hero
+// button and the spawn bar had exactly this bug, and this one was one stage
+// away from joining them. `kMaxStages` is 24 and a data file may supply that
+// many, while only eight rows fit: a ninth would have drawn straight across
+// "CLICK A BATTLE, OR ENTER FOR THE LATEST", a tenth across "Q TO QUIT", and
+// everything past that off the bottom of the window where it can be neither
+// seen nor clicked.
+//
+// The shipped campaign has exactly eight, which is why nothing showed it and
+// why this fix changes nothing you can see today.
+constexpr int kMaxVisibleStages =
+    static_cast<int>((kStageHintY - kStageY) / (kStageHeight + kStageGap));
+
+// The stage list clamped to what fits. A campaign longer than this is a real
+// limit and an honest one: ENTER always plays the newest stage unlocked, so a
+// long campaign can still be progressed to the end — the rows past the eighth
+// just cannot be picked out of the list to replay. Making them pickable means
+// scrolling the list, which is a feature rather than a bug fix.
+int visibleStageCount();
 
 int stageAt(float screenX, float screenY);
 

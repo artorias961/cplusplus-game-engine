@@ -34,6 +34,21 @@ rem     SURVIVED  - bad. Either the change is harmless, or you have found a
 rem                 test that does not test what it claims to.
 rem
 rem The file is always restored.
+rem
+rem A NOTE ON LINE ENDINGS, because this file was broken by them and the
+rem symptom pointed nowhere near the cause.
+rem
+rem This script must be stored with CRLF endings. cmd.exe does not read a batch
+rem file line by line - it seeks by byte offset after each command, and a file
+rem ending LF makes it land mid-line and run the tail of one as a command. The
+rem symptom was a wall of "'m' is not recognized as an internal or external
+rem command" followed by "< was unexpected at this time", on the example in the
+rem USAGE block above, with no argument reaching the script at all.
+rem
+rem Nothing here says "line endings". verify.bat, in the same folder and just
+rem as LF, runs perfectly - the mis-seek only lands badly in some files - so
+rem the obvious comparison pointed the wrong way too. `.gitattributes` now
+rem pins *.bat to CRLF so this cannot come back.
 rem ---------------------------------------------------------------------------
 
 setlocal
@@ -76,8 +91,11 @@ rem A literal replacement through .NET, so punctuation in the pattern is not
 rem treated as a regular expression. Doing this with a text-substitution tool
 rem and its own delimiter is how half the hand-run mutations in this project
 rem silently failed to apply.
-powershell -NoProfile -Command ^
-  "$p=$env:FILE; $c=[IO.File]::ReadAllText($p); $c=$c.Replace($env:FIND,$env:REPLACE); [IO.File]::WriteAllText($p,$c)"
+rem
+rem On ONE line rather than wrapped with a `^` continuation. That is a small
+rem robustness point and was NOT what broke this script: see the note about
+rem line endings at the top of the file, which is the real story.
+powershell -NoProfile -Command "$p=$env:FILE; $c=[IO.File]::ReadAllText($p); $c=$c.Replace($env:FIND,$env:REPLACE); [IO.File]::WriteAllText($p,$c)"
 
 rem Verified rather than assumed: a mutation that did not apply produces a
 rem green run that looks exactly like a surviving mutant.

@@ -51,6 +51,14 @@ Engine::Engine(const std::string& title, int width, int height) {
         throw std::runtime_error(std::string("SDL_CreateRenderer failed: ") + SDL_GetError());
     }
 
+    // Did we actually get vsync? The request above can be granted, refused, or
+    // quietly dropped by the fallback, and the frame limiter's behaviour has to
+    // follow what happened rather than what was asked for.
+    SDL_RendererInfo info;
+    if (SDL_GetRendererInfo(renderer_, &info) == 0) {
+        vsync_ = (info.flags & SDL_RENDERER_PRESENTVSYNC) != 0;
+    }
+
     // Without this, alpha is silently ignored and every draw is opaque —
     // the `a` on Sprite would be a field that does nothing. With it, a
     // half-transparent rectangle over the board dims what's underneath.
@@ -403,12 +411,25 @@ void Engine::run(World& world, const UpdateFn& onUpdate) {
 
         // --- 6. Frame limiting: if we finished early, sleep the remainder
         // so we don't burn 100% CPU rendering thousands of frames a second.
-        // (SDL_RENDERER_PRESENTVSYNC above usually does this for us already;
-        // this is a fallback for renderers/platforms where vsync isn't honored.)
-        Uint64 frameTicks = SDL_GetPerformanceCounter() - currentTicks;
-        float frameSeconds = static_cast<float>(frameTicks) / static_cast<float>(frequency);
-        if (frameSeconds < kTargetFrameSeconds) {
-            SDL_Delay(static_cast<Uint32>((kTargetFrameSeconds - frameSeconds) * 1000.0f));
+        //
+        // ONLY when vsync isn't doing it for us. This used to sleep either
+        // way, and the two limiters fight on any display faster than 60Hz:
+        // present returns after one refresh (6.9ms at 144Hz), the sleep adds
+        // another 9.7ms on top, and the NEXT present then has to wait for the
+        // following refresh boundary — landing at 20.8ms, so a 144Hz monitor
+        // runs the game at 48fps with uneven frame times instead of 60.
+        //
+        // A 60Hz display never showed it: present already costs a full
+        // 16.6ms there, so the sleep computes to zero and the bug is exactly
+        // invisible on the machine most likely to be testing for it.
+        if (!vsync_) {
+            Uint64 frameTicks = SDL_GetPerformanceCounter() - currentTicks;
+            float frameSeconds =
+                static_cast<float>(frameTicks) / static_cast<float>(frequency);
+            if (frameSeconds < kTargetFrameSeconds) {
+                SDL_Delay(static_cast<Uint32>(
+                    (kTargetFrameSeconds - frameSeconds) * 1000.0f));
+            }
         }
     }
 }
