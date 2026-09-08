@@ -2934,6 +2934,43 @@ void testWhenYouSpendTheHeroDecidesWhetherItWasWorthIt() {
           "but won if it is held until there is a line for it to fight behind");
 }
 
+
+// --- Can the game actually be played? --------------------------------------
+
+// Plays a whole battle on a fixed composition, sending each unit as soon as it
+// is affordable. Returns +1 for a win, -1 for a loss, 0 for neither inside the
+// time limit.
+int playBattle(Game& game, const int* cycle, int cycleLength) {
+    const SDL_Scancode keys[] = {SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3};
+    int index = 0;
+    SDL_Scancode holding = SDL_SCANCODE_UNKNOWN;
+
+    for (int frame = 0; frame < 60 * 400; ++frame) {
+        if (holding != SDL_SCANCODE_UNKNOWN) {
+            game.driver.release(holding);
+            holding = SDL_SCANCODE_UNKNOWN;
+        }
+        // Reads forward through the composition for something sendable rather
+        // than waiting on whatever came next. Taking only the next entry means
+        // a cycle of {soldier, soldier, archer} spends most of its time
+        // waiting out the soldier's own cooldown — which is a bad player, not
+        // a bad game, and would have been measured as the latter.
+        for (int step = 0; step < cycleLength; ++step) {
+            const int kind = cycle[(index + step) % cycleLength];
+            if (game.session().spawnCooldowns[kind] > 0.0f) continue;
+            if (game.session().gold < stats(kind).cost) continue;
+
+            holding = keys[kind];
+            game.driver.hold(holding);
+            index = (index + step + 1) % cycleLength;
+            break;
+        }
+        game.driver.step();
+        if (game.session().gameOver) return game.session().playerWon ? 1 : -1;
+    }
+    return 0;
+}
+
 // --- Spells (slice 11) -----------------------------------------------------
 //
 // Cast from mana, which is its own pool and refills on its own. Gold is
@@ -3187,40 +3224,294 @@ void testClickingASpellPanelRowArmsIt() {
           "and does not fire the cannon through the panel either");
 }
 
-// --- Can the game actually be played? --------------------------------------
+// --- The sky (slice 12) ----------------------------------------------------
+//
+// The first thing in this game that distance cannot decide. Everything since
+// slice 1 answered "who is in reach?" with a subtraction on x; a griffin
+// directly above a soldier is as close as anything can be and still cannot be
+// touched by it.
 
-// Plays a whole battle on a fixed composition, sending each unit as soon as it
-// is affordable. Returns +1 for a win, -1 for a loss, 0 for neither inside the
-// time limit.
-int playBattle(Game& game, const int* cycle, int cycleLength) {
-    const SDL_Scancode keys[] = {SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3};
-    int index = 0;
-    SDL_Scancode holding = SDL_SCANCODE_UNKNOWN;
-
-    for (int frame = 0; frame < 60 * 400; ++frame) {
-        if (holding != SDL_SCANCODE_UNKNOWN) {
-            game.driver.release(holding);
-            holding = SDL_SCANCODE_UNKNOWN;
-        }
-        // Reads forward through the composition for something sendable rather
-        // than waiting on whatever came next. Taking only the next entry means
-        // a cycle of {soldier, soldier, archer} spends most of its time
-        // waiting out the soldier's own cooldown — which is a bad player, not
-        // a bad game, and would have been measured as the latter.
-        for (int step = 0; step < cycleLength; ++step) {
-            const int kind = cycle[(index + step) % cycleLength];
-            if (game.session().spawnCooldowns[kind] > 0.0f) continue;
-            if (game.session().gold < stats(kind).cost) continue;
-
-            holding = keys[kind];
-            game.driver.hold(holding);
-            index = (index + step + 1) % cycleLength;
-            break;
-        }
-        game.driver.step();
-        if (game.session().gameOver) return game.session().playerWon ? 1 : -1;
+int kindNamed(const char* name) {
+    for (int kind = 0; kind < lanebattle::unitKindCount(); ++kind) {
+        if (std::string(lanebattle::unitKind(kind).name) == name) return kind;
     }
-    return 0;
+    return -1;
+}
+
+void testTheRosterHasSomethingThatFlies() {
+    const int griffin = kindNamed("GRIFFIN");
+    check(griffin >= 0, "there is a flying unit");
+    check(stats(griffin).flying, "and it flies");
+    check(stats(griffin).hitsAir, "and can reach other things in the sky");
+
+    check(!stats(kSoldier).flying && !stats(kSoldier).hitsAir,
+          "a soldier neither flies nor reaches the sky");
+    check(!stats(kRunner).hitsAir, "nor does a runner");
+    check(stats(kArcher).hitsAir && !stats(kArcher).flying,
+          "an archer stays on the ground and shoots upward");
+    check(stats(lanebattle::heroKindIndex()).hitsAir,
+          "and the hero can reach it, because a champion that loses to a bird "
+          "is not much of one");
+}
+
+void testAFlyerSpawnsInTheSky() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const int griffin = kindNamed("GRIFFIN");
+    const Entity flyer = lanebattle::spawnUnit(game.world, true, griffin);
+    const Entity walker = lanebattle::spawnUnit(game.world, true, kSoldier);
+
+    const float flyerY = game.world.getComponent<Transform>(flyer)->y;
+    const float walkerY = game.world.getComponent<Transform>(walker)->y;
+
+    check(std::fabs(flyerY - lanebattle::kFlyingY) < 0.01f,
+          "a flyer sits at the altitude the layout says");
+    check(flyerY < walkerY - 100.0f, "well above anything on the ground");
+    check(walkerY + stats(kSoldier).height == lanebattle::kGroundY,
+          "while a ground unit still stands on the ground line");
+
+    // And its stick figure goes up with it.
+    //
+    // The figure used to be pinned to the ground line, which was the same
+    // thing for every unit in the game until one of them left the ground.
+    // Nothing else would have noticed: a griffin drawn with its legs dangling
+    // a hundred and fifty pixels beneath it is only visible to eyes.
+    game.driver.step();
+    const Entity figure = figureOf(game.world, flyer);
+    check(figure != kInvalidEntity, "the flyer has a figure");
+    if (figure != kInvalidEntity) {
+        const float figureY = game.world.getComponent<Transform>(figure)->y;
+        check(std::fabs(figureY - (flyerY + stats(griffin).height)) < 0.01f,
+              "drawn at the flyer's own feet, not at the ground line");
+        check(figureY < lanebattle::kGroundY - 100.0f,
+              "which is well up in the sky");
+    }
+}
+
+// The rule, from both sides.
+void testGroundMeleeCannotTouchAFlyer() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const int griffin = kindNamed("GRIFFIN");
+    const Entity soldier = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const Entity flyer = lanebattle::spawnUnit(game.world, false, griffin);
+
+    // Directly overhead: as close as two things can be.
+    game.world.getComponent<Transform>(soldier)->x = 600.0f;
+    game.world.getComponent<Transform>(flyer)->x = 604.0f;
+    game.driver.step(60);
+
+    check(std::fabs(game.world.getComponent<Unit>(flyer)->health -
+                    stats(griffin).health) < 0.01f,
+          "a soldier standing directly beneath a griffin cannot touch it");
+    check(game.world.getComponent<Velocity>(soldier)->dx > 0.0f,
+          "and does not stop to try — it walks on past");
+}
+
+void testArchersAndHeroesCanReachTheSky() {
+    {
+        Game game;
+        game.startPlaying();
+        game.suppressEnemySpawns();
+
+        const int griffin = kindNamed("GRIFFIN");
+        const Entity archer = lanebattle::spawnUnit(game.world, true, kArcher);
+        const Entity flyer = lanebattle::spawnUnit(game.world, false, griffin);
+        game.world.getComponent<Transform>(archer)->x = 600.0f;
+        game.world.getComponent<Transform>(flyer)->x = 660.0f;
+        game.driver.step(4);
+
+        check(game.world.getComponent<Unit>(flyer)->health <
+                  stats(griffin).health,
+              "an archer shoots a griffin down");
+    }
+    {
+        Game game;
+        game.startPlaying();
+        game.suppressEnemySpawns();
+
+        const int griffin = kindNamed("GRIFFIN");
+        game.driver.tap(SDL_SCANCODE_H);
+        game.driver.step(2);
+
+        Entity hero = kInvalidEntity;
+        for (Entity entity : game.world.entities()) {
+            if (game.world.hasComponent<lanebattle::Hero>(entity)) hero = entity;
+        }
+        const Entity flyer = lanebattle::spawnUnit(game.world, false, griffin);
+        game.world.getComponent<Transform>(hero)->x = 600.0f;
+        game.world.getComponent<Transform>(flyer)->x = 620.0f;
+        game.driver.step(4);
+
+        check(game.world.getComponent<Unit>(flyer)->health <
+                  stats(griffin).health,
+              "and so does the hero");
+    }
+}
+
+// A flyer must still be able to win: it attacks the ground and the castle, or
+// it is a unit that can only fight other flyers.
+void testAFlyerAttacksTheGroundAndTheCastle() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const int griffin = kindNamed("GRIFFIN");
+    const Entity flyer = lanebattle::spawnUnit(game.world, true, griffin);
+    const Entity victim = lanebattle::spawnUnit(game.world, false, kSoldier);
+    game.world.getComponent<Transform>(flyer)->x = 600.0f;
+    game.world.getComponent<Transform>(victim)->x = 620.0f;
+    game.driver.step(4);
+
+    check(game.world.getComponent<Unit>(victim)->health < stats(kSoldier).health,
+          "a griffin attacks things on the ground");
+
+    // And the castle, which never flies and so is never out of reach.
+    Game siege;
+    siege.startPlaying();
+    siege.suppressEnemySpawns();
+    const Entity raider = lanebattle::spawnUnit(siege.world, true, griffin);
+    const Entity castle = lanebattle::findCastle(siege.world, false);
+    siege.world.getComponent<Transform>(raider)->x =
+        siege.world.getComponent<Transform>(castle)->x - 50.0f;
+    const float before = siege.castleHealth(false);
+    siege.driver.step(4);
+
+    check(siege.castleHealth(false) < before,
+          "and can bring down a castle on its own");
+}
+
+// The two lanes queue separately. A griffin overhead is not in a soldier's
+// way, and vice versa.
+void testTheSkyIsItsOwnQueue() {
+    // A SHORT-RANGED flyer, defined here on purpose.
+    //
+    // The built-in griffin reaches 40 and a soldier 34, and a friendly whose
+    // reach exceeds yours never blocks you anyway — so with the shipped
+    // roster this test passed whether or not lanes queue separately. It was
+    // measuring the range rule and calling it the lane rule.
+    lanebattle::resetBalance();
+    const std::string path = writeRoster("lb_lowflyer.txt", R"(
+[unit]
+name     = GRIFFIN
+range    = 20
+cooldown = 0.4
+)");
+
+    Game game;
+    lanebattle::loadBalance(path);
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const int griffin = kindNamed("GRIFFIN");
+    check(stats(griffin).range < stats(kSoldier).range,
+          "the flyer reaches less far than the soldier, so the range rule "
+          "cannot be what lets the soldier past");
+
+    const Entity blocker = lanebattle::spawnUnit(game.world, true, griffin);
+    const Entity walker = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const Entity castle = lanebattle::findCastle(game.world, false);
+    const float castleX = game.world.getComponent<Transform>(castle)->x;
+
+    // A griffin parked in front of the castle, with a soldier coming up
+    // behind it on the ground.
+    game.world.getComponent<Transform>(blocker)->x = castleX - 50.0f;
+    game.world.getComponent<Transform>(walker)->x = castleX - 400.0f;
+    game.driver.step(60 * 6);
+
+    check(std::fabs(game.world.getComponent<Velocity>(blocker)->dx) < 0.01f,
+          "the griffin has stopped, so it is something that could block");
+
+    // Measured against where the soldier's OWN attack position is, not a loose
+    // margin. It reaches castleX-56 when the lanes are separate and is held
+    // roughly fifteen pixels short of that when they are not — a tolerance of
+    // a hundred could not tell those apart, and did not.
+    const float walkerX = game.world.getComponent<Transform>(walker)->x;
+    check(walkerX > castleX - 60.0f,
+          "a soldier walks under a hovering griffin rather than queueing behind "
+          "it, and reaches the castle wall");
+
+    lanebattle::resetBalance();
+}
+
+void testAStageCanFieldFlyers() {
+    lanebattle::resetBalance();
+    const int griffin = kindNamed("GRIFFIN");
+
+    const std::string path = writeRoster("lb_airstage.txt",
+        ("[stage]\nname = THE AERIE\nenemy_income = 0.8\n"
+         "enemy_castle_health = 500\nwave_size = 2\ncomposition = " +
+         std::to_string(griffin) + ",1\n").c_str());
+    check(lanebattle::loadBalance(path), "the file loaded");
+
+    Game game;
+    lanebattle::loadBalance(path);   // the Game constructor reset it
+    game.startStage(0);
+
+    bool asksForFlyers = false;
+    for (int index = 0; index < game.session().compositionLength; ++index) {
+        if (game.session().composition[index] == griffin) asksForFlyers = true;
+    }
+    check(asksForFlyers, "a stage may put flyers in its wave");
+
+    lanebattle::resetBalance();
+}
+
+// The payoff, and the reason the slice exists: an army of soldiers cannot
+// answer the sky, however large it is.
+void testAWallOfSoldiersCannotAnswerTheSky() {
+    lanebattle::resetBalance();
+    const int griffin = kindNamed("GRIFFIN");
+
+    // A stage of nothing but griffins.
+    const std::string path = writeRoster("lb_allair.txt",
+        ("[stage]\nname = THE FLOCK\nenemy_income = 0.9\n"
+         "enemy_castle_health = 700\nwave_size = 3\ncomposition = " +
+         std::to_string(griffin) + "\n").c_str());
+
+    static const int onlySoldiers[] = {kSoldier};
+    static const int onlyArchers[] = {kArcher};
+    static const int mostlySoldiers[] = {kSoldier, kArcher, kArcher};
+
+    {
+        Game game;
+        lanebattle::loadBalance(path);
+        game.startStage(0);
+        check(playBattle(game, onlySoldiers, 1) == -1,
+              "an army of nothing but soldiers loses to a sky it cannot reach");
+    }
+    {
+        Game game;
+        lanebattle::loadBalance(path);
+        game.startStage(0);
+        check(playBattle(game, onlyArchers, 1) == 1,
+              "and an army of nothing but archers beats it comfortably");
+    }
+    {
+        // The part worth measuring, and the opposite of what was assumed.
+        //
+        // The obvious guess was that adding archers to a line of soldiers
+        // would answer the sky. It does not: against an enemy that is
+        // entirely airborne, every soldier is gold and a population slot
+        // spent on something that cannot reach anything. Ground melee is not
+        // merely useless there — it actively costs you the battle.
+        //
+        // Which makes the sky a genuine rock-paper-scissors answer rather
+        // than a tax: the counter to all-air is to STOP building the units
+        // that normally carry you.
+        Game game;
+        lanebattle::loadBalance(path);
+        game.startStage(0);
+        check(playBattle(game, mostlySoldiers, 3) == -1,
+              "while a line of soldiers with archers behind it still loses, "
+              "because the soldiers are dead weight");
+    }
+
+    lanebattle::resetBalance();
 }
 
 // --- The campaign (slice 9) ------------------------------------------------
@@ -3614,6 +3905,15 @@ int main() {
     testRageIsTemporaryAndOnlyYours();
     testSpellHitTesting();
     testClickingASpellPanelRowArmsIt();
+
+    testTheRosterHasSomethingThatFlies();
+    testAFlyerSpawnsInTheSky();
+    testGroundMeleeCannotTouchAFlyer();
+    testArchersAndHeroesCanReachTheSky();
+    testAFlyerAttacksTheGroundAndTheCastle();
+    testTheSkyIsItsOwnQueue();
+    testAStageCanFieldFlyers();
+    testAWallOfSoldiersCannotAnswerTheSky();
 
     testABattleCanBeWon();
     testOneUnitTypeIsNotEnough();

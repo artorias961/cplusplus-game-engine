@@ -248,6 +248,14 @@ Entity findTargetAhead(World& world, Entity attacker, bool leftSide,
         Team* team = world.getComponent<Team>(other);
         if (!team || team->leftSide == leftSide) return;  // friend, or teamless
 
+        // Altitude. A target in the sky can only be attacked by something that
+        // reaches it, however close it happens to be — this is the question
+        // distance cannot answer, and the reason the archer stopped being
+        // optional. Castles never fly, so they are never excluded here.
+        if (Unit* targetUnit = world.getComponent<Unit>(other)) {
+            if (kindOf(targetUnit->kind).flying && !stats.hitsAir) return;
+        }
+
         Transform* transform = world.getComponent<Transform>(other);
         Sprite* sprite = world.getComponent<Sprite>(other);
         if (!transform || !sprite) return;
@@ -320,6 +328,12 @@ bool blockedByFriendly(World& world, Entity mover, bool leftSide, float moverX,
         if (!team || team->leftSide != leftSide) continue;
 
         const UnitKind& otherStats = kindOf(otherUnit->kind);
+
+        // Only things in the same lane are in the way. A griffin overhead is
+        // not blocking the soldier beneath it, and a queue in the sky is a
+        // different queue from the one on the ground.
+        if (otherStats.flying != stats.flying) continue;
+
         if (otherStats.range > stats.range) continue;  // it stops well short of me
 
         Velocity* velocity = world.getComponent<Velocity>(other);
@@ -668,6 +682,8 @@ bool loadBalance(const std::string& path) {
         kind.attackDelay = section->number("attack_delay", kind.attackDelay);
         kind.speed = section->number("speed", kind.speed);
         kind.cooldown = section->number("cooldown", kind.cooldown);
+        kind.flying = section->integer("flying", kind.flying ? 1 : 0) != 0;
+        kind.hitsAir = section->integer("hits_air", kind.hitsAir ? 1 : 0) != 0;
         kind.width = section->number("width", kind.width);
         kind.height = section->number("height", kind.height);
 
@@ -807,8 +823,10 @@ void animateUnits(World& world, float dt) {
         if (!at || !lines) continue;
 
         // The figure hangs off the bottom centre of the block it decorates.
+        // Its own bottom, not the ground line — a griffin's legs belong under
+        // the griffin rather than dangling a hundred and fifty pixels below it.
         at->x = body->x + stats.width / 2.0f;
-        at->y = kGroundY;
+        at->y = body->y + stats.height;
 
         const float hipY = -stats.height * 0.45f;
         const float shoulderY = -stats.height * 0.78f;
@@ -996,7 +1014,11 @@ Entity spawnUnit(World& world, bool leftSide, int kind) {
     const float x = leftSide ? kLeftSpawnX : kRightSpawnX;
 
     Entity unit = world.createEntity();
-    world.addComponent(unit, Transform{x, kGroundY - stats.height, 0.0f});
+    // A flyer sits in the sky instead of standing on the ground line. That
+    // one difference is the whole of "a second lane" as far as position goes;
+    // everything else about altitude is the two flags on the roster row.
+    const float y = stats.flying ? kFlyingY : kGroundY - stats.height;
+    world.addComponent(unit, Transform{x, y, 0.0f});
     world.addComponent(unit, Velocity{stats.speed * facing(leftSide), 0.0f});
 
     Sprite sprite;

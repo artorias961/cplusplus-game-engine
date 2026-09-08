@@ -633,6 +633,61 @@ notice the strategy getting stronger.
 rather than now — flying units are another power shift, and tuning the curve
 twice would waste the first attempt.
 
+### Slice 12
+
+**Done**: the sky. A GRIFFIN that flies, an ARCHER and a HERO that can reach
+it, and everything else that cannot. **No engine code**, as predicted — but it
+is the slice that ends the one-dimensional assumption the game has rested on
+since slice 1.
+
+Everything until now decided on x alone: who is ahead, who is in reach, who
+blocks whom. Altitude adds a question distance cannot answer — *can* this unit
+even be attacked by that one — and it is a category rather than a measurement.
+**A soldier standing directly beneath a griffin is as close as two things can
+be and still cannot touch it.**
+
+Range stays horizontal on purpose, and that is a real decision rather than a
+shortcut. Measuring it as a true 2D distance shrinks an archer's 135 to about
+28 pixels of horizontal reach against something 130 above it, which makes the
+one unit that answers flyers unable to answer them.
+
+Two flags on a roster row carry all of it — `flying` and `hitsAir` — plus one
+rule in the queue: only units in the same lane are in each other's way.
+
+#### The payoff was the opposite of what was assumed
+
+The obvious guess was that adding archers behind a line of soldiers answers
+the sky. Measured against a stage of nothing but griffins:
+
+| Player's army | Result |
+| --- | --- |
+| Nothing but soldiers | **Loses** |
+| A line of soldiers with archers behind it | **Loses** |
+| Nothing but archers | **Wins**, 800 to 0 |
+
+Against an entirely airborne enemy every soldier is gold and a population slot
+spent on something that can reach nothing, so ground melee is not merely
+useless — it actively costs the battle. Which makes the sky a genuine
+rock-paper-scissors answer rather than a tax: the counter to all-air is to
+**stop building the units that normally carry you**.
+
+The test asserting this was written the other way round first, and the
+measurement corrected it.
+
+#### Two mutations survived, and both were tests measuring the wrong rule
+
+- **"The two lanes share one queue" passed cleanly.** The shipped griffin
+  reaches 40 and a soldier 34, and a friendly whose reach exceeds yours never
+  blocks you anyway — so the test was measuring the RANGE rule and calling it
+  the lane rule. It now defines a short-ranged flyer through a data file, and
+  asserts against the soldier's own attack position rather than a
+  hundred-pixel margin that could not tell fifteen pixels of difference.
+- **"The figure hangs off the ground line" passed cleanly.** Pinning a stick
+  figure to `kGroundY` was the same thing as pinning it to its owner's feet
+  for every unit in the game — right up until one of them left the ground. A
+  griffin drawn with its legs dangling a hundred and fifty pixels beneath it
+  is visible only to eyes, so there is a test for it now.
+
 ## Between slices: an audit, and closing the last untested gaps
 
 ### The audit

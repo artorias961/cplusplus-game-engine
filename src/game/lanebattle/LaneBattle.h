@@ -93,9 +93,31 @@ struct UnitKind {
 
     float width;
     float height;
+
+    // --- The sky ------------------------------------------------------------
+    //
+    // Two flags that between them end the one-dimensional assumption this game
+    // has rested on since its first slice.
+    //
+    // Everything until now decided on x alone: who is ahead, who is in reach,
+    // who blocks whom. Altitude adds a second question that distance cannot
+    // answer — *can* this unit even be attacked by that one — and it is a
+    // category, not a measurement. A soldier standing directly beneath a
+    // griffin is as close as anything can be and still cannot touch it.
+    //
+    // Range stays horizontal on purpose. Measuring it as a real 2D distance
+    // was tried on paper and is worse: an archer's 135 would shrink to about
+    // 28 pixels of horizontal reach against something 130 above it, which
+    // makes the one unit that answers flyers unable to answer them.
+    bool flying;   // lives in the sky, and only `hitsAir` units can reach it
+    bool hitsAir;  // can attack things in the sky
+
     unsigned char leftR, leftG, leftB;     // your colours
     unsigned char rightR, rightG, rightB;  // theirs
 };
+
+// How high the sky is. Flyers sit here instead of standing on kGroundY.
+constexpr float kFlyingY = 244.0f;
 
 // The roster's hard ceiling. A data file may add unit types, but each side
 // needs one cooldown timer per kind stored on the Session, and an unbounded
@@ -141,16 +163,20 @@ bool heroButtonHit(float screenX, float screenY);
 // build directory and why the tests are deterministic without touching a
 // filesystem. Read the live roster through `unitKind()` — never through this.
 constexpr UnitKind kDefaultUnitKinds[] = {
-    // name      cost   hp     dmg   range  delay  speed  cool   w      h     yours          theirs
-    {"RUNNER",   35.0f, 60.0f,  8.0f,  30.0f, 0.45f, 150.0f, 1.1f, 16.0f, 26.0f, 150, 215, 255, 255, 175, 150},
-    {"SOLDIER",  60.0f, 110.0f, 14.0f, 34.0f, 0.60f,  95.0f, 1.9f, 24.0f, 36.0f, 110, 190, 240, 235, 130, 110},
-    {"ARCHER",   95.0f, 55.0f,  20.0f, 135.0f, 0.95f,  70.0f, 3.0f, 18.0f, 34.0f,  90, 140, 210, 200,  95, 130},
+    // name      cost   hp     dmg   range  delay  speed  cool   w      h     fly   air    yours          theirs
+    {"RUNNER",   35.0f, 60.0f,  8.0f,  30.0f, 0.45f, 150.0f, 1.1f, 16.0f, 26.0f, false, false, 150, 215, 255, 255, 175, 150},
+    {"SOLDIER",  60.0f, 110.0f, 14.0f, 34.0f, 0.60f,  95.0f, 1.9f, 24.0f, 36.0f, false, false, 110, 190, 240, 235, 130, 110},
+    {"ARCHER",   95.0f, 55.0f,  20.0f, 135.0f, 0.95f,  70.0f, 3.0f, 18.0f, 34.0f, false, true,   90, 140, 210, 200,  95, 130},
+    // The griffin. The only thing on this list that flies, and the reason the
+    // archer stopped being optional: nothing else in the roster can touch it.
+    {"GRIFFIN", 115.0f, 95.0f,  17.0f,  40.0f, 0.70f, 112.0f, 3.6f, 26.0f, 24.0f, true,  true,  200, 170, 250, 250, 160, 200},
     // The hero. A roster row like any other, so it walks, fights, queues,
     // animates and is targeted by the same code as everything else — but it is
     // NOT sold from the spawn bar, does not take a number key, and never
     // appears in a stage's composition. Those exclusions are what make it a
-    // hero rather than an expensive soldier.
-    {"HERO",      0.0f, 620.0f, 46.0f,  44.0f, 0.50f,  88.0f, 0.0f, 30.0f, 48.0f, 250, 235, 140, 255, 120,  90},
+    // hero rather than an expensive soldier. It can reach the sky, because a
+    // champion that loses to a bird is not much of one.
+    {"HERO",      0.0f, 620.0f, 46.0f,  44.0f, 0.50f,  88.0f, 0.0f, 30.0f, 48.0f, false, true,  250, 235, 140, 255, 120,  90},
 };
 constexpr int kDefaultUnitKindCount =
     static_cast<int>(sizeof(kDefaultUnitKinds) / sizeof(kDefaultUnitKinds[0]));

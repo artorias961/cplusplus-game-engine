@@ -726,7 +726,8 @@ behind is surrounded and killed for nothing.
 | Click the bar | Send that unit |
 | 1 | Send a **runner** — 35 gold, 1.1s cooldown, fast and fragile |
 | 2 | Send a **soldier** — 60 gold, 1.9s cooldown, the front line |
-| 3 | Send an **archer** — 95 gold, 3.0s cooldown, outranges everything |
+| 3 | Send an **archer** — 95 gold, 3.0s cooldown, outranges everything, and the only ordinary unit that can shoot at the sky |
+| 4 | Send a **griffin** — 115 gold, 3.6s cooldown, flies; only archers and heroes can touch it |
 | Click the field | Fire the castle cannon there — 30 gold, reaches 420px |
 | Drag the field | Scroll the view |
 | Left / Right | Look up and down the field; lets go after a moment |
@@ -779,6 +780,12 @@ Each unit has its OWN cooldown, so a full purse cannot be poured into one
 type — spending it means sending something else. That is what makes the bar a
 decision rather than a shop, and it is why the ratio you send matters and not
 just the mix.
+
+There is a second lane in the air. A griffin cannot be touched by anything on
+the ground except an archer — and against an enemy that is entirely airborne,
+soldiers are worse than useless, because each one is gold and a population
+slot spent on something that can reach nothing. The counter to all-air is to
+stop building the units that normally carry you.
 
 One thing worth knowing, because the game does not yet teach it: **no single
 unit type is a strategy.** An army of nothing but soldiers loses, an army of
