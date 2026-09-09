@@ -56,6 +56,9 @@ constexpr int kRunner = 0;
 constexpr int kSoldier = 1;
 constexpr int kArcher = 2;
 constexpr int kGriffin = 3;
+constexpr int kPikeman = 4;
+constexpr int kOgre = 5;
+constexpr int kBallista = 6;
 
 // How long a battle is given before it is called a draw. Long enough that a
 // draw means "neither side can finish this", not "the clock ran out".
@@ -69,6 +72,15 @@ struct Strategy {
     bool spells = false;     // cast whatever is affordable
     bool economy = false;    // buy INCOME whenever it can be afforded
     bool cannon = false;     // shell the enemy line out of surplus
+
+    // Which path the hero walks. Ignored unless `hero` is set.
+    //
+    // This is the fairness criterion for the hero tree, and it is a criterion
+    // rather than an opinion: no path may win more stages than the others, and
+    // each must win at least one stage the other two lose. A path that wins
+    // everything is the old hero back again; a path that wins nothing is a
+    // trap for whoever picked it, and picking is permanent.
+    int path = 0;
 };
 
 struct Outcome {
@@ -108,6 +120,27 @@ Outcome play(int stage, const Strategy& strategy) {
     scenes.push(lanebattle::makeTitleScene());
     driver.step();
     lanebattle::campaignOf(world).stagesUnlocked = stage + 1;
+    lanebattle::campaignOf(world).heroPath = strategy.path;
+
+    // A strategy carries what it sends.
+    //
+    // Derived from the cycle rather than declared separately, because two
+    // copies of "which units is this player using" is exactly the kind of pair
+    // that drifts — and a strategy whose cycle names a unit its loadout does
+    // not carry would silently send nothing, which is how three columns of
+    // this table once measured a game that was not being played.
+    {
+        lanebattle::Campaign& campaign = lanebattle::campaignOf(world);
+        for (int slot = 0; slot < lanebattle::kLoadoutSlots; ++slot) {
+            campaign.loadout[slot] = -1;
+        }
+        int slot = 0;
+        for (int kind : strategy.cycle) {
+            if (slot >= lanebattle::kLoadoutSlots) break;
+            if (lanebattle::inLoadoutOf(campaign, kind)) continue;
+            campaign.loadout[slot++] = kind;
+        }
+    }
     driver.tap(SDL_SCANCODE_SPACE);
     driver.step(2);
     driver.tap(SDL_SCANCODE_RETURN);
@@ -362,8 +395,24 @@ int main(int argc, char** argv) {
         {"AIR",   {kSoldier, kArcher, kGriffin}},
         {"ECON",  {kSoldier, kSoldier, kArcher}, false, false, true},
         {"GUNS",  {kSoldier, kSoldier, kArcher}, false, false, false, true},
-        {"HERO",  {kSoldier, kSoldier, kArcher}, true},
-        {"FULL",  {kSoldier, kArcher, kGriffin}, true, true, true, true},
+        // The three roles the loadout added, each carried in place of
+        // something the MIXED column relies on. If a new unit cannot get a
+        // column near MIXED's it is not a choice, it is a trap.
+        {"OGRE",  {kOgre, kSoldier, kArcher}},
+        {"PIKE",  {kSoldier, kPikeman, kArcher}},
+        {"BALL",  {kSoldier, kSoldier, kBallista}},
+        // The whole point of a loadout, in one column: a player who brings the
+        // anti-air AND the siege piece instead of two of one. If carrying both
+        // does not beat carrying either, then four slots are decoration.
+        {"COMBO", {kSoldier, kSoldier, kPikeman, kBallista}},
+        {"WARDN", {kSoldier, kSoldier, kArcher}, true, false, false, false,
+         static_cast<int>(lanebattle::HeroPath::Warden)},
+        {"FALCN", {kSoldier, kSoldier, kArcher}, true, false, false, false,
+         static_cast<int>(lanebattle::HeroPath::Falconer)},
+        {"CHAPL", {kSoldier, kSoldier, kArcher}, true, false, false, false,
+         static_cast<int>(lanebattle::HeroPath::Chaplain)},
+        {"FULL",  {kSoldier, kArcher, kGriffin}, true, true, true, true,
+         static_cast<int>(lanebattle::HeroPath::Falconer)},
     };
 
     if (argc > 1 && std::strcmp(argv[1], "--sweep") == 0) {
@@ -378,11 +427,18 @@ int main(int argc, char** argv) {
         std::vector<Strategy> withSolo = strategies;
         withSolo.push_back(Strategy{"SOLO", {}, true, false, false});
 
-        sweep(withSolo, "1,0", 2);        // runners and soldiers, no reach
-        sweep(withSolo, "1,1,0", 3);      // a plain ground army
-        sweep(withSolo, "1,1,2", 3);      // ground with archers behind it
-        sweep(withSolo, "1,2,3,0", 4);    // archers and a flyer
-        sweep(withSolo, "1,3,1,2", 4);    // the full enemy roster
+        // Three compositions, chosen for the question actually being asked:
+        // where does a stage that FIELDS FLYERS have to sit for anti-air to be
+        // worth carrying, and does putting it mid-campaign leave the hero
+        // paths where they were?
+        //
+        // The old five-composition list swept ground armies this game already
+        // understands. A sweep is expensive — every strategy against every
+        // income until it loses — so it is worth pointing at the open question
+        // rather than re-confirming settled ones.
+        sweep(withSolo, "1,1,0", 3);      // the ground baseline, for reference
+        sweep(withSolo, "1,1,2", 3);      // an enemy that shoots back
+        sweep(withSolo, "1,2,2,1", 4);    // archer-heavy: the BALLISTA's niche
         return 0;
     }
 

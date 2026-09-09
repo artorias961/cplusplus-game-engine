@@ -81,6 +81,17 @@ inline constexpr Glyph kGlyphs[] = {
     {'!', "..#.." "..#.." "..#.." "..#.." "..#.." "....." "..#.."},
     {'?', ".###." "#...#" "....#" "...#." "..#.." "....." "..#.."},
     {'/', "....#" "....#" "...#." "..#.." ".#..." "#...." "#...."},
+    // '+' and '%' were missing, and the armoury is written in them: every
+    // permanent upgrade describes itself as "+10% DAMAGE", which the player
+    // saw as a hollow box, "10", another hollow box, "DAMAGE".
+    //
+    // The fallback did its job — a missing character draws as a box precisely
+    // so it cannot vanish silently — and it still took four slices, because
+    // nothing in this project had ever looked at the screen. There is a test
+    // now that reads every string the game draws and fails on any character
+    // the font does not have.
+    {'+', "....." "..#.." "..#.." "#####" "..#.." "..#.." "....."},
+    {'%', "##..#" "##.#." "...#." "..#.." ".#..." ".#.##" "#..##"},
 };
 
 // Anything with no glyph draws as a hollow box, so a missing character is

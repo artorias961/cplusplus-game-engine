@@ -124,6 +124,10 @@ constexpr float kFlyingY = 244.0f;
 // component is a worse thing to own than a documented limit.
 constexpr int kMaxUnitKinds = 16;
 
+// How many unit types you may bring into one battle. You own every type and
+// carry this many — see "The loadout" further down for why four.
+constexpr int kLoadoutSlots = 4;
+
 // --- The hero --------------------------------------------------------------
 //
 // One summon per battle, and if it falls it stays fallen until the stage is
@@ -170,12 +174,46 @@ constexpr UnitKind kDefaultUnitKinds[] = {
     // The griffin. The only thing on this list that flies, and the reason the
     // archer stopped being optional: nothing else in the roster can touch it.
     {"GRIFFIN", 115.0f, 95.0f,  17.0f,  40.0f, 0.70f, 112.0f, 3.6f, 26.0f, 24.0f, true,  true,  200, 170, 250, 250, 160, 200},
+
+    // --- Three more, so that the loadout has something to choose between ----
+    //
+    // A loadout is meaningless with four unit types and four slots. The
+    // reference game's proportions are the argument for going the other way:
+    // a 14 KB unit table behind 2,161 unit frames, against our four sellable
+    // rows. You are meant to own more than you can bring.
+    //
+    // Each of these is a ROLE the roster did not have, and each is answerable,
+    // which is the rule the griffin established — a unit nothing can counter is
+    // the hero bug again in a cheaper costume.
+    //
+    //   PIKEMAN   the budget answer to the sky. Reaches air like an archer but
+    //             at melee range, with a soldier's build. Buying it instead of
+    //             an archer trades reach for a body that survives contact.
+    //   OGRE      the wall. Four soldiers of health for under three soldiers of
+    //             gold, and slow enough that it arrives after the fight starts.
+    //             Ground only, so a griffin walks all over it.
+    //   BALLISTA  the longest reach in the game and the softest body behind it.
+    //             Hits air. Useless without a line in front, which is the
+    //             archer's lesson taken further.
+    {"PIKEMAN",  55.0f, 105.0f, 13.0f,  46.0f, 0.70f,  88.0f, 1.8f, 20.0f, 34.0f, false, true,  120, 205, 190, 225, 145, 120},
+    {"OGRE",    160.0f, 280.0f, 30.0f,  38.0f, 1.10f,  62.0f, 4.5f, 34.0f, 46.0f, false, false, 140, 160, 235, 235, 140, 140},
+    {"BALLISTA",100.0f, 60.0f,  44.0f, 185.0f, 1.50f,  52.0f, 3.2f, 26.0f, 30.0f, false, false, 170, 195, 225, 230, 175, 155},
     // The hero. A roster row like any other, so it walks, fights, queues,
     // animates and is targeted by the same code as everything else — but it is
     // NOT sold from the spawn bar, does not take a number key, and never
     // appears in a stage's composition. Those exclusions are what make it a
-    // hero rather than an expensive soldier. It can reach the sky, because a
-    // champion that loses to a bird is not much of one.
+    // hero rather than an expensive soldier.
+    //
+    // GROUND ONLY, and that is the whole design of the hero tree rather than a
+    // nerf. This row used to reach the sky "because a champion that loses to a
+    // bird is not much of one", and the consequence was a unit that was better
+    // than every other unit at everything, which measurement caught: it beat
+    // every composition at every income the probe could build.
+    //
+    // Reaching the sky is now the FALCONER path — something bought, at the
+    // price of the health the other paths keep. A baseline that already had it
+    // would have made specialising a downgrade, and a choice that costs you
+    // something you already had is not a choice anybody makes twice.
     // Retuned down from 620 health and 46 damage, which measurement said was
     // not a swing but a win button: with the old numbers the hero beat every
     // composition the probe could build at every income it could reach, and a
@@ -184,7 +222,7 @@ constexpr UnitKind kDefaultUnitKinds[] = {
     // three of damage, free and instant — a decision about WHEN, which is what
     // it was always meant to be — and the probe now finds stages it does not
     // save you from.
-    {"HERO",      0.0f, 360.0f, 32.0f,  44.0f, 0.50f,  88.0f, 0.0f, 30.0f, 48.0f, false, true,  250, 235, 140, 255, 120,  90},
+    {"HERO",      0.0f, 360.0f, 32.0f,  44.0f, 0.50f,  88.0f, 0.0f, 30.0f, 48.0f, false, false, 250, 235, 140, 255, 120,  90},
 };
 constexpr int kDefaultUnitKindCount =
     static_cast<int>(sizeof(kDefaultUnitKinds) / sizeof(kDefaultUnitKinds[0]));
@@ -321,10 +359,26 @@ constexpr float kStartingMana = 40.0f;
 
 // Where the spell buttons are, and which one is under a screen position.
 constexpr float kSpellX = 690.0f;
-constexpr float kSpellY = 214.0f;
 constexpr float kSpellWidth = 254.0f;
 constexpr float kSpellHeight = 30.0f;
 constexpr float kSpellGap = 6.0f;
+
+// The top of a castle, which is where the right-hand panel column has to stop.
+//
+// The panels are screen-space and the castles are not, so at one particular
+// camera position — the far right, which is exactly where you look when you
+// are attacking their gate — the enemy castle slid underneath the spell rows
+// and lost the top quarter of itself behind three buttons. Nothing could see
+// it: the castle was drawn correctly, at the right place, in the right layer,
+// and a panel was on top of it, which is what panels are for.
+//
+// So the panel column is positioned FROM the castle rather than at a number
+// that happened to look fine on an empty field.
+constexpr float kCastleTopY = kGroundY - kCastleHeight;
+
+constexpr float kSpellPanelHeight =
+    kSpellCount * (kSpellHeight + kSpellGap) - kSpellGap;
+constexpr float kSpellY = kCastleTopY - kSpellPanelHeight;
 
 constexpr float spellTop(int index) {
     return kSpellY + static_cast<float>(index) * (kSpellHeight + kSpellGap);
@@ -458,9 +512,26 @@ constexpr StageKind kDefaultStages[] = {
     {"RIVER CROSSING", 0.60f,  600.0f, 3, "1,1,0"},
     {"THE FOOTHILLS",  1.00f,  740.0f, 3, "1,1,0"},
     {"OLD ROAD",       1.25f,  860.0f, 3, "1,1,0"},
-    {"THE PASS",       1.70f,  980.0f, 3, "1,1,0"},
-    {"BLACK FIELD",    1.35f,  900.0f, 3, "1,1,2"},
-    {"THE GATES",      1.20f,  950.0f, 4, "1,2,3,0"},
+    // Air-HEAVY, and that word is the measurement rather than flavour. A
+    // single griffin in a composition differentiates nothing — the sweep puts
+    // every strategy within a whisker of each other against "1,3,1", because
+    // one archer already answers one flyer. Two griffins in four collapses
+    // every ground answer to 0.50 income and leaves the PIKEMAN at 1.30.
+    //
+    // The income DROPS here, which looks wrong next to a table that otherwise
+    // climbs, and is not. Composition is far the stronger dial: an air wing at
+    // 0.65 is a harder question than a ground army at 1.25, and holding the
+    // income up as well would have put the stage past what the WARDEN and the
+    // CHAPLAIN can survive — leaving the FALCONER the only path that can
+    // finish the campaign, which is the exact failure the previous retune
+    // fixed.
+    {"THE EYRIE",      0.65f,  850.0f, 4, "1,3,3,1"},
+    {"BLACK FIELD",    1.15f,  900.0f, 3, "1,1,2"},
+    // Pure ground, and deliberately so. When stages 7 AND 8 both fielded
+    // flyers, anti-air was mandatory twice over and the FALCONER was the only
+    // path that could finish the campaign — measured, not guessed. A permanent
+    // choice must not be able to strand a player.
+    {"THE GATES",      1.55f, 1100.0f, 4, "1,1,0,1"},
     {"THE KEEP",       2.10f, 1300.0f, 4, "1,3,1,2"},
 };
 constexpr int kDefaultStageCount =
@@ -514,13 +585,180 @@ float stageReward(int stage, bool firstClear);
 // A separate component from Session because Session is one battle and this
 // outlives them: it is created once and read by the stage-select screen, the
 // play scene, and the victory that unlocks the next stage.
+// --- The hero's path -------------------------------------------------------
+//
+// The problem this solves is role compression: a hero that hits ground AND air,
+// tanks, and out-damages everything has no identity, and measuring said the old
+// one was not a swing in a battle but a substitute for playing well.
+//
+// The fix is not a clever mechanic, it is OPPORTUNITY COST. Every point spent
+// on one axis is a point not spent on another, and — the part that actually
+// bites — **reaching the sky is a path, not a freebie**. Two of the three
+// paths cannot touch a griffin at all. That single exclusion is what stops the
+// hero being strictly better than every unit at everything, because it means
+// the hero can be answered.
+//
+// A path is chosen ONCE and kept. Respeccing would turn the decision into a
+// menu you re-open per stage, which is the same reason the hero is one summon
+// per battle rather than an ability on a cooldown: a choice you can take back
+// is not a choice.
+//
+//   WARDEN     ground only. The most health, the least damage. A wall that
+//              walks, and the only path that can hold a line by itself.
+//   FALCONER   the only one that reaches the sky, and pays for it in health.
+//              Fast and sharp; dies to a real front line.
+//   CHAPLAIN   ground only, weak attack, and heals nearby friendly units while
+//              it lives. Wins nothing on its own and makes an army outlast one.
+//
+// How to know it is fair, concretely: `campaign_probe` plays the campaign once
+// per path. No path may win more stages than the others, and each must win at
+// least one stage the other two lose. That is a criterion you can run, which
+// is the whole reason the probe was built.
+enum class HeroPath { None, Warden, Falconer, Chaplain, Count };
+constexpr int kHeroPathCount = static_cast<int>(HeroPath::Count);
+
+// How many upgrades a path offers. Every path has exactly this many, so the
+// screen and the save format do not have to special-case one of them.
+constexpr int kHeroUpgradesPerPath = 3;
+constexpr int kHeroUpgradeCount = kHeroPathCount * kHeroUpgradesPerPath;
+
+// Which number an upgrade row moves.
+//
+// Tagged in the table rather than implied by the row's position, so the code
+// that applies a level is generic and a path can weight the three axes however
+// it likes. The in-battle upgrades went the other way — a rule per upgrade
+// written in code — because each of those does something structurally
+// different. These all just scale a number, so they can be data.
+enum class HeroStat { Health, Damage, Delay, Heal };
+
+struct HeroUpgradeKind {
+    const char* name;
+    const char* effectText;
+    HeroStat stat;
+    float baseCost;
+    float costGrowth;
+    float effect;     // per level; a fraction for the scalers, health/s for Heal
+    int maxLevel;     // the cap, which is what makes points scarce
+};
+
+struct HeroPathKind {
+    const char* name;
+    const char* blurb;
+
+    // Multipliers on the roster's hero row, so the table stays the one place
+    // the hero's baseline lives.
+    float health;
+    float damage;
+    float attackDelay;
+
+    bool hitsAir;
+
+    // Heals friendlies within kHeroAuraRadius, in health per second. Zero for
+    // everything but the chaplain.
+    float healPerSecond;
+
+    HeroUpgradeKind upgrades[kHeroUpgradesPerPath];
+};
+
+constexpr float kHeroAuraRadius = 150.0f;
+
+// Caps are deliberately low and costs rise steeply. A path you can max out is
+// a path with one ending; three levels of three things is 27 combinations and
+// a bank that never quite covers all of it.
+constexpr HeroPathKind kDefaultHeroPaths[] = {
+    {"NONE", "NO PATH - THE HERO FIGHTS AS THE ROSTER WROTE IT",
+     1.00f, 1.00f, 1.00f, false, 0.0f,
+     {{"", "", HeroStat::Health, 0.0f, 1.0f, 0.0f, 0},
+      {"", "", HeroStat::Health, 0.0f, 1.0f, 0.0f, 0},
+      {"", "", HeroStat::Health, 0.0f, 1.0f, 0.0f, 0}}},
+
+    {"WARDEN", "GROUND ONLY - A WALL THAT WALKS",
+     1.45f, 0.85f, 1.00f, false, 0.0f,
+     {{"PLATE", "+18% HEALTH",   HeroStat::Health, 180.0f, 1.60f, 0.18f, 3},
+      {"HAFT",  "+12% DAMAGE",   HeroStat::Damage, 220.0f, 1.60f, 0.12f, 3},
+      {"VIGIL", "-8% SWING GAP", HeroStat::Delay,  260.0f, 1.65f, 0.08f, 3}}},
+
+    {"FALCONER", "REACHES THE SKY - AND PAYS FOR IT",
+     0.70f, 1.25f, 0.85f, true, 0.0f,
+     {{"TALON", "+16% DAMAGE",   HeroStat::Damage, 200.0f, 1.60f, 0.16f, 3},
+      {"JESS",  "-8% SWING GAP", HeroStat::Delay,  240.0f, 1.60f, 0.08f, 3},
+      {"HOOD",  "+10% HEALTH",   HeroStat::Health, 180.0f, 1.60f, 0.10f, 3}}},
+
+    {"CHAPLAIN", "GROUND ONLY - MENDS THE LINE AROUND IT",
+     1.10f, 0.60f, 1.15f, false, 7.0f,
+     {{"LITANY", "+3/S HEALING", HeroStat::Heal,   200.0f, 1.65f, 3.0f,  3},
+      {"CENSER", "+14% HEALTH",  HeroStat::Health, 190.0f, 1.60f, 0.14f, 3},
+      {"RELIC",  "+8% DAMAGE",   HeroStat::Damage, 230.0f, 1.60f, 0.08f, 3}}},
+};
+
+const HeroPathKind& heroPath(int path);
+int heroPathCount();
+
+// What the next level of one of a path's upgrades costs.
+float heroUpgradeCost(int path, int upgrade, int owned);
+
 struct Campaign {
     int stagesUnlocked = 1;
     int currentStage = 0;
     int bank = 0;                    // gold carried between battles
     int perks[kPerkCount] = {};
     bool cleared[kMaxStages] = {};   // for the first-clear bonus
+
+    // Which path the hero walks, and how far. `heroPath` of 0 is None, which
+    // is the state a new campaign starts in — the hero is summonable but
+    // unspecialised, so choosing is the first real decision the armoury offers.
+    int heroPath = 0;
+    int heroUpgrades[kHeroPathCount][kHeroUpgradesPerPath] = {};
+
+    // What you walk in carrying. -1 is an empty slot; a fresh campaign is
+    // filled in with the first sellable kinds so the game is playable before
+    // anybody visits the army screen.
+    int loadout[kLoadoutSlots] = {-1, -1, -1, -1};
+
+    // How far each unit type has been trained, indexed by ROSTER position.
+    //
+    // By index rather than by name, unlike the perks and the hero path, and
+    // that is a deliberate difference: a data file may add unit types, so
+    // there is no fixed set of names to key on. The save writes them by name
+    // anyway — see saveCampaign — because an index is only safe while the
+    // roster it indexes is the same one.
+    int unitLevels[kMaxUnitKinds] = {};
 };
+
+// --- Training ---------------------------------------------------------------
+//
+// Every unit type levels, bought between battles from the same bank the
+// armoury and the hero spend.
+//
+// The cost is scaled by what the unit costs to field, so training an OGRE is
+// dearer than training a RUNNER and the cheap units stay the cheap units. A
+// flat price would have made the expensive rows strictly better to invest in,
+// which is the same collapse the hero tree exists to prevent.
+//
+// Capped, and the cap is what stops levelling being an answer to difficulty:
+// five levels is about a soldier and a half of health, which wins fights it
+// was already close to winning and does not win a stage the composition
+// cannot.
+constexpr int kMaxUnitLevel = 5;
+constexpr float kTrainHealthPerLevel = 0.08f;   // +8% health
+constexpr float kTrainDamagePerLevel = 0.06f;   // +6% damage
+constexpr float kTrainCostFactor = 2.2f;        // times the unit's own cost
+constexpr float kTrainCostGrowth = 1.55f;
+
+// What the next level of `kind` costs a player who owns `owned` already.
+float trainCost(int kind, int owned);
+
+// The multipliers a trained unit fights with.
+float trainedHealth(int kind, int level);
+float trainedDamage(int kind, int level);
+
+// The levels this battle is being fought with. Set from the campaign when a
+// battle starts, exactly like the loadout, and applied to YOUR units only —
+// the opponent fields the roster as written, or every level bought would arm
+// both sides equally and buy nothing.
+void setTrainingLevels(const int* levels, int count);
+void resetTraining();
+int trainingLevel(int kind);
 
 Campaign& campaignOf(engine::World& world);  // created on first use
 
@@ -633,6 +871,58 @@ constexpr int kMaxVisibleButtons =
     static_cast<int>((kHeroButtonX - kButtonGap - kButtonX) /
                      (kButtonWidth + kButtonGap));
 
+// --- The loadout -----------------------------------------------------------
+//
+// You own every unit type. You bring four.
+//
+// This is the one mechanic the reference game has that this one did not, and
+// its asset structure is the argument: 2,161 unit frames behind a 14 KB unit
+// table, against a spawn bar five buttons wide. Owning more than you can field
+// is the whole shape of the genre's meta — the decision moves out of the
+// battle and into what you walked in carrying.
+//
+// It also closes a hole this file has had since the spawn bar was built. The
+// bar showed the first five sellable rows and everything past them was
+// unreachable; a data file adding a sixth produced a unit that could be paid
+// for and never sent. "Which five?" was answered by roster order. Now it is
+// answered by the player.
+//
+// FOUR rather than five, so the choice bites. Five slots against seven kinds
+// is a mild preference; four is a decision you can get wrong. The constant
+// itself lives up beside kMaxUnitKinds, because Campaign needs it long before
+// this point in the file.
+
+// The kinds the bar sells this battle, in bar order. Set from the campaign
+// when a battle starts; falls back to the first sellable kinds so that a bare
+// World — a test, a probe — behaves exactly as it did before loadouts existed.
+void setLoadout(const int* kinds, int count);
+void resetLoadout();
+
+// What slot `slot` is carrying, or -1. This is the ONE answer to "what can the
+// player send": the bar, the number keys and the title screen all ask it.
+int loadoutKind(int slot);
+
+// Is this kind in the loadout at all?
+bool inLoadout(int kind);
+
+// The same question about a CAMPAIGN's loadout rather than the one a battle is
+// currently being fought with. Two different things: the campaign holds what
+// you have chosen, the global holds what this battle was started with.
+bool inLoadoutOf(const Campaign& campaign, int kind);
+
+// Every sellable kind, in roster order — what the army screen offers and what
+// a loadout is chosen FROM. Excludes the hero, which is never sold.
+int sellableKindCount();
+int sellableKind(int index);
+
+// The loadout can never ask the bar for more buttons than it can draw.
+//
+// Two constants that have to agree, checked by the compiler rather than by
+// somebody remembering — this file has had four bugs from two copies of one
+// fact disagreeing, and every one of them was found by accident.
+static_assert(kLoadoutSlots <= kMaxVisibleButtons,
+              "the bar cannot draw as many buttons as the loadout carries");
+
 // The roster clamped to what fits. Kinds past this have no plate, no label,
 // no hit box and no key: the bar is the only way to send anything, and the
 // number keys are bound to its SLOTS rather than to roster rows.
@@ -719,6 +1009,16 @@ struct Unit {
     // clamped it DOWN to the roster's number: a spell that hurt, and only for
     // the player who had paid for the perk.
     float maxHealth = 0.0f;
+
+    // Whether THIS unit can reach the sky, seeded from its roster row.
+    //
+    // A per-entity copy rather than a read of the table, because the hero's
+    // reach is decided by the path its owner chose rather than by the row it
+    // was spawned from — and "can it be answered" is the single rule that
+    // stops a hero being better than every unit at everything. Everything else
+    // on the field never changes it, so for every other unit this is exactly
+    // what the table says.
+    bool hitsAir = false;
 
     float timeUntilAttack = 0.0f;
 
@@ -875,10 +1175,24 @@ float castleMaxHealthFor(const Session& session, bool leftSide);
 // (-1 for none). Exposed for the same reason `buttonAt` is: a test that clicks
 // one should not have to re-derive the layout.
 constexpr float kUpgradeX = 690.0f;
-constexpr float kUpgradeY = 84.0f;
 constexpr float kUpgradeWidth = 254.0f;
 constexpr float kUpgradeHeight = 30.0f;
 constexpr float kUpgradeGap = 6.0f;
+
+// The mana bar sits between the two panels, and used to be an unlabelled blue
+// strip flush against the bottom of the upgrade panel — which read as a
+// progress bar belonging to SUPPLY rather than as a resource of its own. It
+// has a gap and a label now.
+constexpr float kManaBarHeight = 16.0f;
+constexpr float kManaBarGap = 8.0f;
+constexpr float kManaBarY = kSpellY - kManaBarGap - kManaBarHeight;
+
+// Stacked upward from the mana bar for the same reason the spells are stacked
+// upward from the castle: so that moving one of them cannot silently land on
+// another.
+constexpr float kUpgradePanelHeight =
+    kUpgradeCount * (kUpgradeHeight + kUpgradeGap) - kUpgradeGap;
+constexpr float kUpgradeY = kManaBarY - kManaBarGap - kUpgradePanelHeight;
 
 constexpr float upgradeTop(int index) {
     return kUpgradeY + static_cast<float>(index) * (kUpgradeHeight + kUpgradeGap);
@@ -968,5 +1282,79 @@ constexpr float perkTop(int index) {
 }
 
 int perkAt(float screenX, float screenY);
+
+// --- The hero screen -------------------------------------------------------
+//
+// Its own scene rather than more rows on the stage list, because choosing a
+// path is a different kind of decision from choosing a battle and the armoury
+// column has no room left. Reached with H from the stage list.
+std::unique_ptr<engine::Scene> makeHeroScene();
+
+// The three paths, laid out across the middle.
+constexpr float kPathX = 60.0f;
+constexpr float kPathY = 150.0f;
+constexpr float kPathWidth = 270.0f;
+constexpr float kPathHeight = 92.0f;
+constexpr float kPathGap = 15.0f;
+
+constexpr float pathLeft(int index) {
+    return kPathX + static_cast<float>(index) * (kPathWidth + kPathGap);
+}
+
+// Which path plate is under a screen position, or -1. Paths are numbered from
+// 1 (None is not offered), so this returns a HeroPath value directly.
+int pathAt(float screenX, float screenY);
+
+// The chosen path's three upgrades, stacked underneath.
+constexpr float kHeroUpgradeX = 240.0f;
+constexpr float kHeroUpgradeY = 300.0f;
+constexpr float kHeroUpgradeWidth = 480.0f;
+constexpr float kHeroUpgradeHeight = 44.0f;
+constexpr float kHeroUpgradeGap = 8.0f;
+
+constexpr float heroUpgradeTop(int index) {
+    return kHeroUpgradeY +
+           static_cast<float>(index) * (kHeroUpgradeHeight + kHeroUpgradeGap);
+}
+
+int heroUpgradeAt(float screenX, float screenY);
+
+// --- The army screen -------------------------------------------------------
+//
+// One row per unit type you own. Clicking the row's left side carries or drops
+// it; clicking TRAIN buys a level. Reached with A from the stage list.
+//
+// Both halves on one screen deliberately. Choosing what to bring and choosing
+// what to invest in are the same question asked twice — there is no point
+// training an OGRE you never carry — and putting them on separate screens
+// would let a player answer one without seeing the other.
+std::unique_ptr<engine::Scene> makeArmyScene();
+
+constexpr float kArmyX = 130.0f;
+constexpr float kArmyY = 118.0f;
+constexpr float kArmyWidth = 700.0f;
+constexpr float kArmyHeight = 40.0f;
+constexpr float kArmyGap = 6.0f;
+
+// The TRAIN button lives at the right-hand end of a row.
+constexpr float kTrainWidth = 150.0f;
+constexpr float kTrainX = kArmyX + kArmyWidth - kTrainWidth;
+
+constexpr float armyTop(int index) {
+    return kArmyY + static_cast<float>(index) * (kArmyHeight + kArmyGap);
+}
+
+// How many rows fit above the instructions at the bottom.
+constexpr float kArmyHintY = 476.0f;
+constexpr int kMaxVisibleArmyRows =
+    static_cast<int>((kArmyHintY - kArmyY) / (kArmyHeight + kArmyGap));
+
+// Which army row is under a screen position, or -1. Rows are indexes into the
+// SELLABLE kinds, not into the roster.
+int armyRowAt(float screenX, float screenY);
+
+// True when that position is on the row's TRAIN button rather than its
+// carry/drop half.
+bool armyTrainHit(float screenX, float screenY);
 
 }  // namespace lanebattle

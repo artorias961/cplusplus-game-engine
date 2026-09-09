@@ -232,8 +232,13 @@ Entity createFigure(World& world, Entity owner, const Sprite& body) {
 // overall. With a dozen units that is free. When it stops being free,
 // engine_bench will say so and the answer will be a spatial grid; guessing at
 // that now would be optimising a number nobody has measured.
+// `hitsAir` is passed rather than read from `stats`, because for one unit on
+// the field it is not a property of the roster row: the hero's reach comes from
+// the path its owner chose. Explicit and unavoidable rather than a defaulted
+// parameter, for the reason View.h spells out — a default here would let every
+// existing call keep compiling while quietly meaning something else.
 Entity findTargetAhead(World& world, Entity attacker, bool leftSide,
-                       float attackerX, const UnitKind& stats) {
+                       float attackerX, const UnitKind& stats, bool hitsAir) {
     const float direction = facing(leftSide);
     const float attackerCenter = attackerX + stats.width / 2.0f;
 
@@ -258,7 +263,7 @@ Entity findTargetAhead(World& world, Entity attacker, bool leftSide,
         // distance cannot answer, and the reason the archer stopped being
         // optional. Castles never fly, so they are never excluded here.
         if (Unit* targetUnit = world.getComponent<Unit>(other)) {
-            if (kindOf(targetUnit->kind).flying && !stats.hitsAir) return;
+            if (kindOf(targetUnit->kind).flying && !hitsAir) return;
         }
 
         Transform* transform = world.getComponent<Transform>(other);
@@ -520,6 +525,22 @@ float perkCost(int perk, int owned) {
     return cost;
 }
 
+const HeroPathKind& heroPath(int path) {
+    if (path < 0) return kDefaultHeroPaths[0];
+    if (path >= kHeroPathCount) return kDefaultHeroPaths[kHeroPathCount - 1];
+    return kDefaultHeroPaths[path];
+}
+
+int heroPathCount() { return kHeroPathCount; }
+
+float heroUpgradeCost(int path, int upgrade, int owned) {
+    if (upgrade < 0 || upgrade >= kHeroUpgradesPerPath) return 0.0f;
+    const HeroUpgradeKind& kind = heroPath(path).upgrades[upgrade];
+    float cost = kind.baseCost;
+    for (int level = 0; level < owned; ++level) cost *= kind.costGrowth;
+    return cost;
+}
+
 float stageReward(int stage, bool firstClear) {
     const float base =
         kStageRewardBase + kStageRewardPerStage * static_cast<float>(stage);
@@ -550,6 +571,41 @@ bool saveCampaign(const Campaign& campaign) {
                    campaign.perks[perk]);
     }
 
+    // The hero's path is written by NAME for the same reason the perks are:
+    // an index is a promise that the enum never gets reordered, and this one
+    // decides whether somebody's hero can reach the sky.
+    writer.set("hero_path", std::string(heroPath(campaign.heroPath).name));
+    for (int path = 1; path < kHeroPathCount; ++path) {
+        for (int up = 0; up < kHeroUpgradesPerPath; ++up) {
+            const char* name = heroPath(path).upgrades[up].name;
+            if (!name || name[0] == '\0') continue;
+            writer.set(std::string("hero_") + name,
+                       campaign.heroUpgrades[path][up]);
+        }
+    }
+
+    // The loadout and the training, both written by unit NAME.
+    //
+    // The Campaign holds them by roster index because a data file may add unit
+    // types and there is no fixed set of names to key on in memory. A SAVE is
+    // different: it outlives the roster that produced it, and an index into a
+    // roster that has since gained a row in the middle is a promise nobody
+    // made. Names survive that; indices do not.
+    std::string carried;
+    for (int slot = 0; slot < kLoadoutSlots; ++slot) {
+        const int kind = campaign.loadout[slot];
+        if (kind < 0 || kind >= unitKindCount()) continue;
+        if (!carried.empty()) carried += ",";
+        carried += unitKind(kind).name;
+    }
+    writer.set("loadout", carried);
+
+    for (int kind = 0; kind < unitKindCount() && kind < kMaxUnitKinds; ++kind) {
+        if (campaign.unitLevels[kind] <= 0) continue;
+        writer.set(std::string("level_") + unitKind(kind).name,
+                   campaign.unitLevels[kind]);
+    }
+
     std::string cleared;
     for (int stage = 0; stage < kMaxStages; ++stage) {
         if (!campaign.cleared[stage]) continue;
@@ -578,6 +634,64 @@ bool loadCampaign(Campaign& campaign) {
     for (int perk = 0; perk < kPerkCount; ++perk) {
         campaign.perks[perk] = std::max(
             0, section->integer(std::string("perk_") + perkKind(perk).name, 0));
+    }
+
+    // Matched by name, and an unrecognised one falls back to no path rather
+    // than to whatever index it happened to resemble.
+    campaign.heroPath = 0;
+    const std::string pathName = section->text("hero_path", "NONE");
+    for (int path = 0; path < kHeroPathCount; ++path) {
+        if (pathName == heroPath(path).name) campaign.heroPath = path;
+    }
+    for (int path = 0; path < kHeroPathCount; ++path) {
+        for (int up = 0; up < kHeroUpgradesPerPath; ++up) {
+            const HeroUpgradeKind& kind = heroPath(path).upgrades[up];
+            if (!kind.name || kind.name[0] == '\0') {
+                campaign.heroUpgrades[path][up] = 0;
+                continue;
+            }
+            // Clamped to the cap on the way in. The cap is what makes points
+            // scarce, and a save file is a text file a player can edit.
+            const int owned =
+                section->integer(std::string("hero_") + kind.name, 0);
+            campaign.heroUpgrades[path][up] =
+                std::min(std::max(0, owned), kind.maxLevel);
+        }
+    }
+
+    // Matched by name back to whatever index that name holds now. A name the
+    // roster no longer has is simply dropped, which turns "the file was
+    // written against a roster that has changed" into an empty slot rather
+    // than into somebody else's unit.
+    for (int slot = 0; slot < kLoadoutSlots; ++slot) campaign.loadout[slot] = -1;
+    {
+        const std::string carried = section->text("loadout", "");
+        std::string name;
+        int slot = 0;
+        for (std::size_t at = 0; at <= carried.size(); ++at) {
+            const char c = at < carried.size() ? carried[at] : ',';
+            if (c != ',') {
+                name += c;
+                continue;
+            }
+            if (!name.empty() && slot < kLoadoutSlots) {
+                for (int kind = 0; kind < unitKindCount(); ++kind) {
+                    if (name == unitKind(kind).name && kind != heroKindIndex()) {
+                        campaign.loadout[slot++] = kind;
+                        break;
+                    }
+                }
+            }
+            name.clear();
+        }
+    }
+
+    for (int kind = 0; kind < kMaxUnitKinds; ++kind) campaign.unitLevels[kind] = 0;
+    for (int kind = 0; kind < unitKindCount() && kind < kMaxUnitKinds; ++kind) {
+        const int level =
+            section->integer(std::string("level_") + unitKind(kind).name, 0);
+        campaign.unitLevels[kind] =
+            std::min(std::max(0, level), kMaxUnitLevel);
     }
 
     for (int stage = 0; stage < kMaxStages; ++stage) {
@@ -620,6 +734,43 @@ int spellAt(float screenX, float screenY) {
         if (screenY >= top && screenY <= top + kSpellHeight) return index;
     }
     return -1;
+}
+
+int pathAt(float screenX, float screenY) {
+    if (screenY < kPathY || screenY > kPathY + kPathHeight) return -1;
+
+    // Numbered from 1: None is a state, not an offer.
+    for (int path = 1; path < kHeroPathCount; ++path) {
+        const float left = pathLeft(path - 1);
+        if (screenX >= left && screenX <= left + kPathWidth) return path;
+    }
+    return -1;
+}
+
+int heroUpgradeAt(float screenX, float screenY) {
+    if (screenX < kHeroUpgradeX || screenX > kHeroUpgradeX + kHeroUpgradeWidth) {
+        return -1;
+    }
+    for (int index = 0; index < kHeroUpgradesPerPath; ++index) {
+        const float top = heroUpgradeTop(index);
+        if (screenY >= top && screenY <= top + kHeroUpgradeHeight) return index;
+    }
+    return -1;
+}
+
+int armyRowAt(float screenX, float screenY) {
+    if (screenX < kArmyX || screenX > kArmyX + kArmyWidth) return -1;
+
+    const int rows = std::min(sellableKindCount(), kMaxVisibleArmyRows);
+    for (int index = 0; index < rows; ++index) {
+        const float top = armyTop(index);
+        if (screenY >= top && screenY <= top + kArmyHeight) return index;
+    }
+    return -1;
+}
+
+bool armyTrainHit(float screenX, float screenY) {
+    return armyRowAt(screenX, screenY) >= 0 && screenX >= kTrainX;
 }
 
 int perkAt(float screenX, float screenY) {
@@ -947,27 +1098,139 @@ int heroKindIndex() {
     return -1;
 }
 
-// Which unit kind a bar slot sells, or -1 if that slot is empty.
-//
-// The bar SKIPS the hero rather than stopping at it. Stopping was simpler and
-// wrong: the hero is the last row of the built-in roster, so a data file that
-// added a unit after it would put that unit permanently out of reach — a file
-// that silently does nothing is worse than one that fails.
-int kindForButton(int slot) {
+int sellableKindCount() {
+    const int hero = heroKindIndex();
+    return unitKindCount() - (hero >= 0 ? 1 : 0);
+}
+
+int sellableKind(int index) {
     const int hero = heroKindIndex();
     int seen = 0;
     for (int kind = 0; kind < unitKindCount(); ++kind) {
         if (kind == hero) continue;
-        if (seen == slot) return kind;
+        if (seen == index) return kind;
         ++seen;
     }
     return -1;
 }
 
+namespace {
+int gLoadout[kLoadoutSlots] = {-1, -1, -1, -1};
+
+// Whether anybody has chosen at all.
+//
+// The fallback to roster order has to be all-or-nothing, and it was not: it
+// applied PER SLOT, so a player who deliberately carried three units and left
+// the fourth empty got a fourth button selling whatever roster order put
+// there. The army screen said CARRYING 3 OF 4 and the spawn bar sold four —
+// the two screens disagreeing about the same fact, which is this file's
+// oldest recurring bug.
+//
+// An empty slot is a choice. Only "nobody has chosen anything" falls back, and
+// that exists so every test and probe written before loadouts existed still
+// means what it meant then.
+bool gLoadoutChosen = false;
+}  // namespace
+
+void setLoadout(const int* kinds, int count) {
+    gLoadoutChosen = false;
+    for (int slot = 0; slot < kLoadoutSlots; ++slot) {
+        const int wanted = (kinds && slot < count) ? kinds[slot] : -1;
+        // Validated on the way in rather than trusted: this comes from a save
+        // file, and a roster can shrink between one launch and the next.
+        const bool usable =
+            wanted >= 0 && wanted < unitKindCount() && wanted != heroKindIndex();
+        gLoadout[slot] = usable ? wanted : -1;
+        if (usable) gLoadoutChosen = true;
+    }
+}
+
+void resetLoadout() {
+    for (int slot = 0; slot < kLoadoutSlots; ++slot) gLoadout[slot] = -1;
+    gLoadoutChosen = false;
+}
+
+int loadoutKind(int slot) {
+    if (slot < 0 || slot >= kLoadoutSlots) return -1;
+    if (gLoadoutChosen) return gLoadout[slot];
+    // Nobody has chosen: the first sellable kinds, which is what the bar
+    // showed before there was such a thing as a loadout.
+    return sellableKind(slot);
+}
+
+bool inLoadoutOf(const Campaign& campaign, int kind) {
+    if (kind < 0) return false;
+    for (int slot = 0; slot < kLoadoutSlots; ++slot) {
+        if (campaign.loadout[slot] == kind) return true;
+    }
+    return false;
+}
+
+bool inLoadout(int kind) {
+    if (kind < 0) return false;
+    for (int slot = 0; slot < kLoadoutSlots; ++slot) {
+        if (loadoutKind(slot) == kind) return true;
+    }
+    return false;
+}
+
+// Which unit kind a bar slot sells, or -1 if that slot is empty.
+//
+// The loadout is the answer now. It used to be "the nth sellable row", which
+// meant roster order decided what a player could field and everything past the
+// bar's width was unreachable — payable for, never sendable.
+//
+// The hero is still not on it: it is not bought, and a loadout slot spent on
+// something free would be a slot wasted.
+int kindForButton(int slot) { return loadoutKind(slot); }
+
 int visibleButtonCount() {
-    const int hero = heroKindIndex();
-    const int sellable = unitKindCount() - (hero >= 0 ? 1 : 0);
-    return std::min(sellable, kMaxVisibleButtons);
+    int shown = 0;
+    for (int slot = 0; slot < kLoadoutSlots && slot < kMaxVisibleButtons; ++slot) {
+        if (loadoutKind(slot) >= 0) ++shown;
+    }
+    return shown;
+}
+
+float trainCost(int kind, int owned) {
+    float cost = unitKind(kind).cost * kTrainCostFactor;
+    // A free unit still has to cost something to train, or the hero — and
+    // anything a data file prices at zero — would level for nothing.
+    if (cost < 40.0f) cost = 40.0f;
+    for (int level = 0; level < owned; ++level) cost *= kTrainCostGrowth;
+    return cost;
+}
+
+namespace {
+int gTrainingLevels[kMaxUnitKinds] = {};
+}  // namespace
+
+void setTrainingLevels(const int* levels, int count) {
+    for (int kind = 0; kind < kMaxUnitKinds; ++kind) {
+        const int wanted = (levels && kind < count) ? levels[kind] : 0;
+        gTrainingLevels[kind] = std::min(std::max(0, wanted), kMaxUnitLevel);
+    }
+}
+
+void resetTraining() {
+    for (int kind = 0; kind < kMaxUnitKinds; ++kind) gTrainingLevels[kind] = 0;
+}
+
+int trainingLevel(int kind) {
+    if (kind < 0 || kind >= kMaxUnitKinds) return 0;
+    return gTrainingLevels[kind];
+}
+
+float trainedHealth(int kind, int level) {
+    (void)kind;
+    const int owned = std::min(std::max(0, level), kMaxUnitLevel);
+    return 1.0f + static_cast<float>(owned) * kTrainHealthPerLevel;
+}
+
+float trainedDamage(int kind, int level) {
+    (void)kind;
+    const int owned = std::min(std::max(0, level), kMaxUnitLevel);
+    return 1.0f + static_cast<float>(owned) * kTrainDamagePerLevel;
 }
 
 bool heroButtonHit(float screenX, float screenY) {
@@ -1064,8 +1327,14 @@ Entity spawnUnit(World& world, bool leftSide, int kind) {
 
     Unit component;
     component.kind = kind;
-    component.health = stats.health;  // the table is the only source of health
-    component.maxHealth = stats.health;
+    // Training is YOURS. The opponent fields the roster as written, or every
+    // level bought would arm both sides and buy nothing — the same reason
+    // WEAPONS only scales the player's blows.
+    const float trained =
+        leftSide ? trainedHealth(kind, trainingLevel(kind)) : 1.0f;
+    component.health = stats.health * trained;
+    component.maxHealth = stats.health * trained;
+    component.hitsAir = stats.hitsAir;  // the hero's path may override this
     world.addComponent(unit, component);
     world.getComponent<Unit>(unit)->figure = createFigure(world, unit, sprite);
 
@@ -1159,6 +1428,17 @@ public:
             1.0f + perks_[static_cast<int>(Perk::Damage)] *
                        perkKind(static_cast<int>(Perk::Damage)).effect;
 
+        // The hero's path, resolved once here rather than looked up mid-fight,
+        // for the same reason the stage is: a battle should be decided by one
+        // snapshot taken at the start.
+        readHeroPath(campaign);
+
+        // What you walked in carrying, and what it has been trained to. Also a
+        // snapshot: the army screen is closed while a battle runs, so nothing
+        // can change underneath it.
+        setLoadout(campaign.loadout, kLoadoutSlots);
+        setTrainingLevels(campaign.unitLevels, kMaxUnitKinds);
+
         Session& fresh = *world.getComponent<Session>(sessionEntity_);
         applyStage(fresh, stage_);
 
@@ -1179,7 +1459,13 @@ public:
                                kHudLayer);
         leftHealthText_ = createText(world, "", 16, 48, 2, 140, 200, 240,
                                      kHudLayer);
-        rightHealthText_ = createText(world, "", kWindowWidth - 220, 48, 2,
+        // Sat just above the upgrade panel rather than at a fixed 48, because
+        // raising that panel to clear the castles would otherwise have run it
+        // straight through this label — trading one overlap for another, which
+        // is how the hero button ended up on top of the spawn bar.
+        rightHealthText_ = createText(world, "",
+                                      kWindowWidth - 220,
+                                      static_cast<int>(kUpgradeY) - 22, 2,
                                       240, 150, 130, kHudLayer);
         hud_.push_back(goldText_);
         hud_.push_back(leftHealthText_);
@@ -1283,6 +1569,7 @@ public:
         // After the dead are gone, so the camera never chases a corpse for a
         // frame, and after the fight, so the minimap shows this frame's front
         // line rather than last frame's.
+        healAroundTheHero(world, dt);
         updateSpells(world, *session, input, dt);
         updateCannonballs(world, dt);
         animateUnits(world, dt);
@@ -1326,6 +1613,71 @@ private:
         // half of what makes a later stage longer as well as harder.
         world.addComponent(right, Castle{stageKind(stage_).enemyCastleHealth});
         field_.push_back(right);
+
+        dressCastle(world, kLeftCastleX, 24, 44, 66);
+        dressCastle(world, kRightCastleX, 66, 34, 32);
+    }
+
+    // Battlements and a gate, drawn over a castle's block.
+    //
+    // The castle is what the whole game is about — it is the win condition at
+    // one end and the lose condition at the other — and it was a plain
+    // rectangle. Nothing marked it as a building, which side it belonged to
+    // beyond its colour, or which end of it the fighting reaches.
+    //
+    // Built out of `Polygon`, exactly like the stick figures over the units,
+    // for exactly the same reason: this project has no art and no artist, and
+    // a few line segments cost nothing and need no engine work. Drawn a shade
+    // darker than the block so the detail reads against it.
+    void dressCastle(World& world, float x, unsigned char r, unsigned char g,
+                     unsigned char b) {
+        const float top = kGroundY - kCastleHeight;
+        const float w = kCastleWidth;
+
+        Entity trim = world.createEntity();
+        world.addComponent(trim, Transform{x, top, 0.0f});
+
+        Polygon lines;
+        lines.closed = false;
+        // Four crenellations along the top, as one unbroken stroke.
+        const float notch = w / 7.0f;
+        lines.points = {
+            Vec2{0.0f, 12.0f},        Vec2{0.0f, 0.0f},
+            Vec2{notch, 0.0f},        Vec2{notch, 10.0f},
+            Vec2{notch * 2, 10.0f},   Vec2{notch * 2, 0.0f},
+            Vec2{notch * 3, 0.0f},    Vec2{notch * 3, 10.0f},
+            Vec2{notch * 4, 10.0f},   Vec2{notch * 4, 0.0f},
+            Vec2{notch * 5, 0.0f},    Vec2{notch * 5, 10.0f},
+            Vec2{notch * 6, 10.0f},   Vec2{notch * 6, 0.0f},
+            Vec2{w, 0.0f},            Vec2{w, 12.0f},
+        };
+        lines.r = r;
+        lines.g = g;
+        lines.b = b;
+        // Above the block it decorates. Within a layer the renderer sorts by
+        // entity id and ids rise with creation order, so being built after the
+        // castle is what puts it on top — the same quiet guarantee the stick
+        // figures rely on.
+        lines.layer = kFieldLayer;
+        world.addComponent(trim, lines);
+        field_.push_back(trim);
+
+        // The gate, a separate stroke because it does not join the battlements.
+        Entity gate = world.createEntity();
+        world.addComponent(gate,
+                           Transform{x + w / 2.0f, kGroundY, 0.0f});
+
+        Polygon arch;
+        arch.closed = false;
+        arch.points = {Vec2{-14.0f, 0.0f}, Vec2{-14.0f, -26.0f},
+                       Vec2{-8.0f, -34.0f}, Vec2{8.0f, -34.0f},
+                       Vec2{14.0f, -26.0f}, Vec2{14.0f, 0.0f}};
+        arch.r = r;
+        arch.g = g;
+        arch.b = b;
+        arch.layer = kFieldLayer;
+        world.addComponent(gate, arch);
+        field_.push_back(gate);
     }
 
     // --- Scenery -----------------------------------------------------------
@@ -1350,9 +1702,16 @@ private:
         field_.push_back(makeSky(world, 150.0f, 120.0f, 34, 38, 54));
         field_.push_back(makeSky(world, 270.0f, kGroundY - 270.0f, 44, 46, 60));
 
-        buildHills(world, kFarParallax, kFarLayer, 150.0f, 320.0f, 54, 58, 78, 11);
-        buildHills(world, kMidParallax, kMidLayer, 100.0f, 240.0f, 44, 52, 66, 23);
-        buildHills(world, kNearParallax, kNearLayer, 60.0f, 180.0f, 36, 44, 56, 37);
+        // Brighter than they were, because `Polygon` STROKES rather than
+        // fills — there is no filled-polygon call in this engine — so a hill
+        // is a triangle outline, not a solid mass. At the old values the three
+        // bands were a few pixels of near-black on near-black and the whole
+        // parallax effect was invisible in a screenshot. Lifted until the
+        // ridgelines read, which is the same line-art the units are drawn in
+        // rather than a different style bolted on.
+        buildHills(world, kFarParallax, kFarLayer, 150.0f, 320.0f, 66, 72, 98, 11);
+        buildHills(world, kMidParallax, kMidLayer, 100.0f, 240.0f, 56, 66, 86, 23);
+        buildHills(world, kNearParallax, kNearLayer, 60.0f, 180.0f, 48, 58, 74, 37);
         buildForeground(world);
     }
 
@@ -1408,19 +1767,35 @@ private:
             const int index = static_cast<int>(x / 190.0f);
             const float height = jitter(index + 91, 10.0f, 22.0f);
 
+            // Above the spawn bar, not at the bottom of the window.
+            //
+            // These sat at kWindowHeight - 6, which is six pixels from the
+            // bottom edge — and the spawn bar covers everything from 480 down.
+            // So the foreground band was drawn into a sliver nobody could see.
+            // That band is the entire reason slice 6 pulled `parallax` out of
+            // the engine: it is the one layer that moves FASTER than the
+            // ground, which is the half of depth a boolean could never
+            // express, and it has been invisible ever since.
+            //
+            // Between the unit line and the bar, so it reads as ground cover
+            // in front of the fight without covering the fight itself.
+            const float baseY = kButtonY - 28.0f;
+
             Entity tuft = world.createEntity();
             world.addComponent(tuft, Transform{x + jitter(index + 53, -40.0f, 40.0f),
-                                               static_cast<float>(kWindowHeight) - 6.0f,
-                                               0.0f});
+                                               baseY, 0.0f});
 
             Polygon blades;
             blades.points = {Vec2{-9.0f, 0.0f},  Vec2{-4.0f, -height},
                              Vec2{-1.0f, 0.0f},  Vec2{3.0f, -height * 1.2f},
                              Vec2{6.0f, 0.0f},   Vec2{10.0f, -height * 0.8f}};
             blades.closed = false;
-            blades.r = 30;
-            blades.g = 38;
-            blades.b = 44;
+            // Green, and light enough to see. It was 30/38/44 — a blue-grey
+            // within a few points of the ground behind it — so even once it
+            // was drawn somewhere visible it still wasn't.
+            blades.r = 64;
+            blades.g = 92;
+            blades.b = 68;
             blades.layer = kForeLayer;
             blades.parallax = kForeParallax;
             world.addComponent(tuft, blades);
@@ -1597,6 +1972,77 @@ private:
         if (kind >= 0) trySpawn(world, session, kind);
     }
 
+    // Folds a path and everything bought within it into four numbers and a
+    // flag, so nothing in the battle has to know what a path is.
+    void readHeroPath(const Campaign& campaign) {
+        const int path = std::min(std::max(0, campaign.heroPath),
+                                  kHeroPathCount - 1);
+        const HeroPathKind& kind = heroPath(path);
+
+        heroPath_ = path;
+        heroHealthScale_ = kind.health;
+        heroPathDamage_ = kind.damage;
+        heroDelayScale_ = kind.attackDelay;
+        heroHitsAir_ = kind.hitsAir;
+        heroHealPerSecond_ = kind.healPerSecond;
+
+        for (int up = 0; up < kHeroUpgradesPerPath; ++up) {
+            const HeroUpgradeKind& row = kind.upgrades[up];
+            const int owned = std::min(campaign.heroUpgrades[path][up],
+                                       row.maxLevel);
+            const float total = static_cast<float>(owned) * row.effect;
+            switch (row.stat) {
+                case HeroStat::Health: heroHealthScale_ *= 1.0f + total; break;
+                case HeroStat::Damage: heroPathDamage_  *= 1.0f + total; break;
+                // A SMALLER gap between blows is faster, so this one subtracts.
+                // Floored well above zero: a delay of nought would be an
+                // infinite rate, and three levels of a data-driven percentage
+                // is exactly the sort of thing that reaches nought by accident.
+                case HeroStat::Delay:
+                    heroDelayScale_ *= std::max(0.35f, 1.0f - total);
+                    break;
+                case HeroStat::Heal: heroHealPerSecond_ += total; break;
+            }
+        }
+    }
+
+    // The chaplain's aura: friendly units near the hero are mended while it
+    // lives.
+    //
+    // Capped at each unit's own maximum, the same rule HEAL learned the hard
+    // way — the hero's own maximum is raised by its path, so a cap read from
+    // the roster would have healed it downwards.
+    void healAroundTheHero(World& world, float dt) {
+        if (heroHealPerSecond_ <= 0.0f) return;
+
+        float heroX = 0.0f;
+        float heroY = 0.0f;
+        bool found = false;
+        for (auto& [entity, hero] : world.view<Hero>()) {
+            (void)hero;
+            if (Transform* at = world.getComponent<Transform>(entity)) {
+                heroX = at->x;
+                heroY = at->y;
+                found = true;
+            }
+        }
+        if (!found) return;  // not summoned, or fallen
+
+        const float mend = heroHealPerSecond_ * dt;
+        for (auto& [entity, unit] : world.view<Unit>()) {
+            Team* team = world.getComponent<Team>(entity);
+            Transform* at = world.getComponent<Transform>(entity);
+            if (!team || !at || !team->leftSide) continue;
+            if (unit.health <= 0.0f) continue;  // already dead this frame
+
+            const float dx = at->x - heroX;
+            const float dy = at->y - heroY;
+            if (dx * dx + dy * dy > kHeroAuraRadius * kHeroAuraRadius) continue;
+
+            unit.health = std::min(unit.health + mend, unit.maxHealth);
+        }
+    }
+
     // Puts the hero on the field, once.
     //
     // No cost and no cooldown: the only limit is that there is exactly one of
@@ -1617,16 +2063,29 @@ private:
         // CHAMPION is permanent, so it is applied on the way out of the gate
         // rather than to the roster: the table stays the hero everyone has,
         // and the perk is what this particular player has made of it.
-        const float scale =
+        //
+        // The PATH is applied the same way and on top: a multiplier from the
+        // path itself, then whatever levels have been bought within it. So the
+        // roster row stays "the hero everybody starts with" and everything
+        // after it is what this player has made of theirs.
+        const float champion =
             1.0f + perks_[static_cast<int>(Perk::Champion)] *
                        perkKind(static_cast<int>(Perk::Champion)).effect;
+
         if (Unit* unit = world.getComponent<Unit>(hero)) {
-            unit->health *= scale;
+            unit->health *= champion * heroHealthScale_;
             // Its ceiling moves with it, or HEAL would clamp the hero back
             // down to the roster's number the first time it was cast.
-            unit->maxHealth *= scale;
+            unit->maxHealth *= champion * heroHealthScale_;
+
+            // The whole point of a path: two of the three cannot touch a
+            // griffin, whatever the roster row says.
+            unit->hitsAir = heroHitsAir_;
         }
-        heroDamageScale_ = scale;
+        // Assigned from the two inputs rather than multiplied into itself, so
+        // that a second call could not compound it. `heroSummoned` already
+        // makes a second call impossible; this makes it harmless too.
+        heroDamageScale_ = champion * heroPathDamage_;
 
         if (audioDevice) audioDevice->play(Waveform::Sine, 180.0f, 0.35f, 0.20f);
     }
@@ -1746,7 +2205,8 @@ private:
 
             const UnitKind& stats = kindOf(unit->kind);
             const Entity target =
-                findTargetAhead(world, attacker, team->leftSide, at->x, stats);
+                findTargetAhead(world, attacker, team->leftSide, at->x, stats,
+                                unit->hitsAir);
 
             if (target == kInvalidEntity) {
                 // Nothing in reach. March, unless one of our own is in the
@@ -1762,7 +2222,12 @@ private:
             unit->timeUntilAttack -= dt;
             if (unit->timeUntilAttack > 0.0f) continue;
 
-            unit->timeUntilAttack = stats.attackDelay;
+            // The hero's path can shorten the gap between its blows. Everything
+            // else swings at whatever the roster says.
+            unit->timeUntilAttack =
+                world.hasComponent<Hero>(attacker)
+                    ? stats.attackDelay * heroDelayScale_
+                    : stats.attackDelay;
             unit->swing = 1.0f;  // starts the arm through its arc
 
             // WEAPONS is the player's perk, so only the player's units swing
@@ -1774,6 +2239,9 @@ private:
             float damage = stats.damage;
             if (team->leftSide) {
                 damage *= damageScale_;
+                // And whatever this KIND has been trained to, which is why a
+                // levelled soldier is worth more than a levelled purse.
+                damage *= trainedDamage(unit->kind, trainingLevel(unit->kind));
                 if (world.hasComponent<Hero>(attacker)) damage *= heroDamageScale_;
 
                 // RAGE is temporary and applies to everything you own,
@@ -1824,9 +2292,27 @@ private:
     }
 
     void removeTheDead(World& world, Session& session) {
-        for (Entity entity : world.entities()) {
+        // The dead are gathered BEFORE any of them is buried.
+        //
+        // This used to walk `world.entities()` directly and call spawnShards
+        // from inside the loop — and spawnShards creates six entities, each of
+        // which push_backs onto the very vector being iterated. ECS.h says in
+        // as many words that entities() is the live list and that creating an
+        // entity while looping it can reallocate the vector under the loop.
+        //
+        // It had been there since slice 1 and only ever mattered when a push
+        // happened to cross a capacity boundary during a death, which is why
+        // it took an unrelated test — a chaplain healing a line while a fight
+        // was killing it — to fall over. `fight` already gathers first for
+        // exactly this reason; this is the one place that did not.
+        std::vector<Entity> dead;
+        for (auto& [entity, unit] : world.view<Unit>()) {
+            if (unit.health <= 0.0f) dead.push_back(entity);
+        }
+
+        for (Entity entity : dead) {
             Unit* unit = world.getComponent<Unit>(entity);
-            if (!unit || unit->health > 0.0f) continue;
+            if (!unit) continue;
 
             // Whoever killed it gets paid. The bounty is a share of what the
             // casualty cost its owner, so trading cheap units for expensive
@@ -2343,12 +2829,22 @@ private:
     // --- The spell panel ---------------------------------------------------
 
     void buildSpellPanel(World& world) {
-        manaPlate_ = makeScreenRect(world, kSpellX, kSpellY - 26.0f, kSpellWidth,
-                                    16.0f, 30, 34, 50, kHudLayer);
-        manaFill_ = makeScreenRect(world, kSpellX, kSpellY - 26.0f, kSpellWidth,
-                                   16.0f, 90, 130, 220, kHudLayer);
+        manaPlate_ = makeScreenRect(world, kSpellX, kManaBarY, kSpellWidth,
+                                    kManaBarHeight, 30, 34, 50, kHudLayer);
+        manaFill_ = makeScreenRect(world, kSpellX, kManaBarY, kSpellWidth,
+                                   kManaBarHeight, 90, 130, 220, kHudLayer);
+        // Labelled, and on top of the fill so it stays readable however full
+        // the bar is. Without this it was an unnamed blue strip pressed
+        // against the bottom of the upgrade panel, and read as a progress bar
+        // belonging to SUPPLY — three spells priced in a resource the screen
+        // never named.
+        manaText_ = createText(world, "", static_cast<int>(kSpellX) + 8,
+                               static_cast<int>(kManaBarY) + 1, 2,
+                               235, 240, 255, kHudLayer);
+        world.getComponent<Text>(manaText_)->screenSpace = true;
         hud_.push_back(manaPlate_);
         hud_.push_back(manaFill_);
+        hud_.push_back(manaText_);
 
         for (int spell = 0; spell < kSpellCount; ++spell) {
             const float top = spellTop(spell);
@@ -2370,6 +2866,9 @@ private:
         if (Sprite* fill = world.getComponent<Sprite>(manaFill_)) {
             fill->width =
                 static_cast<int>(kSpellWidth * (session.mana / kMaxMana));
+        }
+        if (Text* text = world.getComponent<Text>(manaText_)) {
+            text->value = "MANA " + std::to_string(static_cast<int>(session.mana));
         }
 
         for (int spell = 0; spell < kSpellCount; ++spell) {
@@ -2561,6 +3060,12 @@ private:
     int perks_[kPerkCount] = {};
     float damageScale_ = 1.0f;
     float heroDamageScale_ = 1.0f;
+    int heroPath_ = 0;
+    float heroPathDamage_ = 1.0f;
+    float heroHealthScale_ = 1.0f;
+    float heroDelayScale_ = 1.0f;
+    float heroHealPerSecond_ = 0.0f;
+    bool heroHitsAir_ = false;
     Entity sessionEntity_ = kInvalidEntity;
     Entity cameraEntity_ = kInvalidEntity;
     Entity goldText_ = kInvalidEntity;
@@ -2575,6 +3080,7 @@ private:
     Entity cannonText_ = kInvalidEntity;
     Entity manaPlate_ = kInvalidEntity;
     Entity manaFill_ = kInvalidEntity;
+    Entity manaText_ = kInvalidEntity;
     Entity spellPlate_[kSpellCount] = {};
     Entity spellText_[kSpellCount] = {};
     Entity heroPlate_ = kInvalidEntity;
@@ -2631,7 +3137,7 @@ public:
         buildArmoury(world, campaign);
 
         owned_.push_back(createCenteredText(
-            world, "CLICK A BATTLE, OR ENTER FOR THE LATEST", 470, 2,
+            world, "CLICK A BATTLE - ENTER FOR THE LATEST - A ARMY - H HERO", 470, 2,
             160, 160, 185, kHudLayer));
         owned_.push_back(createCenteredText(world, "Q TO QUIT", 496, 2,
                                             140, 140, 165, kHudLayer));
@@ -2679,10 +3185,25 @@ public:
                 affordable ? 215 : 100, affordable ? 215 : 100,
                 affordable ? 230 : 115, kHudLayer));
 
+            // The cost is right-aligned on the NAME line rather than appended
+            // to the effect line.
+            //
+            // "+40 START GOLD  160" is nineteen characters, which at this
+            // scale is 226 pixels inside a 220-pixel plate: TREASURY's price
+            // hung out over the gap towards the stage list, and one more digit
+            // would have put it under the list itself. Splitting the line
+            // fixes it for every row and keeps working when a price reaches
+            // four figures, which the geometric cost curve reaches quickly.
+            const std::string price = std::to_string(static_cast<int>(cost));
             owned_.push_back(createText(
-                world,
-                std::string(kind.effectText) + "  " +
-                    std::to_string(static_cast<int>(cost)),
+                world, price,
+                static_cast<int>(kPerkX + kPerkWidth) - 8 - textWidth(price, 2),
+                static_cast<int>(top) + 6, 2,
+                affordable ? 235 : 100, affordable ? 220 : 100,
+                affordable ? 150 : 115, kHudLayer));
+
+            owned_.push_back(createText(
+                world, kind.effectText,
                 static_cast<int>(kPerkX) + 8, static_cast<int>(top) + 24, 2,
                 affordable ? 190 : 90, affordable ? 175 : 90,
                 affordable ? 120 : 105, kHudLayer));
@@ -2737,6 +3258,24 @@ public:
             return;
         }
 
+        // The hero screen. Pushed, not replaced, so it comes back here — and
+        // this screen takes its own picture down first, for the reason
+        // startBattle spells out: push does not call onExit underneath, and
+        // the renderer draws components rather than scenes.
+        if (input.wasKeyPressed(SDL_SCANCODE_H)) {
+            onExit(world);
+            world.flushDestroyed();
+            scenes.push(makeHeroScene());
+            return;
+        }
+
+        if (input.wasKeyPressed(SDL_SCANCODE_A)) {
+            onExit(world);
+            world.flushDestroyed();
+            scenes.push(makeArmyScene());
+            return;
+        }
+
         // Enter plays the furthest stage reached, which is what you want nine
         // times in ten and saves aiming at a row.
         if (input.wasKeyPressed(SDL_SCANCODE_RETURN) ||
@@ -2763,6 +3302,416 @@ public:
 
         campaign.currentStage = picked;
         startBattle(world, scenes);
+    }
+
+    bool simulatesWorld() const override { return false; }
+
+private:
+    std::vector<Entity> owned_;
+};
+
+// The army screen: what you own, what you carry, and what you have trained.
+class ArmyScene : public Scene {
+public:
+    void onEnter(World& world) override {
+        const Campaign& campaign = campaignOf(world);
+
+        owned_.push_back(createCenteredText(world, "YOUR ARMY", 44, 4,
+                                            235, 220, 150, kHudLayer));
+        owned_.push_back(createText(
+            world, "GOLD " + std::to_string(campaign.bank), 20, 18, 3,
+            235, 220, 150, kHudLayer));
+
+        int carriedCount = 0;
+        for (int slot = 0; slot < kLoadoutSlots; ++slot) {
+            if (campaign.loadout[slot] >= 0) ++carriedCount;
+        }
+        owned_.push_back(createCenteredText(
+            world,
+            "CARRYING " + std::to_string(carriedCount) + " OF " +
+                std::to_string(kLoadoutSlots) + " - CLICK A NAME TO CARRY OR DROP IT",
+            88, 2, 170, 170, 195, kHudLayer));
+
+        const int rows = std::min(sellableKindCount(), kMaxVisibleArmyRows);
+        for (int index = 0; index < rows; ++index) {
+            const int kind = sellableKind(index);
+            if (kind < 0) continue;
+            buildRow(world, campaign, index, kind);
+        }
+
+        owned_.push_back(createCenteredText(
+            world, "Q OR ESC TO GO BACK", static_cast<int>(kArmyHintY) + 6, 2,
+            160, 160, 185, kHudLayer));
+    }
+
+    void buildRow(World& world, const Campaign& campaign, int index, int kind) {
+        const UnitKind& unit = unitKind(kind);
+        const float top = armyTop(index);
+        const bool carried = isCarried(campaign, kind);
+        const int level = campaign.unitLevels[kind];
+        const bool maxed = level >= kMaxUnitLevel;
+        const float cost = trainCost(kind, level);
+        const bool affordable = !maxed && static_cast<float>(campaign.bank) >= cost;
+
+        Entity plate = createRect(world, kArmyX, top, kArmyWidth, kArmyHeight,
+                                  carried ? 50 : 30, carried ? 58 : 34,
+                                  carried ? 74 : 42, kHudLayer);
+        world.getComponent<Sprite>(plate)->screenSpace = true;
+        owned_.push_back(plate);
+
+        // A swatch in the unit's own colour, so the row and the thing it puts
+        // on the field are recognisably the same unit.
+        Entity swatch = createRect(world, kArmyX + 10.0f, top + 10.0f, 20.0f,
+                                   20.0f, unit.leftR, unit.leftG, unit.leftB,
+                                   kHudLayer);
+        world.getComponent<Sprite>(swatch)->screenSpace = true;
+        owned_.push_back(swatch);
+
+        owned_.push_back(createText(
+            world, carried ? "CARRIED" : "-",
+            static_cast<int>(kArmyX) + 40, static_cast<int>(top) + 4, 1,
+            carried ? 190 : 110, carried ? 230 : 110,
+            carried ? 200 : 125, kHudLayer));
+
+        owned_.push_back(createText(
+            world, unit.name, static_cast<int>(kArmyX) + 40,
+            static_cast<int>(top) + 16, 2,
+            carried ? 235 : 150, carried ? 235 : 150,
+            carried ? 245 : 165, kHudLayer));
+
+        // The numbers that decide whether it is worth a slot, including what
+        // training has already done to them — the point of a level is visible
+        // here or nowhere.
+        const float health = unit.health * trainedHealth(kind, level);
+        const float damage = unit.damage * trainedDamage(kind, level);
+        owned_.push_back(createText(
+            world,
+            std::to_string(static_cast<int>(unit.cost)) + "G   HP " +
+                std::to_string(static_cast<int>(health)) + "   DMG " +
+                std::to_string(static_cast<int>(damage)) + "   RANGE " +
+                std::to_string(static_cast<int>(unit.range)) +
+                (unit.flying ? "   FLIES" : "") +
+                (unit.hitsAir ? "   HITS AIR" : ""),
+            static_cast<int>(kArmyX) + 190, static_cast<int>(top) + 8, 1,
+            carried ? 200 : 130, carried ? 205 : 130,
+            carried ? 220 : 145, kHudLayer));
+
+        owned_.push_back(createText(
+            world, "LEVEL " + std::to_string(level) + "/" +
+                       std::to_string(kMaxUnitLevel),
+            static_cast<int>(kArmyX) + 190, static_cast<int>(top) + 22, 1,
+            carried ? 190 : 125, carried ? 175 : 125,
+            carried ? 120 : 135, kHudLayer));
+
+        Entity train = createRect(world, kTrainX, top + 4.0f,
+                                  kTrainWidth - 8.0f, kArmyHeight - 8.0f,
+                                  affordable ? 58 : 34, affordable ? 66 : 38,
+                                  affordable ? 82 : 46, kHudLayer);
+        world.getComponent<Sprite>(train)->screenSpace = true;
+        owned_.push_back(train);
+
+        const std::string label =
+            maxed ? "MAX" : ("TRAIN  " + std::to_string(static_cast<int>(cost)));
+        owned_.push_back(createText(
+            world, label,
+            static_cast<int>(kTrainX) + 10, static_cast<int>(top) + 14, 2,
+            maxed ? 150 : (affordable ? 235 : 115),
+            maxed ? 200 : (affordable ? 220 : 115),
+            maxed ? 160 : (affordable ? 150 : 130), kHudLayer));
+    }
+
+    static bool isCarried(const Campaign& campaign, int kind) {
+        for (int slot = 0; slot < kLoadoutSlots; ++slot) {
+            if (campaign.loadout[slot] == kind) return true;
+        }
+        return false;
+    }
+
+    void onExit(World& world) override {
+        for (Entity entity : owned_) world.destroyLater(entity);
+        owned_.clear();
+    }
+
+    void rebuild(World& world) {
+        onExit(world);
+        world.flushDestroyed();
+        onEnter(world);
+    }
+
+    // Carry it, or put it back. Dropping leaves a hole rather than shuffling
+    // the rest along: the slot a unit sits in is the key that sends it, and
+    // re-ordering the bar under a player who has learned it is a worse cost
+    // than an empty button.
+    void toggleCarried(World& world, Campaign& campaign, int kind) {
+        for (int slot = 0; slot < kLoadoutSlots; ++slot) {
+            if (campaign.loadout[slot] == kind) {
+                campaign.loadout[slot] = -1;
+                saveCampaign(campaign);
+                rebuild(world);
+                return;
+            }
+        }
+        for (int slot = 0; slot < kLoadoutSlots; ++slot) {
+            if (campaign.loadout[slot] < 0) {
+                campaign.loadout[slot] = kind;
+                saveCampaign(campaign);
+                rebuild(world);
+                return;
+            }
+        }
+        // Full, and nothing happens. Silently swapping something out would
+        // make a mis-click cost a unit the player had chosen deliberately.
+    }
+
+    void update(World& world, InputManager& input, float,
+                SceneStack& scenes) override {
+        Campaign& campaign = campaignOf(world);
+
+        if (input.wasKeyPressed(SDL_SCANCODE_Q) ||
+            input.wasKeyPressed(SDL_SCANCODE_ESCAPE)) {
+            scenes.pop();
+            return;
+        }
+
+        if (!input.wasMousePressed()) return;
+
+        const float mouseX = static_cast<float>(input.mouseX());
+        const float mouseY = static_cast<float>(input.mouseY());
+
+        const int row = armyRowAt(mouseX, mouseY);
+        if (row < 0) return;
+
+        const int kind = sellableKind(row);
+        if (kind < 0) return;
+
+        if (!armyTrainHit(mouseX, mouseY)) {
+            toggleCarried(world, campaign, kind);
+            return;
+        }
+
+        const int level = campaign.unitLevels[kind];
+        if (level >= kMaxUnitLevel) return;
+
+        const float cost = trainCost(kind, level);
+        if (static_cast<float>(campaign.bank) < cost) return;
+
+        campaign.bank -= static_cast<int>(cost);
+        ++campaign.unitLevels[kind];
+        saveCampaign(campaign);
+        rebuild(world);
+    }
+
+    bool simulatesWorld() const override { return false; }
+
+private:
+    std::vector<Entity> owned_;
+};
+
+// The hero screen: choose a path once, then spend the bank inside it.
+class HeroScene : public Scene {
+public:
+    void onEnter(World& world) override {
+        const Campaign& campaign = campaignOf(world);
+        const int chosen = campaign.heroPath;
+
+        owned_.push_back(createCenteredText(world, "YOUR HERO", 56, 5,
+                                            235, 220, 150, kHudLayer));
+        owned_.push_back(createText(
+            world, "GOLD " + std::to_string(campaign.bank), 20, 20, 3,
+            235, 220, 150, kHudLayer));
+
+        owned_.push_back(createCenteredText(
+            world,
+            chosen == 0 ? "CHOOSE A PATH - IT CANNOT BE CHANGED"
+                        : "PATH CHOSEN - SPEND THE BANK INSIDE IT",
+            110, 2, 170, 170, 195, kHudLayer));
+
+        for (int path = 1; path < kHeroPathCount; ++path) {
+            const HeroPathKind& kind = heroPath(path);
+            const float left = pathLeft(path - 1);
+
+            // Three states, and they have to look different: the one you took,
+            // the ones you can still take, and the ones you can no longer take
+            // because you took another. A locked-out path is drawn dimmest —
+            // it is not a thing you failed to afford, it is a road you did not
+            // walk, and it should read as closed rather than as expensive.
+            const bool isChosen = path == chosen;
+            const bool available = chosen == 0;
+
+            Entity plate = createRect(
+                world, left, kPathY, kPathWidth, kPathHeight,
+                isChosen ? 54 : (available ? 40 : 26),
+                isChosen ? 62 : (available ? 46 : 28),
+                isChosen ? 78 : (available ? 58 : 34), kHudLayer);
+            world.getComponent<Sprite>(plate)->screenSpace = true;
+            owned_.push_back(plate);
+
+            const unsigned char bright =
+                isChosen ? 240 : (available ? 210 : 92);
+            owned_.push_back(createText(
+                world, kind.name, static_cast<int>(left) + 12,
+                static_cast<int>(kPathY) + 10, 3, bright, bright,
+                static_cast<unsigned char>(isChosen ? 170 : bright), kHudLayer));
+
+            owned_.push_back(createText(
+                world, kind.blurb, static_cast<int>(left) + 12,
+                static_cast<int>(kPathY) + 40, 1,
+                isChosen ? 200 : (available ? 170 : 80),
+                isChosen ? 200 : (available ? 170 : 80),
+                isChosen ? 215 : (available ? 195 : 92), kHudLayer));
+
+            owned_.push_back(createText(
+                world,
+                kind.hitsAir ? "REACHES THE SKY" : "GROUND ONLY",
+                static_cast<int>(left) + 12, static_cast<int>(kPathY) + 58, 2,
+                kind.hitsAir ? 200 : 150, kind.hitsAir ? 180 : 150,
+                kind.hitsAir ? 240 : 165, kHudLayer));
+
+            // What the path costs you, on the plate you choose it from.
+            //
+            // The choice is permanent, and without this the screen asked for
+            // it while showing only prose: "a wall that walks" does not tell
+            // anybody that a WARDEN carries twice a FALCONER's health and hits
+            // for two thirds as much. A trade you cannot see is not a trade
+            // you can make.
+            //
+            // Percentages of the roster's hero rather than raw numbers,
+            // because the roster row is the one thing all three share and the
+            // interesting fact is the RATIO between them.
+            auto percent = [](float value) {
+                return std::to_string(static_cast<int>(value * 100.0f + 0.5f)) + "%";
+            };
+            // The heal belongs on this line too, or the chaplain reads as a
+            // strictly worse warden: 110% health and 60% damage against 145%
+            // and 85%, with the one thing it is actually for left off the
+            // plate. A path whose advantage is invisible is a path nobody
+            // picks, and it would have looked like a balance problem rather
+            // than a missing label.
+            std::string line =
+                "HP " + percent(kind.health) + "   DMG " + percent(kind.damage) +
+                "   RATE " + percent(1.0f / kind.attackDelay);
+            if (kind.healPerSecond > 0.0f) {
+                line += "   MENDS " +
+                        std::to_string(static_cast<int>(kind.healPerSecond)) + "/S";
+            }
+            owned_.push_back(createText(
+                world, line,
+                static_cast<int>(left) + 12, static_cast<int>(kPathY) + 76, 1,
+                isChosen ? 215 : (available ? 185 : 85),
+                isChosen ? 225 : (available ? 195 : 85),
+                isChosen ? 200 : (available ? 175 : 95), kHudLayer));
+        }
+
+        if (chosen != 0) buildUpgrades(world, campaign);
+
+        owned_.push_back(createCenteredText(
+            world, "Q OR ESC TO GO BACK", 470, 2, 160, 160, 185, kHudLayer));
+    }
+
+    void buildUpgrades(World& world, const Campaign& campaign) {
+        const int path = campaign.heroPath;
+        const HeroPathKind& kind = heroPath(path);
+
+        for (int up = 0; up < kHeroUpgradesPerPath; ++up) {
+            const HeroUpgradeKind& row = kind.upgrades[up];
+            const int owned = campaign.heroUpgrades[path][up];
+            const bool maxed = owned >= row.maxLevel;
+            const float cost = heroUpgradeCost(path, up, owned);
+            const bool affordable =
+                !maxed && static_cast<float>(campaign.bank) >= cost;
+
+            const float top = heroUpgradeTop(up);
+            Entity plate = createRect(world, kHeroUpgradeX, top,
+                                      kHeroUpgradeWidth, kHeroUpgradeHeight,
+                                      affordable ? 44 : 30,
+                                      affordable ? 50 : 34,
+                                      affordable ? 64 : 42, kHudLayer);
+            world.getComponent<Sprite>(plate)->screenSpace = true;
+            owned_.push_back(plate);
+
+            owned_.push_back(createText(
+                world,
+                std::string(row.name) + "  " + std::to_string(owned) + "/" +
+                    std::to_string(row.maxLevel),
+                static_cast<int>(kHeroUpgradeX) + 10,
+                static_cast<int>(top) + 6, 2,
+                affordable ? 215 : 110, affordable ? 215 : 110,
+                affordable ? 230 : 125, kHudLayer));
+
+            owned_.push_back(createText(
+                world, row.effectText, static_cast<int>(kHeroUpgradeX) + 10,
+                static_cast<int>(top) + 25, 2,
+                affordable ? 190 : 95, affordable ? 175 : 95,
+                affordable ? 120 : 105, kHudLayer));
+
+            // Right-aligned, the same lesson the armoury learned: a cost
+            // appended to a label is a cost that eventually runs off the plate.
+            const std::string right = maxed ? "MAX" : std::to_string(
+                                                  static_cast<int>(cost));
+            owned_.push_back(createText(
+                world, right,
+                static_cast<int>(kHeroUpgradeX + kHeroUpgradeWidth) - 10 -
+                    textWidth(right, 2),
+                static_cast<int>(top) + 15, 2,
+                maxed ? 150 : (affordable ? 235 : 110),
+                maxed ? 200 : (affordable ? 220 : 110),
+                maxed ? 160 : (affordable ? 150 : 125), kHudLayer));
+        }
+    }
+
+    void onExit(World& world) override {
+        for (Entity entity : owned_) world.destroyLater(entity);
+        owned_.clear();
+    }
+
+    void rebuild(World& world) {
+        onExit(world);
+        world.flushDestroyed();
+        onEnter(world);
+    }
+
+    void update(World& world, InputManager& input, float,
+                SceneStack& scenes) override {
+        Campaign& campaign = campaignOf(world);
+
+        if (input.wasKeyPressed(SDL_SCANCODE_Q) ||
+            input.wasKeyPressed(SDL_SCANCODE_ESCAPE)) {
+            scenes.pop();
+            return;
+        }
+
+        if (!input.wasMousePressed()) return;
+
+        const float mouseX = static_cast<float>(input.mouseX());
+        const float mouseY = static_cast<float>(input.mouseY());
+
+        // Choosing is free and once. Nothing is spent, so there is no
+        // affordability check — the cost of a path is the other two.
+        if (campaign.heroPath == 0) {
+            const int picked = pathAt(mouseX, mouseY);
+            if (picked > 0) {
+                campaign.heroPath = picked;
+                saveCampaign(campaign);
+                rebuild(world);
+            }
+            return;
+        }
+
+        const int upgrade = heroUpgradeAt(mouseX, mouseY);
+        if (upgrade < 0) return;
+
+        const int path = campaign.heroPath;
+        const HeroUpgradeKind& row = heroPath(path).upgrades[upgrade];
+        const int owned = campaign.heroUpgrades[path][upgrade];
+        if (owned >= row.maxLevel) return;
+
+        const float cost = heroUpgradeCost(path, upgrade, owned);
+        if (static_cast<float>(campaign.bank) < cost) return;
+
+        campaign.bank -= static_cast<int>(cost);
+        ++campaign.heroUpgrades[path][upgrade];
+        saveCampaign(campaign);
+        rebuild(world);
     }
 
     bool simulatesWorld() const override { return false; }
@@ -2871,6 +3820,14 @@ std::unique_ptr<Scene> makeTitleScene() {
 
 std::unique_ptr<Scene> makeStageSelectScene() {
     return std::make_unique<StageSelectScene>();
+}
+
+std::unique_ptr<Scene> makeArmyScene() {
+    return std::make_unique<ArmyScene>();
+}
+
+std::unique_ptr<Scene> makeHeroScene() {
+    return std::make_unique<HeroScene>();
 }
 
 std::unique_ptr<Scene> makePlayScene() {

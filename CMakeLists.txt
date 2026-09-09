@@ -100,6 +100,15 @@ add_executable(campaign_probe "${CMAKE_SOURCE_DIR}/tests/campaign_probe.cpp")
 target_include_directories(campaign_probe PRIVATE "${CMAKE_SOURCE_DIR}/tests")
 target_link_libraries(campaign_probe PRIVATE lanebattle_lib)
 
+# Also not a test, and this one CANNOT fail: it writes a PNG of every screen in
+# the game and a person has to look at them. That is the point. The bug class
+# it exists for — a panel over another panel, a label off the edge, a whole
+# menu still drawn over the battlefield — is exactly the class no assertion
+# catches, and one of those shipped for weeks.
+add_executable(ui_shots "${CMAKE_SOURCE_DIR}/tests/ui_shots.cpp")
+target_include_directories(ui_shots PRIVATE "${CMAKE_SOURCE_DIR}/tests")
+target_link_libraries(ui_shots PRIVATE lanebattle_lib)
+
 # `ctest` in the build directory runs all three; so does running any of the
 # binaries directly, which prints what passed.
 enable_testing()
@@ -163,7 +172,7 @@ endforeach()
 # the shipped assets/lanebattle/units.txt and checks it parses into a sane
 # roster, so the data file the player actually gets is covered rather than
 # only the parser that reads it.
-foreach(target asteroids lanebattle lanebattle_tests campaign_probe)
+foreach(target asteroids lanebattle lanebattle_tests campaign_probe ui_shots)
     add_custom_command(TARGET ${target} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_SOURCE_DIR}/assets

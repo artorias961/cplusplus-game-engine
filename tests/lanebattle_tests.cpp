@@ -39,6 +39,17 @@ const lanebattle::UnitKind& stats(int kind) {
     return lanebattle::unitKind(kind);
 }
 
+// A roster row by name. Used by everything that cares about a unit added after
+// the first three — looking one up by index means writing the roster's order
+// down a second time, and this file has had four bugs from two copies of one
+// fact disagreeing.
+int kindNamed(const char* name) {
+    for (int kind = 0; kind < lanebattle::unitKindCount(); ++kind) {
+        if (std::string(lanebattle::unitKind(kind).name) == name) return kind;
+    }
+    return -1;
+}
+
 int failures = 0;
 int checks = 0;
 
@@ -76,6 +87,12 @@ struct Game {
     // and the failure would land somewhere else entirely.
     Game() : scenes(), driver(world, scenes) {
         lanebattle::resetBalance();
+        // The loadout and the training levels are global for the same reason
+        // the roster is — a battle reads them once at the start — so they need
+        // putting back for the same reason too. A test that carries a griffin
+        // must not change the meaning of the one that runs after it.
+        lanebattle::resetLoadout();
+        lanebattle::resetTraining();
 
         // Saving is pointed at a scratch file next to the test binary, NOT at
         // the real per-user save. Winning a battle writes a campaign file, and
@@ -1865,20 +1882,29 @@ health = 200
           "a unit type that came from a file can be sent");
     check(world.getComponent<Unit>(spawned)->health == 200.0f,
           "and fights with the health the file gave it");
-    // Found by slot rather than assumed to be at its own index: the bar skips
-    // the hero, so a unit added after it sits one slot to the left of where
-    // its roster index would suggest.
-    int knightSlot = -1;
-    for (int slot = 0; slot < lanebattle::visibleButtonCount(); ++slot) {
-        if (lanebattle::kindForButton(slot) == knight) knightSlot = slot;
-    }
-    check(knightSlot >= 0, "a unit added by a file gets a slot on the bar");
-    check(knightSlot >= 0 &&
-              lanebattle::buttonAt(
-                  lanebattle::buttonLeft(knightSlot) + lanebattle::kButtonWidth / 2.0f,
-                  lanebattle::kButtonY + 4.0f) == knight,
-          "and that slot sells it");
+    // A file-added unit is NOT on the bar by default, and that is the loadout
+    // working rather than a regression.
+    //
+    // The bar used to show the first few sellable rows, so roster order
+    // decided what you could field and anything past the bar's width was
+    // payable for but unsendable. The bar shows what you are CARRYING now, so
+    // a new unit type reaches the field the moment you choose to bring it —
+    // which is the general fix for the specific bug that rule used to have.
+    check(!lanebattle::inLoadout(knight),
+          "a unit added by a file is owned but not carried by default");
 
+    int carried[lanebattle::kLoadoutSlots] = {knight, kSoldier, kArcher, -1};
+    lanebattle::setLoadout(carried, lanebattle::kLoadoutSlots);
+
+    check(lanebattle::kindForButton(0) == knight,
+          "putting it in the loadout puts it on the bar");
+    check(lanebattle::buttonAt(
+              lanebattle::buttonLeft(0) + lanebattle::kButtonWidth / 2.0f,
+              lanebattle::kButtonY + 4.0f) == knight,
+          "and that slot sells it");
+    check(lanebattle::inLoadout(knight), "and it counts as carried");
+
+    lanebattle::resetLoadout();
     lanebattle::resetBalance();
 }
 
@@ -1895,13 +1921,15 @@ void testTheSpawnBarStopsAtTheEdgeOfTheWindow() {
 
     check(lanebattle::unitKindCount() > lanebattle::kMaxVisibleButtons,
           "there are more unit types than buttons that fit");
-    check(lanebattle::visibleButtonCount() == lanebattle::kMaxVisibleButtons,
-          "the bar shows as many as fit and no more");
+    check(lanebattle::visibleButtonCount() == lanebattle::kLoadoutSlots,
+          "the bar shows the loadout, however long the roster is");
+    check(lanebattle::kLoadoutSlots <= lanebattle::kMaxVisibleButtons,
+          "and the loadout never asks for more buttons than fit");
 
     const float pastTheEnd =
-        lanebattle::buttonLeft(lanebattle::kMaxVisibleButtons) + 4.0f;
+        lanebattle::buttonLeft(lanebattle::kLoadoutSlots) + 4.0f;
     check(lanebattle::buttonAt(pastTheEnd, lanebattle::kButtonY + 4.0f) == -1,
-          "and nothing is clickable past the last visible one");
+          "and nothing is clickable past the last carried one");
 
     lanebattle::resetBalance();
 }
@@ -1925,8 +1953,8 @@ void testEveryVisibleSlotHasAKeyThatSendsIt() {
     }
     const std::string path = writeRoster("lb_keys.txt", contents.c_str());
     check(lanebattle::loadBalance(path), "a roster longer than the bar loads");
-    check(lanebattle::visibleButtonCount() == lanebattle::kMaxVisibleButtons,
-          "and fills every slot the bar has");
+    check(lanebattle::visibleButtonCount() == lanebattle::kLoadoutSlots,
+          "and the bar carries a full loadout");
 
     // Deliberately NOT using Game, whose constructor resets the roster.
     World world;
@@ -3126,24 +3154,651 @@ void testWhenYouSpendTheHeroDecidesWhetherItWasWorthIt() {
     // the capstone that asks for the whole game instead. Stage 7 is where the
     // hero is the difference between losing and winning, so that is where the
     // claim about SPENDING it well can be measured at all.
-    constexpr int kHeroDecides = 6;
+    // Stage 6, which is where a mixed army cleanly LOSES and any hero path
+    // wins. Stage 7 became a ground grind when the campaign was retuned to
+    // stop both late stages demanding anti-air, and a mixed army now draws it
+    // rather than losing — still not a win, but "did not win" and "lost" are
+    // different facts and a test saying `== -1` should mean the second.
+    constexpr int kHeroDecides = 5;
 
     Game never;
     never.startStage(kHeroDecides);
     check(playWithHero(never, -1) == -1,
-          "a good mixed army loses stage seven without the hero");
+          "a good mixed army loses stage six without the hero");
 
     Game immediately;
     immediately.startStage(kHeroDecides);
     check(playWithHero(immediately, 0) == -1,
           "and loses just the same if the hero is thrown out on frame one");
 
+    // On a path, because stage seven fields griffins and a pathless hero
+    // cannot reach them — which is the tree working, not the timing failing.
+    // The claim under test is about WHEN the hero is spent, so everything else
+    // about it has to be held still.
     Game timed;
-    timed.startStage(kHeroDecides);
+    timed.scenes.push(lanebattle::makeTitleScene());
+    timed.driver.step();
+    lanebattle::campaignOf(timed.world).stagesUnlocked = kHeroDecides + 1;
+    lanebattle::campaignOf(timed.world).heroPath =
+        static_cast<int>(lanebattle::HeroPath::Falconer);
+    timed.driver.tap(SDL_SCANCODE_SPACE);
+    timed.driver.step(2);
+    timed.driver.tap(SDL_SCANCODE_RETURN);
+    timed.driver.step(2);
     check(playWithHero(timed, 20) == 1,
           "but wins if it is held until there is a line for it to fight behind");
 }
 
+
+// --- The hero's path -------------------------------------------------------
+
+namespace {
+
+// Summons a hero on `path` and hands back its health and the damage one blow
+// lands, which between them are what a path actually changes.
+struct HeroReading {
+    float health = 0.0f;
+    float dealt = 0.0f;
+};
+
+HeroReading readHeroOn(int path, int championLevels = 0) {
+    Game game;
+    game.scenes.push(lanebattle::makeTitleScene());
+    game.driver.step();
+    lanebattle::campaignOf(game.world).heroPath = path;
+    lanebattle::campaignOf(game.world)
+        .perks[static_cast<int>(lanebattle::Perk::Champion)] = championLevels;
+    game.driver.tap(SDL_SCANCODE_SPACE);
+    game.driver.step(2);
+    game.driver.tap(SDL_SCANCODE_RETURN);
+    game.driver.step(2);
+    game.suppressEnemySpawns();
+
+    game.driver.tap(SDL_SCANCODE_H);
+    game.driver.step(2);
+
+    Entity hero = kInvalidEntity;
+    for (Entity entity : game.world.entities()) {
+        if (game.world.hasComponent<lanebattle::Hero>(entity)) hero = entity;
+    }
+    if (hero == kInvalidEntity) return HeroReading{};
+
+    HeroReading reading;
+    reading.health = game.world.getComponent<Unit>(hero)->health;
+
+    const Entity victim = lanebattle::spawnUnit(game.world, false, kSoldier);
+    game.world.getComponent<Transform>(hero)->x = 900.0f;
+    game.world.getComponent<Transform>(victim)->x = 920.0f;
+    game.world.getComponent<Unit>(victim)->health = 1.0e6f;
+    game.driver.step(2);
+    reading.dealt = 1.0e6f - game.world.getComponent<Unit>(victim)->health;
+    return reading;
+}
+
+}  // namespace
+
+// Each path is a different hero, and none of them is the best one.
+//
+// This is the anti-role-compression check. Before the tree the hero tanked,
+// out-damaged everything AND reached the sky, which measurement showed made it
+// a substitute for playing well rather than a decision. The shape being
+// guarded is that every path gives something up.
+void testEachHeroPathIsADifferentHero() {
+    const HeroReading warden =
+        readHeroOn(static_cast<int>(lanebattle::HeroPath::Warden));
+    const HeroReading falconer =
+        readHeroOn(static_cast<int>(lanebattle::HeroPath::Falconer));
+    const HeroReading chaplain =
+        readHeroOn(static_cast<int>(lanebattle::HeroPath::Chaplain));
+
+    check(warden.health > 0.0f && falconer.health > 0.0f &&
+              chaplain.health > 0.0f,
+          "every path puts a hero on the field");
+
+    check(warden.health > falconer.health * 1.5f,
+          "a WARDEN carries far more health than a FALCONER");
+    check(falconer.dealt > warden.dealt,
+          "and a FALCONER hits harder than a WARDEN");
+    check(chaplain.dealt < warden.dealt,
+          "a CHAPLAIN hits softest of the three");
+
+    // The trade has to run BOTH ways or one path is simply better. Checking
+    // only that the warden is tankier would pass just as happily if it also
+    // out-damaged everything, which is the exact bug the tree exists to stop.
+    check(falconer.health < warden.health && falconer.health < chaplain.health,
+          "and the one that reaches the sky is the most fragile");
+}
+
+void testAHeroPathIsChosenOnceAndKept() {
+    Game game;
+    game.scenes.push(lanebattle::makeTitleScene());
+    game.driver.step();
+    game.driver.tap(SDL_SCANCODE_SPACE);
+    game.driver.step(2);
+
+    check(lanebattle::campaignOf(game.world).heroPath == 0,
+          "a new campaign has no path");
+
+    game.driver.tap(SDL_SCANCODE_H);
+    game.driver.step(3);
+
+    const float x = lanebattle::pathLeft(1) + lanebattle::kPathWidth / 2.0f;
+    const float y = lanebattle::kPathY + lanebattle::kPathHeight / 2.0f;
+    check(lanebattle::pathAt(x, y) ==
+              static_cast<int>(lanebattle::HeroPath::Falconer),
+          "the middle plate is the FALCONER");
+
+    game.driver.clickAt(static_cast<int>(x), static_cast<int>(y));
+    game.driver.step(3);
+    check(lanebattle::campaignOf(game.world).heroPath ==
+              static_cast<int>(lanebattle::HeroPath::Falconer),
+          "clicking a path takes it");
+
+    // And the others are closed now. A path you can swap is a menu, not a
+    // decision — the same reasoning as one hero summon per battle.
+    const float other = lanebattle::pathLeft(0) + lanebattle::kPathWidth / 2.0f;
+    game.driver.clickAt(static_cast<int>(other), static_cast<int>(y));
+    game.driver.step(3);
+    check(lanebattle::campaignOf(game.world).heroPath ==
+              static_cast<int>(lanebattle::HeroPath::Falconer),
+          "and the path cannot be changed afterwards");
+}
+
+void testHeroUpgradesCostBankAndAreCapped() {
+    Game game;
+    game.scenes.push(lanebattle::makeTitleScene());
+    game.driver.step();
+    lanebattle::campaignOf(game.world).heroPath =
+        static_cast<int>(lanebattle::HeroPath::Warden);
+    lanebattle::campaignOf(game.world).bank = 100000;
+    game.driver.tap(SDL_SCANCODE_SPACE);
+    game.driver.step(2);
+    game.driver.tap(SDL_SCANCODE_H);
+    game.driver.step(3);
+
+    const int path = static_cast<int>(lanebattle::HeroPath::Warden);
+    const int cap = lanebattle::heroPath(path).upgrades[0].maxLevel;
+    check(cap > 0, "the first upgrade has a cap");
+
+    const float x = lanebattle::kHeroUpgradeX + 20.0f;
+    const float y = lanebattle::heroUpgradeTop(0) + 10.0f;
+    check(lanebattle::heroUpgradeAt(x, y) == 0, "and its own hit box");
+
+    // Bought well past the cap on purpose: the cap is what makes points
+    // scarce, so it has to hold against a bank that could buy far more.
+    for (int click = 0; click < cap + 4; ++click) {
+        game.driver.clickAt(static_cast<int>(x), static_cast<int>(y));
+        game.driver.step(3);
+    }
+
+    const lanebattle::Campaign& campaign = lanebattle::campaignOf(game.world);
+    check(campaign.heroUpgrades[path][0] == cap,
+          "an upgrade stops at its cap however much gold is left");
+    check(campaign.bank < 100000, "and buying it spent the bank");
+
+    // Rising cost, so the third level is not the price of the first.
+    check(lanebattle::heroUpgradeCost(path, 0, 2) >
+              lanebattle::heroUpgradeCost(path, 0, 0) * 1.5f,
+          "and each level costs more than the last");
+}
+
+void testAnUnaffordableHeroUpgradeIsNotSold() {
+    Game game;
+    game.scenes.push(lanebattle::makeTitleScene());
+    game.driver.step();
+    lanebattle::campaignOf(game.world).heroPath =
+        static_cast<int>(lanebattle::HeroPath::Warden);
+    lanebattle::campaignOf(game.world).bank = 5;
+    game.driver.tap(SDL_SCANCODE_SPACE);
+    game.driver.step(2);
+    game.driver.tap(SDL_SCANCODE_H);
+    game.driver.step(3);
+
+    game.driver.clickAt(static_cast<int>(lanebattle::kHeroUpgradeX) + 20,
+                        static_cast<int>(lanebattle::heroUpgradeTop(0)) + 10);
+    game.driver.step(3);
+
+    check(lanebattle::campaignOf(game.world)
+                  .heroUpgrades[static_cast<int>(lanebattle::HeroPath::Warden)][0] == 0,
+          "an upgrade you cannot afford is not sold");
+    check(lanebattle::campaignOf(game.world).bank == 5,
+          "and the bank is untouched");
+}
+
+void testHeroUpgradesActuallyChangeTheHero() {
+    const int warden = static_cast<int>(lanebattle::HeroPath::Warden);
+
+    const HeroReading plain = readHeroOn(warden);
+
+    Game strong;
+    strong.scenes.push(lanebattle::makeTitleScene());
+    strong.driver.step();
+    lanebattle::campaignOf(strong.world).heroPath = warden;
+    // PLATE is the health row of the warden's three.
+    lanebattle::campaignOf(strong.world).heroUpgrades[warden][0] =
+        lanebattle::heroPath(warden).upgrades[0].maxLevel;
+    strong.driver.tap(SDL_SCANCODE_SPACE);
+    strong.driver.step(2);
+    strong.driver.tap(SDL_SCANCODE_RETURN);
+    strong.driver.step(2);
+    strong.suppressEnemySpawns();
+    strong.driver.tap(SDL_SCANCODE_H);
+    strong.driver.step(2);
+
+    float strongHealth = 0.0f;
+    for (Entity entity : strong.world.entities()) {
+        if (strong.world.hasComponent<lanebattle::Hero>(entity)) {
+            strongHealth = strong.world.getComponent<Unit>(entity)->health;
+        }
+    }
+
+    check(strongHealth > plain.health * 1.2f,
+          "levels bought in a path reach the hero on the field");
+}
+
+// The chaplain heals the army around it, and only the army.
+void testTheChaplainMendsTheLine() {
+    Game game;
+    game.scenes.push(lanebattle::makeTitleScene());
+    game.driver.step();
+    lanebattle::campaignOf(game.world).heroPath =
+        static_cast<int>(lanebattle::HeroPath::Chaplain);
+    game.driver.tap(SDL_SCANCODE_SPACE);
+    game.driver.step(2);
+    game.driver.tap(SDL_SCANCODE_RETURN);
+    game.driver.step(2);
+    game.suppressEnemySpawns();
+
+    game.driver.tap(SDL_SCANCODE_H);
+    game.driver.step(2);
+
+    Entity hero = kInvalidEntity;
+    for (Entity entity : game.world.entities()) {
+        if (game.world.hasComponent<lanebattle::Hero>(entity)) hero = entity;
+    }
+    check(hero != kInvalidEntity, "the chaplain is on the field");
+    if (hero == kInvalidEntity) return;
+    game.world.getComponent<Transform>(hero)->x = 900.0f;
+
+    // Everyone is placed out of everyone else's reach, and the window is short
+    // enough that nobody closes it.
+    //
+    // The first version of this test ran a full second with an enemy standing
+    // next to a friendly, which meant the two killed each other — and a test
+    // that reads a unit destroyed on frame 40 gets a null pointer, not a
+    // failure. The aura is what is being measured, so combat has to be kept
+    // out of the measurement entirely.
+    const Entity beside = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const Entity across = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const Entity foe = lanebattle::spawnUnit(game.world, false, kSoldier);
+    game.world.getComponent<Transform>(beside)->x = 930.0f;   // inside the aura
+    game.world.getComponent<Transform>(across)->x = 1700.0f;  // far outside it
+    game.world.getComponent<Transform>(foe)->x = 1030.0f;     // inside, unreachable
+    game.world.getComponent<Unit>(beside)->health = 20.0f;
+    game.world.getComponent<Unit>(across)->health = 20.0f;
+    game.world.getComponent<Unit>(foe)->health = 20.0f;
+
+    game.driver.step(10);
+
+    check(game.world.getComponent<Unit>(beside)->health > 20.0f,
+          "a wounded friendly beside the chaplain is mended");
+    check(game.world.getComponent<Unit>(across)->health <= 20.0f,
+          "one across the field is not");
+    check(game.world.getComponent<Unit>(foe)->health <= 20.0f,
+          "and the opponent never is");
+
+    // Never past full, the lesson HEAL had to learn twice.
+    game.world.getComponent<Unit>(beside)->health =
+        game.world.getComponent<Unit>(beside)->maxHealth;
+    game.driver.step(10);
+    check(game.world.getComponent<Unit>(beside)->health <=
+              game.world.getComponent<Unit>(beside)->maxHealth + 0.01f,
+          "and never past a unit's own maximum");
+
+
+    // And the other paths do not heal at all, or the aura is not a path.
+    const int warden = static_cast<int>(lanebattle::HeroPath::Warden);
+    Game dry;
+    dry.scenes.push(lanebattle::makeTitleScene());
+    dry.driver.step();
+    lanebattle::campaignOf(dry.world).heroPath = warden;
+    dry.driver.tap(SDL_SCANCODE_SPACE);
+    dry.driver.step(2);
+    dry.driver.tap(SDL_SCANCODE_RETURN);
+    dry.driver.step(2);
+    dry.suppressEnemySpawns();
+    dry.driver.tap(SDL_SCANCODE_H);
+    dry.driver.step(2);
+
+    Entity wardenHero = kInvalidEntity;
+    for (Entity entity : dry.world.entities()) {
+        if (dry.world.hasComponent<lanebattle::Hero>(entity)) wardenHero = entity;
+    }
+    dry.world.getComponent<Transform>(wardenHero)->x = 900.0f;
+    const Entity wardenNeighbour = lanebattle::spawnUnit(dry.world, true, kSoldier);
+    dry.world.getComponent<Transform>(wardenNeighbour)->x = 930.0f;
+    dry.world.getComponent<Unit>(wardenNeighbour)->health = 20.0f;
+    dry.driver.step(10);
+
+    check(dry.world.getComponent<Unit>(wardenNeighbour)->health <= 20.0f,
+          "and a WARDEN mends nobody");
+}
+
+void testAHeroPathSurvivesBeingSaved() {
+    const int chaplain = static_cast<int>(lanebattle::HeroPath::Chaplain);
+
+    lanebattle::Campaign saved;
+    saved.heroPath = chaplain;
+    saved.heroUpgrades[chaplain][1] = 2;
+    saved.bank = 700;
+    check(lanebattle::saveCampaign(saved), "a campaign with a path saves");
+
+    lanebattle::Campaign loaded;
+    check(lanebattle::loadCampaign(loaded), "and loads again");
+    check(loaded.heroPath == chaplain, "with the same path");
+    check(loaded.heroUpgrades[chaplain][1] == 2, "and the same levels in it");
+
+    // Clamped on the way in: the cap is a balance rule and a save is a text
+    // file somebody can edit.
+    lanebattle::Campaign cheated;
+    cheated.heroPath = chaplain;
+    cheated.heroUpgrades[chaplain][1] = 9999;
+    lanebattle::saveCampaign(cheated);
+
+    lanebattle::Campaign clamped;
+    lanebattle::loadCampaign(clamped);
+    check(clamped.heroUpgrades[chaplain][1] ==
+              lanebattle::heroPath(chaplain).upgrades[1].maxLevel,
+          "and a hand-edited level is clamped to the cap");
+}
+
+// --- The loadout and training ----------------------------------------------
+
+namespace {
+
+// Opens the army screen on a campaign with money in it.
+struct Army {
+    Game game;
+
+    explicit Army(int bank = 100000) {
+        game.scenes.push(lanebattle::makeTitleScene());
+        game.driver.step();
+        lanebattle::campaignOf(game.world).bank = bank;
+        // A fresh campaign carries nothing, and the game fills the first slots
+        // in on the way into a battle. The army screen is where it is chosen,
+        // so start it explicit.
+        for (int slot = 0; slot < lanebattle::kLoadoutSlots; ++slot) {
+            lanebattle::campaignOf(game.world).loadout[slot] =
+                lanebattle::sellableKind(slot);
+        }
+        game.driver.tap(SDL_SCANCODE_SPACE);
+        game.driver.step(2);
+        game.driver.tap(SDL_SCANCODE_A);
+        game.driver.step(3);
+    }
+
+    lanebattle::Campaign& campaign() { return lanebattle::campaignOf(game.world); }
+
+    void clickRow(int row) {
+        game.driver.clickAt(static_cast<int>(lanebattle::kArmyX) + 60,
+                            static_cast<int>(lanebattle::armyTop(row)) + 20);
+        game.driver.step(3);
+    }
+    void clickTrain(int row) {
+        game.driver.clickAt(static_cast<int>(lanebattle::kTrainX) + 40,
+                            static_cast<int>(lanebattle::armyTop(row)) + 20);
+        game.driver.step(3);
+    }
+};
+
+}  // namespace
+
+// You own more than you can bring, which is the whole point of a loadout.
+void testTheRosterIsLongerThanTheLoadout() {
+    lanebattle::resetBalance();
+    check(lanebattle::sellableKindCount() > lanebattle::kLoadoutSlots,
+          "there are more unit types than slots to carry them in");
+    check(lanebattle::kLoadoutSlots <= lanebattle::kMaxVisibleButtons,
+          "and the bar can draw a full loadout");
+
+    // Every sellable kind must be carryable, or owning it is a lie.
+    for (int index = 0; index < lanebattle::sellableKindCount(); ++index) {
+        const int kind = lanebattle::sellableKind(index);
+        check(kind >= 0 && kind != lanebattle::heroKindIndex(),
+              "every sellable index names a real non-hero unit");
+    }
+}
+
+void testTheBarSellsWhatYouCarry() {
+    lanebattle::resetBalance();
+    lanebattle::resetLoadout();
+
+    const int ogre = kindNamed("OGRE");
+    const int ballista = kindNamed("BALLISTA");
+    check(ogre >= 0 && ballista >= 0, "the roster has the new roles");
+
+    // Not carried by default.
+    check(!lanebattle::inLoadout(ogre), "an OGRE is owned but not carried");
+
+    int carried[lanebattle::kLoadoutSlots] = {ogre, ballista, kSoldier, kArcher};
+    lanebattle::setLoadout(carried, lanebattle::kLoadoutSlots);
+
+    check(lanebattle::kindForButton(0) == ogre, "slot one sells what it carries");
+    check(lanebattle::kindForButton(1) == ballista, "and so does slot two");
+    check(lanebattle::inLoadout(ogre) && lanebattle::inLoadout(ballista),
+          "and both count as carried");
+    check(!lanebattle::inLoadout(kRunner),
+          "while what was dropped is not");
+
+    // An empty slot stays empty.
+    //
+    // The fallback to roster order used to apply per SLOT, so carrying three
+    // units and leaving the fourth blank produced a fourth button selling
+    // whatever roster order happened to put there — the army screen saying
+    // CARRYING 3 OF 4 while the spawn bar sold four.
+    int three[lanebattle::kLoadoutSlots] = {ogre, kSoldier, kArcher, -1};
+    lanebattle::setLoadout(three, lanebattle::kLoadoutSlots);
+    check(lanebattle::kindForButton(3) == -1,
+          "a slot left empty on purpose sells nothing");
+    check(lanebattle::visibleButtonCount() == 3,
+          "and the bar shows three buttons, not four");
+
+    lanebattle::setLoadout(carried, lanebattle::kLoadoutSlots);
+
+    // The key for a slot sends the slot's unit, which is the rule the number
+    // keys were bound to when they stopped counting roster rows.
+    // Set on the CAMPAIGN, not on the global: starting a battle reads the
+    // campaign's loadout into the global, so setting the global first would be
+    // overwritten a frame later. That is the right way round — a battle is
+    // fought with what you walked in carrying — and it means a test has to
+    // choose before the gate rather than after it.
+    World world;
+    SceneStack scenes;
+    harness::Harness driver(world, scenes);
+    lanebattle::Campaign& campaign = lanebattle::campaignOf(world);
+    for (int slot = 0; slot < lanebattle::kLoadoutSlots; ++slot) {
+        campaign.loadout[slot] = carried[slot];
+    }
+    scenes.push(lanebattle::makePlayScene());
+    driver.step(2);
+
+    Session* session = lanebattle::findSession(world);
+    check(session != nullptr, "a battle started");
+    session->gold = 5000.0f;
+    for (int k = 0; k < lanebattle::kMaxUnitKinds; ++k) {
+        session->spawnCooldowns[k] = 0.0f;
+        session->enemySpawnCooldowns[k] = 1.0e9f;
+    }
+
+    driver.hold(SDL_SCANCODE_1);
+    driver.step(2);
+    driver.release(SDL_SCANCODE_1);
+    driver.step();
+    check(lanebattle::countUnitsOfKind(world, true, ogre) >= 1,
+          "and key one sends the unit in slot one");
+
+    lanebattle::resetLoadout();
+}
+
+void testCarryingAndDroppingOnTheArmyScreen() {
+    Army army;
+
+    const int rows = lanebattle::sellableKindCount();
+    check(rows > lanebattle::kLoadoutSlots, "there is something to choose");
+
+    const int first = lanebattle::sellableKind(0);
+    check(army.campaign().loadout[0] == first, "slot one starts carrying it");
+
+    army.clickRow(0);
+    check(army.campaign().loadout[0] == -1,
+          "clicking a carried unit drops it, leaving the slot empty");
+
+    // Dropping leaves a HOLE rather than shuffling. The slot a unit sits in is
+    // the key that sends it, and re-ordering the bar under a player who has
+    // learned it costs more than an empty button does.
+    check(army.campaign().loadout[1] == lanebattle::sellableKind(1),
+          "and does not shuffle the rest along");
+
+    // Something not carried goes into the hole.
+    const int spare = lanebattle::sellableKind(lanebattle::kLoadoutSlots);
+    check(spare >= 0, "there is an uncarried unit to pick up");
+    int spareRow = -1;
+    for (int row = 0; row < rows; ++row) {
+        if (lanebattle::sellableKind(row) == spare) spareRow = row;
+    }
+    army.clickRow(spareRow);
+    check(army.campaign().loadout[0] == spare,
+          "and an uncarried unit fills the first empty slot");
+}
+
+void testAFullLoadoutRefusesMore() {
+    Army army;
+    // Every slot is carrying something from the constructor.
+    for (int slot = 0; slot < lanebattle::kLoadoutSlots; ++slot) {
+        check(army.campaign().loadout[slot] >= 0, "the loadout starts full");
+    }
+
+    const int spare = lanebattle::sellableKind(lanebattle::kLoadoutSlots);
+    int spareRow = -1;
+    for (int row = 0; row < lanebattle::sellableKindCount(); ++row) {
+        if (lanebattle::sellableKind(row) == spare) spareRow = row;
+    }
+    army.clickRow(spareRow);
+
+    check(!lanebattle::inLoadoutOf(army.campaign(), spare),
+          "a full loadout takes nothing new");
+    for (int slot = 0; slot < lanebattle::kLoadoutSlots; ++slot) {
+        check(army.campaign().loadout[slot] != spare,
+              "and swaps nothing out behind the player's back");
+    }
+}
+
+void testTrainingCostsBankAndIsCapped() {
+    Army army;
+    const int kind = lanebattle::sellableKind(0);
+
+    check(lanebattle::armyTrainHit(lanebattle::kTrainX + 20.0f,
+                                   lanebattle::armyTop(0) + 20.0f),
+          "the TRAIN button has its own hit box");
+    check(!lanebattle::armyTrainHit(lanebattle::kArmyX + 60.0f,
+                                    lanebattle::armyTop(0) + 20.0f),
+          "and the name half of the row is not it");
+
+    for (int click = 0; click < lanebattle::kMaxUnitLevel + 3; ++click) {
+        army.clickTrain(0);
+    }
+
+    check(army.campaign().unitLevels[kind] == lanebattle::kMaxUnitLevel,
+          "training stops at the cap however much gold is left");
+    check(army.campaign().bank < 100000, "and spends the bank");
+
+    check(lanebattle::trainCost(kind, 3) > lanebattle::trainCost(kind, 0) * 1.5f,
+          "and each level costs more than the last");
+
+    // Priced off what the unit costs to field, so the cheap units stay cheap
+    // to improve and an OGRE is a real investment.
+    const int ogre = kindNamed("OGRE");
+    check(lanebattle::trainCost(ogre, 0) > lanebattle::trainCost(kRunner, 0),
+          "training an OGRE costs more than training a RUNNER");
+}
+
+void testUnaffordableTrainingIsNotSold() {
+    Army army(5);
+    const int kind = lanebattle::sellableKind(0);
+    army.clickTrain(0);
+    check(army.campaign().unitLevels[kind] == 0,
+          "a level you cannot afford is not sold");
+    check(army.campaign().bank == 5, "and the bank is untouched");
+}
+
+void testTrainingReachesTheField() {
+    lanebattle::resetBalance();
+    lanebattle::resetTraining();
+
+    Game plain;
+    plain.startPlaying();
+    plain.suppressEnemySpawns();
+    const Entity ordinary = lanebattle::spawnUnit(plain.world, true, kSoldier);
+    const float baseHealth = plain.world.getComponent<Unit>(ordinary)->health;
+
+    int levels[lanebattle::kMaxUnitKinds] = {};
+    levels[kSoldier] = lanebattle::kMaxUnitLevel;
+    lanebattle::setTrainingLevels(levels, lanebattle::kMaxUnitKinds);
+
+    Game trained;
+    trained.driver.step();  // the Game constructor reset training; put it back
+    lanebattle::setTrainingLevels(levels, lanebattle::kMaxUnitKinds);
+    trained.startPlaying();
+    lanebattle::setTrainingLevels(levels, lanebattle::kMaxUnitKinds);
+    trained.suppressEnemySpawns();
+
+    const Entity veteran = lanebattle::spawnUnit(trained.world, true, kSoldier);
+    check(trained.world.getComponent<Unit>(veteran)->health > baseHealth,
+          "a trained soldier walks on with more health");
+
+    // The opponent gets nothing. Training both sides would arm both equally
+    // and buy the player nothing, the same reason WEAPONS is one-sided.
+    const Entity theirs = lanebattle::spawnUnit(trained.world, false, kSoldier);
+    check(trained.world.getComponent<Unit>(theirs)->health <= baseHealth + 0.01f,
+          "and the opponent's soldier does not");
+
+    lanebattle::resetTraining();
+}
+
+void testALoadoutSurvivesBeingSaved() {
+    lanebattle::resetBalance();
+    const int ogre = kindNamed("OGRE");
+    const int ballista = kindNamed("BALLISTA");
+
+    lanebattle::Campaign saved;
+    saved.loadout[0] = ogre;
+    saved.loadout[1] = ballista;
+    saved.loadout[2] = -1;
+    saved.loadout[3] = kArcher;
+    saved.unitLevels[ogre] = 3;
+    check(lanebattle::saveCampaign(saved), "a campaign with a loadout saves");
+
+    lanebattle::Campaign loaded;
+    check(lanebattle::loadCampaign(loaded), "and loads again");
+    check(loaded.unitLevels[ogre] == 3, "with the training intact");
+
+    // Written by NAME, so the slots come back holding the same UNITS even
+    // though an empty slot in the middle collapses on the way out. What must
+    // survive is which units are carried, not which hole they sat in.
+    check(lanebattle::inLoadoutOf(loaded, ogre) &&
+              lanebattle::inLoadoutOf(loaded, ballista) &&
+              lanebattle::inLoadoutOf(loaded, kArcher),
+          "and carrying the same three units");
+
+    // A hand-edited level is clamped, like every other player-editable number.
+    lanebattle::Campaign cheated;
+    cheated.unitLevels[ogre] = 9999;
+    lanebattle::saveCampaign(cheated);
+    lanebattle::Campaign clamped;
+    lanebattle::loadCampaign(clamped);
+    check(clamped.unitLevels[ogre] == lanebattle::kMaxUnitLevel,
+          "and a hand-edited level is clamped to the cap");
+}
 
 // --- Can the game actually be played? --------------------------------------
 
@@ -3492,13 +4147,6 @@ void testClickingASpellPanelRowArmsIt() {
 // directly above a soldier is as close as anything can be and still cannot be
 // touched by it.
 
-int kindNamed(const char* name) {
-    for (int kind = 0; kind < lanebattle::unitKindCount(); ++kind) {
-        if (std::string(lanebattle::unitKind(kind).name) == name) return kind;
-    }
-    return -1;
-}
-
 void testTheRosterHasSomethingThatFlies() {
     const int griffin = kindNamed("GRIFFIN");
     check(griffin >= 0, "there is a flying unit");
@@ -3510,9 +4158,14 @@ void testTheRosterHasSomethingThatFlies() {
     check(!stats(kRunner).hitsAir, "nor does a runner");
     check(stats(kArcher).hitsAir && !stats(kArcher).flying,
           "an archer stays on the ground and shoots upward");
-    check(stats(lanebattle::heroKindIndex()).hitsAir,
-          "and the hero can reach it, because a champion that loses to a bird "
-          "is not much of one");
+    // The hero's ROW does not reach the sky. The FALCONER path grants it, and
+    // buying it costs the health the other paths keep — see
+    // testArchersAndHeroesCanReachTheSky. A baseline that already had it made
+    // the hero better than every unit at everything, which is what the probe
+    // measured before the tree existed.
+    check(!stats(lanebattle::heroKindIndex()).hitsAir,
+          "and the hero's own row does not reach it - that is a path, not a "
+          "birthright");
 }
 
 void testAFlyerSpawnsInTheSky() {
@@ -3590,9 +4243,23 @@ void testArchersAndHeroesCanReachTheSky() {
                   stats(griffin).health,
               "an archer shoots a griffin down");
     }
-    {
+    // The hero reaches the sky only on the FALCONER path, and that is the
+    // whole hero tree in one assertion.
+    //
+    // The roster row used to grant it, which made the hero strictly better than
+    // every unit at everything — measurement caught it beating every
+    // composition at every income the probe could reach. Reaching the sky is
+    // bought now, at the price of the health the other two paths keep, so a
+    // hero can always be answered by SOMETHING.
+    auto heroAgainstAGriffin = [](int path) {
         Game game;
-        game.startPlaying();
+        game.scenes.push(lanebattle::makeTitleScene());
+        game.driver.step();
+        lanebattle::campaignOf(game.world).heroPath = path;
+        game.driver.tap(SDL_SCANCODE_SPACE);
+        game.driver.step(2);
+        game.driver.tap(SDL_SCANCODE_RETURN);
+        game.driver.step(2);
         game.suppressEnemySpawns();
 
         const int griffin = kindNamed("GRIFFIN");
@@ -3608,10 +4275,16 @@ void testArchersAndHeroesCanReachTheSky() {
         game.world.getComponent<Transform>(flyer)->x = 620.0f;
         game.driver.step(4);
 
-        check(game.world.getComponent<Unit>(flyer)->health <
-                  stats(griffin).health,
-              "and so does the hero");
-    }
+        return game.world.getComponent<Unit>(flyer)->health <
+               stats(griffin).health;
+    };
+
+    check(heroAgainstAGriffin(static_cast<int>(lanebattle::HeroPath::Falconer)),
+          "a FALCONER hero shoots a griffin down");
+    check(!heroAgainstAGriffin(static_cast<int>(lanebattle::HeroPath::Warden)),
+          "and a WARDEN cannot touch one");
+    check(!heroAgainstAGriffin(static_cast<int>(lanebattle::HeroPath::None)),
+          "nor can a hero whose owner has chosen no path at all");
 }
 
 // A flyer must still be able to win: it attacks the ground and the castle, or
@@ -3967,8 +4640,12 @@ void testTheTitleScreenTeachesTheWholeRoster() {
               "and every spell");
     }
 
-    // A unit added by a file must appear too, or the screen is stale again the
-    // moment anyone retunes the roster.
+    // A unit added by a file and CARRIED must appear too, or the screen is
+    // stale again the moment anyone retunes the roster.
+    //
+    // Carried, not merely owned: the title screen teaches the keys, and the
+    // keys send the loadout. Listing a unit that no key reaches would be worse
+    // than listing nothing.
     const std::string path = writeRoster("lb_title.txt", R"(
 [unit]
 name = LANCER
@@ -3976,6 +4653,11 @@ cost = 70
 health = 130
 )");
     check(lanebattle::loadBalance(path), "a file adds a unit");
+
+    const int lancer = kindNamed("LANCER");
+    check(lancer >= 0, "and it is in the roster");
+    int carried[lanebattle::kLoadoutSlots] = {lancer, kSoldier, kArcher, -1};
+    lanebattle::setLoadout(carried, lanebattle::kLoadoutSlots);
 
     World later;
     SceneStack laterScenes;
@@ -3988,6 +4670,7 @@ health = 130
     check(laterScreen.find("LANCER") != std::string::npos,
           "and the title screen names it without anybody editing the title screen");
 
+    lanebattle::resetLoadout();
     lanebattle::resetBalance();
 }
 
@@ -4170,6 +4853,14 @@ void testOneUnitTypeIsNotEnough() {
 }  // namespace
 
 int main() {
+    // Unbuffered, so a crash does not take the output with it.
+    //
+    // A test in this file segfaulted and printed NOTHING — not even the banner
+    // on the line below — because stdout was still sitting in a buffer the
+    // dying process never flushed. "Exit code -1073741819 and no output" says
+    // nothing about which of six hundred checks was running. With this, the
+    // last line printed is the one before the crash.
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
     std::printf("lane battle tests\n");
 
     testBattleStarts();
@@ -4302,6 +4993,23 @@ int main() {
     testStagesCannotFieldHeroes();
     testTheChampionPerkStrengthensTheHero();
     testWhenYouSpendTheHeroDecidesWhetherItWasWorthIt();
+
+    testTheRosterIsLongerThanTheLoadout();
+    testTheBarSellsWhatYouCarry();
+    testCarryingAndDroppingOnTheArmyScreen();
+    testAFullLoadoutRefusesMore();
+    testTrainingCostsBankAndIsCapped();
+    testUnaffordableTrainingIsNotSold();
+    testTrainingReachesTheField();
+    testALoadoutSurvivesBeingSaved();
+
+    testEachHeroPathIsADifferentHero();
+    testAHeroPathIsChosenOnceAndKept();
+    testHeroUpgradesCostBankAndAreCapped();
+    testAnUnaffordableHeroUpgradeIsNotSold();
+    testHeroUpgradesActuallyChangeTheHero();
+    testTheChaplainMendsTheLine();
+    testAHeroPathSurvivesBeingSaved();
 
     testManaRefillsOnItsOwn();
     testAnUnaffordableSpellDoesNothing();

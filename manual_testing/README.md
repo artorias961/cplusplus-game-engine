@@ -133,6 +133,30 @@ bump the timestamp, rebuild, and confirm the suite is green before they finish.
 
 ---
 
+## ui_shots — what does the screen actually look like?
+
+The hole this fills was open from slice 4 to slice 12 and cost four real bugs.
+Nothing in this project could see the SCREEN: `render_tests` asserts that one
+sprite lands where the camera says, which is geometry, and `lanebattle_tests`
+asserts about game state, which is arithmetic. Neither notices a panel drawn
+over another panel, a label hanging off its plate, a character the font does
+not have, or an entire menu still being drawn over the battlefield.
+
+```bash
+cmake --build build --config Release --target ui_shots && ./build/Release/ui_shots
+```
+
+Writes a PNG of every screen — title, both stage-select states, an empty
+battle, a melee with flyers, the hero and an armed spell, a shot in flight,
+the pause overlay, the camera at both castles, victory and defeat — into
+`ui_shots/` next to the binary. Takes about a second, needs no display, and
+runs on a machine with no graphics hardware, same dummy-driver trick as
+`render_tests`.
+
+**It cannot fail.** It makes pictures; a person has to look at them. That is
+the whole point — the bug class it exists for is the one no assertion catches.
+The first run of it found five things, four of which had shipped for months.
+
 ## campaign_probe — is the campaign asking anything?
 
 The throwaway version of this (below) got run enough times that it stopped

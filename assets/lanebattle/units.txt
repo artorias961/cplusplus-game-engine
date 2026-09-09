@@ -139,6 +139,74 @@ right_r      = 250
 right_g      = 160
 right_b      = 200
 # ---------------------------------------------------------------------------
+# Three more roles, so that a four-slot loadout has something to choose
+# between. You own every one of these; you bring four.
+#
+# Each is answerable, which is the rule the griffin set: a unit nothing can
+# counter is the hero bug in a cheaper costume.
+# ---------------------------------------------------------------------------
+
+[unit]
+name         = PIKEMAN
+cost         = 55
+health       = 105
+damage       = 13
+range        = 46
+attack_delay = 0.70
+speed        = 88
+cooldown     = 1.8
+flying       = 0
+hits_air     = 1
+width        = 20
+height       = 34
+left_r       = 120
+left_g       = 205
+left_b       = 190
+right_r      = 225
+right_g      = 145
+right_b      = 120
+
+[unit]
+name         = OGRE
+cost         = 160
+health       = 280
+damage       = 30
+range        = 38
+attack_delay = 1.10
+speed        = 62
+cooldown     = 4.5
+flying       = 0
+hits_air     = 0
+width        = 34
+height       = 46
+left_r       = 140
+left_g       = 160
+left_b       = 235
+right_r      = 235
+right_g      = 140
+right_b      = 140
+
+[unit]
+name         = BALLISTA
+cost         = 100
+health       = 60
+damage       = 44
+range        = 185
+attack_delay = 1.50
+speed        = 52
+cooldown     = 3.2
+flying       = 0
+hits_air     = 0
+width        = 26
+height       = 30
+left_r       = 170
+left_g       = 195
+left_b       = 225
+right_r      = 230
+right_g      = 175
+right_b      = 155
+
+# ---------------------------------------------------------------------------
 # The hero. One summon per battle, and if it falls it stays fallen until the
 # stage is finished or restarted.
 #
@@ -160,7 +228,7 @@ attack_delay = 0.50
 speed        = 88
 cooldown     = 0
 flying       = 0
-hits_air     = 1
+hits_air     = 0
 width        = 30
 height       = 48
 left_r       = 250
@@ -225,25 +293,25 @@ wave_size           = 3
 composition         = 1,1,0
 
 [stage]
-name                = THE PASS
-enemy_income        = 1.70
-enemy_castle_health = 980
-wave_size           = 3
-composition         = 1,1,0
+name                = THE EYRIE
+enemy_income        = 0.65
+enemy_castle_health = 850
+wave_size           = 4
+composition         = 1,3,3,1
 
 [stage]
 name                = BLACK FIELD
-enemy_income        = 1.35
+enemy_income        = 1.15
 enemy_castle_health = 900
 wave_size           = 3
 composition         = 1,1,2
 
 [stage]
 name                = THE GATES
-enemy_income        = 1.20
-enemy_castle_health = 950
+enemy_income        = 1.55
+enemy_castle_health = 1100
 wave_size           = 4
-composition         = 1,2,3,0
+composition         = 1,1,0,1
 
 [stage]
 name                = THE KEEP

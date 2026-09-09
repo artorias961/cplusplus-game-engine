@@ -1092,6 +1092,289 @@ happened rather than what was asked for.
   whether or not it is on screen. SDL clips, so it is correct, and the
   measured frame cost says it is not worth an early-out yet.
 
+## The loadout, and training
+
+Also not roadmap slices, and the same reason: the roadmap was read off the
+reference game's asset structure, which shows units and animation but not
+"you own more than you can bring".
+
+### The roster grew
+
+A loadout is meaningless with four unit types and four slots. Three more roles,
+each answerable — the rule the griffin set, because a unit nothing can counter
+is the hero bug in a cheaper costume:
+
+    PIKEMAN    the budget answer to the sky. Reaches air at melee range, with a
+               soldier's build and a shorter purse.
+    OGRE       the wall. Four soldiers of health, slow enough to arrive after
+               the fight starts, and ground only — a griffin walks over it.
+    BALLISTA   the longest reach in the game behind the softest body. Useless
+               without a line in front, which is the archer's lesson taken
+               further.
+
+### You own everything and carry four
+
+`kindForButton` used to mean "the nth sellable row", so ROSTER ORDER decided
+what a player could field and anything past the bar's width was payable for and
+unsendable. It means "what is in slot n of your loadout" now, and every route
+into the field — the number keys, the bar, the title screen — asks that one
+question.
+
+Four slots against seven kinds, deliberately. Five would be a mild preference;
+four is a decision you can get wrong. A `static_assert` ties the loadout to what
+the bar can draw, because this file has now had five bugs from two copies of one
+fact disagreeing and the compiler can check this one.
+
+### Training
+
+Every unit type levels, five deep, bought from the same bank the armoury and the
+hero spend. Cost scales with what the unit costs to field, so training an OGRE
+is a real investment and the cheap units stay cheap to improve — a flat price
+would have made the expensive rows strictly the better thing to buy.
+
+Player units only. The opponent fields the roster as written, for the same
+reason WEAPONS is one-sided: training both sides arms both equally and buys
+nothing.
+
+Both halves live on one screen, reached with A. Choosing what to bring and
+choosing what to invest in are the same question asked twice — there is no
+point training an OGRE you never carry — and separate screens would let a
+player answer one without seeing the other.
+
+### An empty slot is a choice
+
+The fallback to roster order applied PER SLOT, so carrying three units and
+leaving the fourth blank produced a fourth button selling whatever roster order
+put there: the army screen saying CARRYING 3 OF 4 while the spawn bar sold
+four. Two screens disagreeing about one fact, which is this file's oldest
+recurring bug and the fifth instance of it.
+
+The fallback is all-or-nothing now — only "nobody has chosen anything" falls
+back, which is what keeps every test written before loadouts existed meaning
+what it meant then.
+
+### Giving the new units a question to answer
+
+The first measurement was bad: `MIXED 4, OGRE 5, PIKE 3, BALL 2`. Two of the
+three new units were weaker than the army they replaced, and **two rounds of
+buffing them moved nothing at all** — the outcome is a step function and
+neither crossed a threshold, though battle times moved (PIKE 123s, BALL 130s
+against MIXED's 61s), so they were being played rather than silently absent.
+
+The diagnosis was not that the numbers were wrong. It was that **the campaign
+never asked their questions.** `--sweep` said so plainly:
+
+    against "1,3,1"     one griffin in three - every strategy within 0.10 of
+                        every other. One archer already answers one flyer.
+    against "1,3,3,1"   two griffins in four - every ground answer collapses to
+                        0.50 income and the PIKEMAN sits at 1.30.
+
+So a stage has to be air-HEAVY, not merely contain a flyer. **THE EYRIE**
+replaces the old stage five: `1,3,3,1` at 0.65 income.
+
+The income DROPS there, which looks wrong beside a table that otherwise climbs
+and is not. Composition is far the stronger dial, and the sweep also set the
+ceiling: WARDEN and CHAPLAIN cap at 0.70 against that composition, so holding
+income up as well would have left the FALCONER the only path able to finish the
+campaign — the exact failure the previous retune had just fixed.
+
+### The ballista had no niche, so it got a different one
+
+Buffing it never worked. At 48 damage it beat 0.80 income on the ground; at 72
+— a fifty per cent buff — it beat 1.00, still under MIXED's 1.30, and moved
+**not at all** against archers. Three passes, no niche.
+
+The problem was structural. At 120 gold on a 14/s income you cannot field them,
+and more importantly the ballista was competing with the ARCHER: both ranged
+support, both hitting air, so it could only be a worse archer or a replacement
+for one.
+
+The fix was to take something away. It is **ground only** now, cheaper and
+softer, and the difference is not subtle:
+
+                        MIXED   BALLISTA
+    ground "1,1,0"       1.30     1.30
+    archers "1,1,2"      0.60     1.20
+    archer-heavy         0.70     1.50
+
+Outranging enemy archers is a real job that nothing else in the roster does.
+The archer answers the sky; the ballista answers the ground line. Two ranged
+units with no overlap, and the player picks by what the stage fields.
+
+### The result
+
+    stage            asks for              answered by
+    5  THE EYRIE     an air wing           PIKEMAN
+    6  BLACK FIELD   enemy archers         BALLISTA
+    7  THE GATES     a ground grind        OGRE (and AIR, and BALL)
+    8  THE KEEP      all of it             FULL only
+
+    NAIVE 1  MIXED 4  AIR 5  ECON 4  GUNS 4  OGRE 5  PIKE 4  BALL 6  COMBO 4
+    WARDN 7  FALCN 7  CHAPL 7  FULL 8
+
+Every new unit is now at or above the army it replaced, each has a stage only
+it answers, and the hero paths are still 7/7/7 — the retune did not cost the
+balance the previous one bought.
+
+### Specialising beats carrying a bit of everything
+
+The COMBO column exists to check that four slots are not decoration: a player
+carrying the anti-air AND the siege piece, against players carrying one of
+each. It wins **4**, against BALL's 6 and PIKE's 4 — carrying both is worse
+than carrying either.
+
+That is not a bug, and it survived being given a proper front line rather than
+a thin one. The limit on an army here is GOLD, not cooldowns, so adding unit
+types does not add throughput — it splits the same purse across more expensive
+units and thins the line everything else depends on.
+
+So the loadout's answer is **re-equip for the stage you are about to fight**,
+not "bring a balanced kit". Which is what the reference game does between
+levels, and it is the reason to have a screen for it at all.
+
+## The hero tree
+
+Not a roadmap slice. The roadmap was built by reading the reference game's
+asset structure, which shows units and animation but does not shout "the hero
+is a build you commit to" — so this, the loadout and troop levelling were all
+missing from the plan.
+
+### The problem
+
+Role compression. The hero tanked, out-damaged every unit AND reached the sky,
+and `campaign_probe` measured what that meant: it beat every composition at
+every income the sweep could build. A unit that answers everything is not a
+decision, it is a substitute for playing well.
+
+### The mechanic
+
+Opportunity cost, and one exclusion that does the real work: **reaching the sky
+is a path, not a birthright.** Two of the three paths cannot touch a griffin.
+
+    WARDEN     HP 145%  DMG  85%  RATE 100%   ground only
+    FALCONER   HP  70%  DMG 125%  RATE 118%   reaches the sky
+    CHAPLAIN   HP 110%  DMG  60%  RATE  87%   ground only, mends 7/s
+
+The hero's roster row is ground-only now. It used to reach the sky "because a
+champion that loses to a bird is not much of one", and that one line was what
+made the hero unanswerable. A baseline that already had it would also have made
+specialising a *downgrade*, and a choice that costs you something you already
+had is not a choice anybody makes twice.
+
+A path is chosen once and kept, for the same reason the hero is one summon per
+battle rather than an ability on a cooldown: a choice you can take back is not
+a choice. Three upgrades per path, each capped at three levels, costs rising
+geometrically — 27 combinations and a bank that never quite covers all of it.
+
+### The fairness criterion, and why half of it was wrong
+
+The criterion set before building was: no path may win more stages than the
+others, **and each must win at least one stage the other two lose.**
+
+The first run failed it — FALCONER 7, WARDEN 6, CHAPLAIN 6 — because stages 7
+and 8 both fielded griffins, so anti-air was mandatory twice over and only one
+path could finish the campaign. Stage 7 is a pure-ground grind now, and the
+paths measure 7 / 7 / 7.
+
+The second half of the criterion is **wrong for a permanent choice**, and
+measuring is what made that obvious. If a stage can only be won by one path,
+and the path is chosen once and kept, then two thirds of players meet a wall
+they cannot ever pass. Uniqueness and irreversibility do not belong in the same
+system.
+
+So the differentiation has to be in HOW a path wins rather than WHETHER, and
+that is measurable too — the same stage, by path:
+
+    stage 7   WARDEN 104s   FALCONER 90s   CHAPLAIN 167s
+
+Same destination, three routes, the chaplain taking nearly twice as long
+because it wins by attrition rather than damage. That is the shape a permanent
+choice should have.
+
+### A crash it uncovered
+
+The chaplain's aura test segfaulted, and the cause was older than the tree:
+`removeTheDead` walked `world.entities()` and called `spawnShards` from inside
+that loop. Shards are six new entities, each pushing onto the very vector being
+iterated — and `ECS.h` says in as many words that `entities()` is the live list
+and creating an entity while looping it can reallocate under the loop.
+
+It had been there since slice 1 and only bit when a push happened to cross a
+capacity boundary during a death. `fight` had gathered first since the
+beginning for exactly this reason; this was the one place that had not.
+
+The test binary also printed *nothing* when it died — six hundred checks and
+not even the banner, because stdout was buffered and the dying process never
+flushed. `main` sets it unbuffered now, which is how the next crash gets
+located in one run instead of six.
+
+## The UI pass, and the tool that made one possible
+
+The stage-list bug below was found by a human starting the game. That is not a
+method — it is luck, and it only works for whichever screen someone happens to
+open. So the next thing built was `tests/ui_shots.cpp`: it drives the game to
+twelve different screens and writes a PNG of each, using the same dummy-driver
+trick `render_tests` uses, in about a second with no display.
+
+It **cannot fail**. It makes pictures and a person has to look at them. That is
+the point: the bug class it exists for is precisely the one no assertion
+catches. The first run found five things, four of which had shipped for months.
+
+### The font had no `+` and no `%`
+
+Every permanent upgrade describes itself as `+10% DAMAGE`. The player saw a
+hollow box, `10`, another hollow box, `DAMAGE`. All four armoury rows, unreadable.
+
+The fallback worked exactly as designed — a missing character draws as a box so
+it cannot vanish silently — and it still survived four slices, because nobody
+had ever looked at the screen it was shouting on.
+
+### The armoury text hung out of its plate
+
+`+40 START GOLD  160` is nineteen characters, 226 pixels at that scale, inside
+a 220-pixel plate. TREASURY's price sat out over the gap toward the stage list,
+and one more digit would have put it underneath the list. The cost is
+right-aligned on the name line now, which fixes every row and keeps working
+when the geometric cost curve reaches four figures.
+
+### The enemy castle was behind the spell panel
+
+At the far-right camera position — exactly where you look when you are
+attacking their gate — the enemy castle slid under the spell rows and lost the
+top quarter of itself behind three buttons.
+
+Nothing could have caught this. The castle was drawn correctly, at the right
+place, in the right layer, with a panel on top of it, which is what panels are
+for. The right-hand column is now positioned **from `kCastleTopY`** rather than
+from a number that looked fine on an empty field, and the upgrade panel and
+mana bar stack upward from it, so moving one cannot land on another.
+
+### The mana bar was an unnamed blue strip
+
+Pressed against the bottom of the upgrade panel, it read as a progress bar
+belonging to SUPPLY. Three spells were priced in a resource the screen never
+named. It has a gap and a `MANA 62` label now.
+
+### The foreground parallax band was behind the spawn bar
+
+The grass sat at `kWindowHeight - 6`, and the spawn bar covers everything from
+480 down. So the one layer that moves *faster* than the ground — the half of
+depth a boolean could never express, and the entire reason slice 6 pulled
+`parallax` out of the engine — was drawn into a sliver nobody could see. It was
+also 30/38/44, within a few points of the ground behind it, so even once moved
+it still would not have read.
+
+Two smaller things went with it: the hill bands were near-black on near-black,
+because `Polygon` **strokes** rather than fills and there is no filled-polygon
+call in this engine, so a hill is a triangle outline and needs the contrast to
+show; and the castles were plain rectangles, now given battlements and a gate
+out of `Polygon` — the same line-art trick, and the same reason, as the stick
+figures over the units.
+
+One thing this pass got wrong on the way: I added a screen-space ground band
+believing there wasn't one, having misread a screenshot. `buildField` has drawn
+a world-spanning ground bar since slice 1. Removed.
+
 ## The first bug found by looking at the game
 
 Somebody started stage one and the stage list was still there — "CHOOSE A
