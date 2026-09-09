@@ -503,6 +503,75 @@ void testPauseFreezesTheBattle() {
 // misnamed since slice 1 and nothing noticed, because before the campaign a
 // win and a loss both did the same thing. They no longer do, so it is two
 // tests with the names they should always have had.
+// Starting a battle has to take the stage list off the screen.
+//
+// It did not, and this was visible the first time a human looked at the game
+// rather than at a test: "CHOOSE A BATTLE" across the middle of the
+// battlefield, eight stage rows drawn through the HUD, the armoury sitting on
+// top of the spawn bar.
+//
+// The mechanism is worth stating because nothing about it is obvious.
+// `SceneStack::push` does not call onExit on the scene underneath — only pop
+// and replace do — and the renderer draws COMPONENTS, not scenes. A scene that
+// is merely frozen still has every entity it created in the world, and the
+// world is what gets drawn. That is deliberate and correct for the pause and
+// game-over overlays, which want the battle visible behind them. It is wrong
+// for a full-screen menu, and only the menu knows which of the two it is.
+//
+// Not one of the 600 checks in this file could see it: they all read game
+// STATE, and the state was perfect. The stage list was in the world, which is
+// exactly where it is supposed to be while that scene is alive.
+void testStartingABattleClearsTheStageList() {
+    Game game;
+    game.scenes.push(lanebattle::makeTitleScene());
+    game.driver.step();
+    game.driver.tap(SDL_SCANCODE_SPACE);
+    game.driver.step(2);
+
+    auto screenText = [](World& world) {
+        std::string all;
+        for (auto& entry : world.view<Text>()) {
+            all += entry.second.value;
+            all += "\n";
+        }
+        return all;
+    };
+
+    check(screenText(game.world).find("CHOOSE A BATTLE") != std::string::npos,
+          "the stage list is on screen before a battle starts");
+
+    game.driver.tap(SDL_SCANCODE_RETURN);
+    game.driver.step(2);
+
+    const std::string during = screenText(game.world);
+    check(lanebattle::findSession(game.world) != nullptr, "the battle started");
+    check(during.find("CHOOSE A BATTLE") == std::string::npos,
+          "and the stage list is gone from the screen");
+    check(during.find("LOCKED") == std::string::npos,
+          "including its locked rows");
+    check(during.find("WEAPONS") == std::string::npos,
+          "and the armoury with it");
+
+    // And it has to come back, or the fix would be a worse bug than the one it
+    // replaced.
+    game.suppressEnemySpawns();
+    const Entity mine = lanebattle::spawnUnit(game.world, true);
+    const Entity enemyCastle = lanebattle::findCastle(game.world, false);
+    game.world.getComponent<Transform>(mine)->x =
+        game.world.getComponent<Transform>(enemyCastle)->x -
+        stats(kSoldier).range + 4.0f;
+    game.world.getComponent<Castle>(enemyCastle)->health = 1.0f;
+    game.driver.step(4);
+    game.driver.tap(SDL_SCANCODE_R);
+    game.driver.step(4);
+
+    const std::string after = screenText(game.world);
+    check(after.find("CHOOSE A BATTLE") != std::string::npos,
+          "and the stage list is back once the battle is over");
+    check(after.find("WEAPONS") != std::string::npos,
+          "along with the armoury");
+}
+
 void testWinningReturnsToTheCampaign() {
     Game game;
     game.startPlaying();
@@ -4119,6 +4188,7 @@ int main() {
     testTheEnemyPaysForItsUnits();
     testTheEconomiesAreSymmetric();
     testPauseFreezesTheBattle();
+    testStartingABattleClearsTheStageList();
     testWinningReturnsToTheCampaign();
     testLosingLetsYouRetryTheSameStage();
 

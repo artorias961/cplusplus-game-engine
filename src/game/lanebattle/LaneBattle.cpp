@@ -2706,6 +2706,28 @@ public:
         onEnter(world);
     }
 
+    // Starts a battle, taking this screen down first.
+    //
+    // `push` does NOT call onExit on the scene underneath — only pop and
+    // replace do — and rendering is driven by the components in the World
+    // rather than by which scene put them there. So pushing the battle left
+    // the entire stage list and armoury sitting in the world, drawn straight
+    // over the top of the fight: "CHOOSE A BATTLE" across the middle of the
+    // battlefield, eight stage rows through the HUD, the armoury over the
+    // spawn bar.
+    //
+    // Push is still right. The battle has to return HERE when it ends, which
+    // is what pop and onResume do; replace would throw this screen away and
+    // there would be nothing to come back to. What was missing is that a
+    // full-screen scene has to clear its own picture on the way out, and only
+    // it knows what it drew. onResume already rebuilds everything from
+    // scratch, so there is nothing to preserve.
+    void startBattle(World& world, SceneStack& scenes) {
+        onExit(world);
+        world.flushDestroyed();
+        scenes.push(makePlayScene());
+    }
+
     void update(World& world, InputManager& input, float,
                 SceneStack& scenes) override {
         Campaign& campaign = campaignOf(world);
@@ -2721,7 +2743,7 @@ public:
             input.wasKeyPressed(SDL_SCANCODE_KP_ENTER) ||
             input.wasKeyPressed(SDL_SCANCODE_SPACE)) {
             campaign.currentStage = campaign.stagesUnlocked - 1;
-            scenes.push(makePlayScene());
+            startBattle(world, scenes);
             return;
         }
 
@@ -2740,7 +2762,7 @@ public:
         if (picked < 0 || picked >= campaign.stagesUnlocked) return;
 
         campaign.currentStage = picked;
-        scenes.push(makePlayScene());
+        startBattle(world, scenes);
     }
 
     bool simulatesWorld() const override { return false; }

@@ -1092,6 +1092,40 @@ happened rather than what was asked for.
   whether or not it is on screen. SDL clips, so it is correct, and the
   measured frame cost says it is not worth an early-out yet.
 
+## The first bug found by looking at the game
+
+Somebody started stage one and the stage list was still there — "CHOOSE A
+BATTLE" across the middle of the battlefield, eight stage rows drawn through
+the HUD, the armoury sitting on top of the spawn bar.
+
+`SceneStack::push` does not call onExit on the scene underneath; only pop and
+replace do. And the renderer draws **components, not scenes** — a frozen scene
+still owns every entity it created, and the world is what gets drawn. That is
+deliberate and right for the pause and game-over overlays, which want the
+battle visible behind them. It is wrong for a full-screen menu, and only the
+menu knows which of the two it is. `StageSelectScene` now clears its own
+picture before pushing the battle; `onResume` already rebuilt everything from
+scratch, so there was nothing to preserve.
+
+Push is still correct here. The battle has to come back to this screen, which
+is what pop and onResume do — replace would throw it away.
+
+**Not one of the 600 checks in this file could see it.** They read game state,
+and the state was perfect: the stage list was in the world, which is exactly
+where it belongs while that scene is alive. `render_tests` could not see it
+either — it proves a sprite lands where the camera says, and every one of
+those sprites did.
+
+The number was there the whole time, though.
+`testTheHudStillIgnoresTheCameraEntirely` puts its `check` inside a loop over
+every screen-space sprite, so its contribution to the total is a count of
+them. Fixing this dropped the suite from 612 checks to 600: eight stage plates
+and four armoury plates, the exact twelve that had been drawing over the
+battle. A test had been quietly reporting the bug as an integer for weeks and
+nobody was reading it as one.
+
+Worth keeping in mind next time a check count moves for no reason.
+
 ## The campaign re-tune, and the instrument it needed
 
 ### What was wrong
