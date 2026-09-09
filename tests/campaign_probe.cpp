@@ -81,6 +81,10 @@ struct Strategy {
     // everything is the old hero back again; a path that wins nothing is a
     // trap for whoever picked it, and picking is permanent.
     int path = 0;
+
+    // Levels of the GRANARY perk this player walked in with. The economy that
+    // survives measurement lives here rather than inside the battle.
+    int granary = 0;
 };
 
 struct Outcome {
@@ -121,6 +125,8 @@ Outcome play(int stage, const Strategy& strategy) {
     driver.step();
     lanebattle::campaignOf(world).stagesUnlocked = stage + 1;
     lanebattle::campaignOf(world).heroPath = strategy.path;
+    lanebattle::campaignOf(world)
+        .perks[static_cast<int>(lanebattle::Perk::Granary)] = strategy.granary;
 
     // A strategy carries what it sends.
     //
@@ -194,6 +200,37 @@ Outcome play(int stage, const Strategy& strategy) {
         // the line, and in this game a lost line does not come back. That is a
         // real property of the design and worth keeping in view; it is just
         // not what a competent player does.
+        // Bought whenever affordable, which is the OPENING the upgrade is now
+        // priced for.
+        //
+        // The old rule was "only while the field is held", and it was correct
+        // for the old price: 120 gold for +4/s paid back in thirty seconds
+        // against battles decided in sixty, so buying early cost you the line
+        // and buying late arrived after the outcome. Greedy measured WORSE
+        // than never buying — three stages against five.
+        //
+        // At 80 for +5 the payback is sixteen seconds, which is inside the
+        // window where it can still change the battle. Modelling a player who
+        // waits until they are already winning would now be modelling the
+        // wrong player, and would measure the upgrade as inert for a reason
+        // that no longer applies.
+        // Two levels early, then stop — which is what a person does and what
+        // neither of the previous models did.
+        //
+        // "Whenever affordable" never stops: it keeps buying the third and
+        // fourth level at rising prices right through the fight, so the player
+        // is permanently one soldier poorer and measures WORSE than never
+        // buying at all. "Only while winning" never starts in time. Both
+        // measured the upgrade as inert, for opposite reasons, and neither is
+        // a player.
+        // Back to "only while the field is held", which is the best of the
+        // three models measured — four stages against two for either flavour
+        // of buying early. It is not that this player is clever; it is that
+        // in-battle income cannot be bought without losing the line, so the
+        // least-bad player is the one who barely buys it.
+        //
+        // The economy that WORKS is GRANARY, a permanent perk bought between
+        // battles, and the GRAIN column measures that instead.
         if (strategy.economy &&
             lanebattle::frontLineX(world, true) > lanebattle::kWorldWidth / 2.0f) {
             const int income = static_cast<int>(lanebattle::Upgrade::Income);
@@ -205,6 +242,61 @@ Outcome play(int stage, const Strategy& strategy) {
             }
         }
 
+        // The cannon, shelled at whatever the enemy has pushed to.
+        //
+        // Left out of the first version of this probe, and its absence was
+        // doing real damage to the conclusions: the sweep said nothing below
+        // the hero could answer an enemy that fields archers, which would have
+        // been a finding about the game rather than about a player who never
+        // touched the one system built for exactly that job. A probe that
+        // ignores a mechanic measures a game that does not have it.
+        //
+        // Out of surplus only — a shot is 30 gold that could have been most of
+        // a runner, and shelling instead of fielding is how a human loses with
+        // it.
+        // `cannonWait` is not politeness, it is correctness. A tap re-issued
+        // every frame never releases — the harness sees the button still
+        // wanted and holds it down — and the game only fires a shot on the
+        // RELEASE. Clicking every frame therefore fires nothing at all, and
+        // produced a GUNS column identical to MIXED down to the second: the
+        // same shape of silent no-op the ECON column had, and the same wrong
+        // conclusion waiting behind it.
+        if (cannonWait > 0) --cannonWait;
+
+        // Two things kept this column at ZERO shots across three campaigns, and
+        // both were the probe rather than the game:
+        //
+        //   * it ran AFTER the unit-spending loop and reserved 120 gold on top
+        //     of the 30-gold shell, so the purse never reached the threshold.
+        //     Exactly the bug the ECON column had, in the same place, for the
+        //     same reason.
+        //   * it aimed at the ENEMY front line, which is frequently off screen
+        //     — the camera follows YOURS — and a click outside the window is
+        //     not a click. Real players drag the view; the probe cannot, so it
+        //     aims just ahead of its own line instead, which is where the enemy
+        //     is whenever the two are engaged and is always on screen.
+        //
+        // Reserve is one soldier now rather than two. Shelling instead of
+        // fielding is still how a human loses with it, so the trade is kept —
+        // it is just no longer set so high that the trade never comes up.
+        if (strategy.cannon && cannonWait == 0 &&
+            session->cannonCooldown <= 0.0f &&
+            session->gold >= lanebattle::kCannonCost + 60.0f) {
+            if (Camera* camera = lanebattle::findCamera(world)) {
+                const float mine = lanebattle::frontLineX(world, true);
+                const float from = lanebattle::kCastleMargin +
+                                   lanebattle::kCastleWidth / 2.0f;
+                const float aim = mine + 60.0f;
+                if (aim - from <= lanebattle::kCannonRange) {
+                    const float screenX = aim - camera->x;
+                    if (screenX > 4.0f &&
+                        screenX < static_cast<float>(lanebattle::kWindowWidth) - 4.0f) {
+                        driver.clickAt(static_cast<int>(screenX), 410);
+                        cannonWait = 3;  // let the press become a release
+                    }
+                }
+            }
+        }
         // Reads FORWARD through the cycle for something sendable rather than
         // waiting on whatever came next — otherwise a cycle of two soldiers
         // spends most of its time waiting out the first one's cooldown, which
@@ -234,44 +326,6 @@ Outcome play(int stage, const Strategy& strategy) {
             }
         }
 
-        // The cannon, shelled at whatever the enemy has pushed to.
-        //
-        // Left out of the first version of this probe, and its absence was
-        // doing real damage to the conclusions: the sweep said nothing below
-        // the hero could answer an enemy that fields archers, which would have
-        // been a finding about the game rather than about a player who never
-        // touched the one system built for exactly that job. A probe that
-        // ignores a mechanic measures a game that does not have it.
-        //
-        // Out of surplus only — a shot is 30 gold that could have been most of
-        // a runner, and shelling instead of fielding is how a human loses with
-        // it.
-        // `cannonWait` is not politeness, it is correctness. A tap re-issued
-        // every frame never releases — the harness sees the button still
-        // wanted and holds it down — and the game only fires a shot on the
-        // RELEASE. Clicking every frame therefore fires nothing at all, and
-        // produced a GUNS column identical to MIXED down to the second: the
-        // same shape of silent no-op the ECON column had, and the same wrong
-        // conclusion waiting behind it.
-        if (cannonWait > 0) --cannonWait;
-
-        if (strategy.cannon && cannonWait == 0 &&
-            session->cannonCooldown <= 0.0f &&
-            session->gold >= lanebattle::kCannonCost + 120.0f) {
-            if (Camera* camera = lanebattle::findCamera(world)) {
-                const float theirs = lanebattle::frontLineX(world, false);
-                const float from = lanebattle::kCastleMargin +
-                                   lanebattle::kCastleWidth / 2.0f;
-                if (theirs - from <= lanebattle::kCannonRange) {
-                    const float screenX = theirs - camera->x;
-                    if (screenX > 4.0f &&
-                        screenX < static_cast<float>(lanebattle::kWindowWidth) - 4.0f) {
-                        driver.clickAt(static_cast<int>(screenX), 410);
-                        cannonWait = 3;  // let the press become a release
-                    }
-                }
-            }
-        }
 
         // RAGE is the unaimed one, so it needs no click and no camera maths.
         // Cast on cooldown once the lines have met, which is when it is worth
@@ -394,6 +448,10 @@ int main(int argc, char** argv) {
         {"MIXED", {kSoldier, kSoldier, kArcher}},
         {"AIR",   {kSoldier, kArcher, kGriffin}},
         {"ECON",  {kSoldier, kSoldier, kArcher}, false, false, true},
+        // The same army walking in with two levels of GRANARY — the economy
+        // moved out of the battle and into the campaign, where buying it does
+        // not cost the soldier that holds the line.
+        {"GRAIN", {kSoldier, kSoldier, kArcher}, false, false, false, false, 0, 2},
         {"GUNS",  {kSoldier, kSoldier, kArcher}, false, false, false, true},
         // The three roles the loadout added, each carried in place of
         // something the MIXED column relies on. If a new unit cannot get a

@@ -1092,6 +1092,83 @@ happened rather than what was asked for.
   whether or not it is on screen. SDL clips, so it is correct, and the
   measured frame cost says it is not worth an early-out yet.
 
+## The cannon, and the economy
+
+Two systems the probe had measured as dead: the cannon fired **zero shots** in
+every column on every stage, and the INCOME upgrade could not change an
+outcome. Both are fixed. Neither fix was the one that looked obvious.
+
+### The cannon: the price was right, the reach was wrong
+
+The obvious rebuild was the genre's shape — free, cooldown-limited, aimed,
+reaching the fight. Free was measured twice and is wrong for this game:
+
+    free, 760 reach     slice 8's stalemate exactly. Draws everywhere,
+                        including the last stage drawing for the only player
+                        who could previously win it.
+    free, whole field   WORSE. Almost every column drawing on almost every
+                        stage.
+
+The second run is the one that taught something, because it killed the theory
+behind the first. The stalemate is not geometry — the hypothesis was that a
+partial arc draws an uncrossable line on the map, and covering the whole field
+should therefore have removed it. It did not. **Two guns firing forever erase
+both armies faster than either side can accumulate one.** Nobody gets ahead, so
+nobody pushes, so no castle falls.
+
+The 30-gold price was what stopped that all along. What was broken was a reach
+of 420 from a castle at x=100 on a 2400-wide field: the only enemy it could
+ever hit was one that had already crossed four fifths of the map.
+
+Reach fixed to 1000 and the gun fired — and the GUNS column got **worse**, four
+stages down to two, having fired 89 shells on one of them. Which is its own
+finding: at 30 gold a shell buys about 50 damage, while 60 gold buys a soldier
+worth ten times that over its life. Ninety shells is forty soldiers of gold
+spent on four soldiers of effect.
+
+    cost 30, reach 420      0 shots, GUNS 4 (= MIXED)
+    cost 30, reach 1000     fires, GUNS 2 (worse than MIXED)
+    cost 12, reach 1000     fires, GUNS 5 (> MIXED), wins stage 6 alone
+
+Twelve gold every 3.2 seconds is about a quarter of base income — a tax you can
+feel and can choose to stop paying. That is the rhythm "free with a cooldown"
+was reaching for, at a price this economy can survive.
+
+**The probe was wrong too, twice.** Its cannon block ran after the unit-spending
+loop and reserved 120 gold on top of the shell, so the purse never reached the
+threshold — the identical bug the ECON column had, in the same place. And it
+aimed at the ENEMY front line, which is frequently off screen because the camera
+follows yours, and a click outside the window is not a click.
+
+### The economy: it cannot live inside a battle
+
+Five configurations, every one inert or harmful:
+
+    120 for +4, bought cautiously      4 stages (= MIXED)
+    120 for +4, bought greedily        3 stages
+     80 for +5, bought cautiously      4 stages
+     80 for +5, bought greedily        2 stages
+     45 for +5, two levels, early      2 stages
+
+No price fixes it, because the problem is not the price. Gold spent in a battle
+is gold not spent on the opening army; the opening army decides the line; and
+kill rewards mean a lost line compounds into a lost battle. An in-battle economy
+upgrade is a bet against the mechanic the whole design rests on.
+
+Cheapening it also **buffed the opponent**, which was the sharpest lesson in the
+sequence. The AI buys upgrades out of true surplus without ever risking the line
+it is holding, so a cheaper INCOME hands it an economy the player still cannot
+safely take — and the naive on-ramp stage stopped being winnable at all. INCOME
+is back to 120 for +4, unchanged, deliberately.
+
+The economy that works is **GRANARY**, a fifth permanent perk: +2 gold/second,
+bought from the campaign bank between battles, out of money that could never
+have been soldiers in the fight it affects. Same idea, moved somewhere it is not
+self-defeating.
+
+    ECON  4 (= MIXED)      the in-battle upgrade, played as well as it can be
+    GRAIN 5                two levels of GRANARY, same army
+
 ## The loadout, and training
 
 Also not roadmap slices, and the same reason: the roadmap was read off the

@@ -1054,7 +1054,10 @@ const int* upgradesOf(const Session& session, bool leftSide) {
 
 float goldPerSecondFor(const Session& session, bool leftSide) {
     const int levels = upgradesOf(session, leftSide)[static_cast<int>(Upgrade::Income)];
-    return kGoldPerSecond +
+    // GRANARY is yours alone, and is added rather than multiplied so that its
+    // worth does not swing with whatever the stage sets the opponent's rate to.
+    const float granary = leftSide ? session.bonusGoldPerSecond : 0.0f;
+    return kGoldPerSecond + granary +
            upgradeKind(static_cast<int>(Upgrade::Income)).effect *
                static_cast<float>(levels);
 }
@@ -1446,6 +1449,14 @@ public:
         // worth buying early and worth less later.
         fresh.gold += perks_[static_cast<int>(Perk::Purse)] *
                       perkKind(static_cast<int>(Perk::Purse)).effect;
+
+        // GRANARY is the rate. Between them they are the two halves of an
+        // economy that could not exist inside a battle: one pays now, one pays
+        // over the whole fight, and neither costs you a soldier at the moment
+        // the line is being decided.
+        fresh.bonusGoldPerSecond =
+            perks_[static_cast<int>(Perk::Granary)] *
+            perkKind(static_cast<int>(Perk::Granary)).effect;
 
         // One camera, on its own entity. The renderer picks up the first one
         // it finds; before this game the only thing that ever moved it was
@@ -2551,13 +2562,24 @@ private:
         // It shelled away every surplus it ever had and stayed poor for the
         // whole match — losing at full health, which looked like balance and
         // was actually an ordering mistake.
-        const int nextUpgrade = cheapestUpgradeFor(session, false);
-        const float reserve =
-            waveCost(session) +
-            (nextUpgrade >= 0
-                 ? upgradeCost(nextUpgrade, session.enemyUpgrades[nextUpgrade])
-                 : 0.0f);
-        if (session.enemyGold < kCannonCost + reserve) return;
+        // Skipped entirely while the gun is free, so both sides shell on the
+        // same terms.
+        //
+        // The reserve exists to stop the opponent spending its army on shells.
+        // With a free cannon there is nothing to spend, and leaving the check
+        // in place would have meant the PLAYER shelling from the first second
+        // while the opponent waited until it could afford a wave and an
+        // upgrade it no longer needed to pay for. Asymmetry in a mechanic both
+        // sides own is the bug slice 1 and slice 3 were both lost to.
+        if (kCannonCost > 0.0f) {
+            const int nextUpgrade = cheapestUpgradeFor(session, false);
+            const float reserve =
+                waveCost(session) +
+                (nextUpgrade >= 0
+                     ? upgradeCost(nextUpgrade, session.enemyUpgrades[nextUpgrade])
+                     : 0.0f);
+            if (session.enemyGold < kCannonCost + reserve) return;
+        }
 
         session.enemyGold -= kCannonCost;
         session.enemyCannonCooldown = kCannonCooldown;
@@ -3025,11 +3047,18 @@ private:
         if (Text* text = world.getComponent<Text>(cannonText_)) {
             const bool ready = session.cannonCooldown <= 0.0f &&
                               session.gold >= kCannonCost;
+            // The price is only mentioned when there is one. A free weapon
+            // labelled "0G" reads as broken, and "CANNON 4" on its own never
+            // said 4 of what.
+            const std::string price =
+                kCannonCost > 0.0f
+                    ? " - " + std::to_string(static_cast<int>(kCannonCost)) + "G"
+                    : "";
             text->value =
-                ready ? "CANNON READY - CLICK THE FIELD - " +
-                            std::to_string(static_cast<int>(kCannonCost)) + "G"
-                      : "CANNON " + std::to_string(
-                                        static_cast<int>(session.cannonCooldown) + 1);
+                ready ? "CANNON READY - CLICK THE FIELD" + price
+                      : "CANNON RELOADING - " +
+                            std::to_string(
+                                static_cast<int>(session.cannonCooldown) + 1) + "S";
             text->r = ready ? 220 : 110;
             text->g = ready ? 200 : 110;
             text->b = ready ? 140 : 125;

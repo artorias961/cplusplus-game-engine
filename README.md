@@ -25,19 +25,23 @@ That's on purpose — an engine with only one game is a hypothesis, not an engin
 — and each needed something the last one didn't: Snake wanted fixed ticks and
 box collision, Asteroids wanted rotation and circles, Breakout wanted contact
 normals and sub-frame movement. Lane Battle has asked for very little across
-eight slices, which is its own kind of result: a battlefield wider than its
+twelve slices, which is its own kind of result: a battlefield wider than its
 window made world and screen coordinates differ for the first time, moving that
 rule out of the renderer into `View.h` where a test can reach it; a clickable
 spawn bar wanted a mouse; scenery at a distance wanted a parallax factor,
 because `screenSpace` was a boolean with nothing between the world and the
 screen; and a roster worth rebalancing wanted a way to read a text file, which
-the engine had never had. Half its slices have needed nothing at all.
+the engine had never had. Half its slices have needed nothing at all, and it is
+now the largest thing here by a distance — about 5,400 lines against the
+engine's 2,500.
 
 It is **not** trying to be fast, complete, or production-ready. Storage uses
-`std::unordered_map` instead of packed arrays, there's no batching, no scene
-graph, collision compares every pair, and the asset handling is one cache that
-loads PNGs. Those are deliberate: every one of them is a place where the simple
-version is easier to read and nothing here is slow enough to care.
+`std::unordered_map` instead of packed arrays, there's no sprite batching, no
+scene graph, collision compares every pair, and the asset handling is one cache
+that loads PNGs. Those are deliberate: every one of them is a place where the
+simple version is easier to read and nothing here is slow enough to care. (Text
+*is* batched — a whole string becomes one `SDL_RenderFillRects` — because a
+HUD at 3,200 draw calls a frame was the one place where it did.)
 
 ## Status
 
@@ -50,15 +54,25 @@ an optimisation is worth doing.
 
 **The live tree is now growing a fourth game**, Lane Battle, and the engine
 grows only where that game demands it — the same rule that produced everything
-in v1.0. Ten slices in, it has demanded four things: two small headers, mouse
-input, and a parallax factor. Five of those ten needed no engine code at all,
-and the roadmap's engine list is now finished.
-`docs/v3-plan.md` has the running notes — including how measuring whole
-battles, rather than individual rules, found the game unwinnable twice before
-it was playable — and `docs/roadmap-cartoonwars.md` has what is left.
+in v1.0. Twelve slices in, it has demanded four things: `View.h`, mouse input,
+a parallax factor, and `DataFile.h` (which now writes as well as reads). Half
+those slices needed no engine code at all, and the roadmap's engine list is
+finished.
 
-The list at the bottom is **exercises, not debt**. Nothing on it is missing in
-the sense of being needed; each is a next thing to learn if you want one.
+Since then the game has gone well past the roadmap, which never had these:
+a hero with a three-path upgrade tree, a loadout (you own seven unit types and
+carry four), per-unit training, and a campaign retuned three times against a
+simulator. `docs/v3-plan.md` has the running notes — including how measuring
+whole battles rather than individual rules found the game unwinnable twice
+before it was playable — and `docs/roadmap-cartoonwars.md` has what is left of
+the original plan.
+
+**1,021 assertions** across five test binaries, plus three measuring tools that
+pass and fail nothing: a benchmark, a campaign simulator, and a screenshotter.
+
+The exercises at the bottom are **exercises, not debt** — each is a next thing
+to learn about the engine, not something missing from it. What the *game* is
+missing is a different list, and it has its own section below.
 
 ## What's in the box
 
@@ -92,7 +106,9 @@ engine_project/
 │   ├── breakout_tests.cpp    Asserts about Breakout's rules
 │   ├── lanebattle_tests.cpp  Asserts about Lane Battle's rules
 │   ├── render_tests.cpp      Draws frames headlessly and checks the pixels
-│   └── engine_bench.cpp      Measures the naive parts; not a pass/fail test
+│   ├── engine_bench.cpp      Measures the naive parts; not a pass/fail test
+│   ├── campaign_probe.cpp    Plays the whole campaign 14 ways; prints a table
+│   └── ui_shots.cpp          Writes a PNG of all 15 screens; cannot fail
 ├── .github/workflows/
 │   └── ci.yml          Builds and tests on Linux and macOS
 ├── docs/               Screenshots, v3-plan.md, roadmap-cartoonwars.md
@@ -119,6 +135,17 @@ The build produces these targets, and the split is the point:
 | `asteroids_tests` / `breakout_tests` / `lanebattle_tests` | Asserts about each game's rules. |
 | `render_tests` | Draws real frames through SDL's `dummy` video driver and asserts on the pixels read back. No window, no GPU. |
 | `asteroids_starts` / `breakout_starts` / `lanebattle_starts` | Runs each shipped game for half a second headlessly and requires it to exit cleanly. The only tests that execute `main.cpp` and the real game loop. |
+
+And three **instruments**, which are built but deliberately not registered with
+`ctest`. They cannot pass or fail; they produce a number, a table or a picture,
+and a person reads it. Each exists because a class of problem kept getting past
+the assertions:
+
+| Target | What it answers | Why it exists |
+| --- | --- | --- |
+| `engine_bench` | Is it slow? | "Optimise when it's slow" is useless advice until someone measures. It has said no to a spatial grid three times. |
+| `campaign_probe` | Is it fair? | Plays every stage 14 different ways and prints who beat what. `--sweep` finds the highest enemy income each player can still beat, which is how the stage table gets placed rather than guessed. |
+| `ui_shots` | Is it readable? | Writes a PNG of every screen with no window needed. Its first run found five bugs, four of which had shipped for months. |
 
 Every game is shaped the same way — rules in a library, behind a three-line
 `main.cpp`. That split exists for one reason: a game whose logic lives inside
@@ -153,6 +180,67 @@ The dependency direction only ever goes one way: game code depends on
 `engine/`, never the reverse. The engine has no idea what a "player", a "rock"
 or an "arrow key binding" is — those live in the games, which the engine only
 ever sees as scenes it updates and components it draws.
+
+## Where the numbers live
+
+Every number that balances Lane Battle is in one of three places, and it is
+worth knowing which before changing anything.
+
+### `assets/lanebattle/units.txt` — edit this, no rebuild
+
+A text file of repeated `[section]` blocks, read once at startup and resolved
+against the executable. A missing or broken file is **not fatal**: the game
+falls back to the compiled-in defaults, which is why it still runs from a bare
+build directory.
+
+| Section | Repeats | What it sets |
+| --- | --- | --- |
+| `[unit]` | once per unit type | `cost` `health` `damage` `range` `attack_delay` `speed` `cooldown` `flying` `hits_air` `width` `height` and six colour channels |
+| `[upgrade]` | once per in-battle upgrade | `base_cost` `cost_growth` `effect` for INCOME / WALLS / SUPPLY |
+| `[stage]` | once per campaign stage | `enemy_income` `enemy_castle_health` `wave_size` `composition` |
+
+Two different merge rules, and the difference matters:
+
+- **Units MERGE by name.** A `[unit]` block naming an existing row overrides
+  only the fields it mentions and leaves the rest alone, so a file that just
+  wants cheaper archers says exactly that. A block with a new name **appends a
+  new unit type**.
+- **Stages REPLACE.** The first `[stage]` in the file discards the built-in
+  campaign entirely, because a campaign is an ordered list and a half-overridden
+  one is nobody's design.
+
+`composition` is a comma-separated list of roster indices — `1,3,3,1` is
+soldier, griffin, griffin, soldier — and the hero is filtered out of it, since
+one per battle is a rule.
+
+**Rebuild before you believe a measurement.** Assets are copied next to the
+binary at build time, so editing this file and re-running a tool measures the
+*previous* version and prints a completely plausible result. `campaign_probe`
+prints the table it actually loaded, in its header, for exactly this reason.
+
+### The compiled-in defaults — `src/game/lanebattle/LaneBattle.h`
+
+The same tables as C++ literals: `kDefaultUnitKinds`, `kDefaultUpgrades`,
+`kDefaultStages`, plus things a file *cannot* reach because they are structural
+rather than tuning — `kDefaultPerks`, `kDefaultSpells`, `kDefaultHeroPaths`,
+the population cap, kill-reward fraction, cannon numbers and layout constants.
+
+The file and the header hold two copies of the shipped balance and they have to
+agree, so there is a test that says so
+(`testTheShippedTableMatchesTheCompiledDefaults`). Change one, change both.
+
+### The save — written where SDL says user files go
+
+`saveCampaign` / `loadCampaign` write the same text format `DataFile` reads, to
+`SDL_GetPrefPath` rather than next to the executable, because the folder a game
+is installed into is frequently read-only. It holds stages unlocked, the bank,
+perk levels, the hero's path and its upgrades, the loadout and per-unit
+training.
+
+Everything in it is **written by name and clamped on the way in**, because a
+save is a text file a player can edit: a level past its cap comes back as the
+cap, and a unit name the roster no longer has is dropped rather than resolved
+to whatever now sits at that index.
 
 ## How it fits together
 
@@ -442,8 +530,32 @@ recording:
 **What the benchmark settled.** "Optimise when it's slow" is useless advice
 unless someone measures. `engine_bench` showed the pair-wise collision loop is
 free at 25 entities and unaffordable by 400, while the map iteration that
-packed storage would replace costs 0.11ms at *1600*. One of those is worth
+packed storage would replace costs 0.06ms at *1600*. One of those is worth
 doing one day; the other never was.
+
+**What Lane Battle added, which was not an engine lesson at all.** It asked the
+engine for almost nothing and instead taught the same thing four times over: a
+test that passes is not evidence the game works.
+
+Every individual rule was green while the game was an unbreakable stalemate,
+then while it was unwinnable, then while three whole systems — the sky, the
+economy, the cannon — did nothing at all. None of it was visible in a table of
+numbers and all of it was obvious after one run of something that played whole
+battles. That is where `campaign_probe` came from.
+
+The same shape again on screen. A thousand assertions were green while the
+entire stage-select menu was drawn over the battlefield, because they check
+state and the state was correct — the menu really was in the world, which is
+where a live scene's entities belong. A person opened the game and saw it in
+thirty seconds. That is where `ui_shots` came from.
+
+And the sharpest one: three columns of the simulator have at various points
+measured *nothing* — a strategy that never bought the upgrade it was named
+after, one whose click never released so the cannon never fired, a sweep whose
+scratch stage was overwritten before it ran. Each produced a believable table
+of numbers meaning nothing. An instrument needs checking as badly as the thing
+it measures, which is why the probe now counts shots fired and prints the table
+it actually loaded.
 
 **What it cost.** Nearly every bug in this project was in code written the same
 week, while the ECS and game loop written first have not produced a defect in a
@@ -634,21 +746,29 @@ useless advice unless someone actually checks. Run
 `.\build\Release\engine_bench.exe`:
 
 ```
-entities | collision ms | movement ms | share of a 16.6ms frame
-      25 |        0.062 |       0.002 |    0.4%
-     100 |        0.892 |       0.006 |    5.4%
-     200 |        3.687 |       0.015 |   22.3%
-     400 |       15.084 |       0.024 |   91.0%
-     800 |       57.647 |       0.035 |  347.5%
+entities | collision ms | movement ms | scan ms | collision+movement
+      25 |        0.033 |       0.001 |   0.001 |    0.2%
+     100 |        0.511 |       0.003 |   0.015 |    3.1%
+     200 |        2.085 |       0.007 |   0.069 |   12.6%
+     400 |        9.121 |       0.015 |   0.343 |   55.0%
+     800 |       36.992 |       0.030 |   2.261 |  223.0%
+    1600 |      154.172 |       0.061 |  10.062 |  929.1%
 ```
 
-Two things fall straight out of that. `CollisionSystem` compares every pair,
-so its cost grows with the *square* of the entity count — free at 25, a fifth
-of the frame at 200, and past 400 it eats the budget alone. And
-`MovementSystem`, which iterates the `unordered_map` storage everyone wants to
-replace with packed arrays, costs 0.02ms at 400 entities and 0.11ms at 1600.
-Packed storage would be optimising something that is already noise, while the
-pair loop next to it costs a thousand times more.
+Three things fall straight out of that. `CollisionSystem` compares every pair,
+so its cost grows with the *square* of the entity count — free at 25, an eighth
+of the frame at 200, and past 400 it eats the budget alone. `MovementSystem`,
+which iterates the `unordered_map` storage everyone wants to replace with
+packed arrays, costs 0.015ms at 400 entities and 0.06ms at 1600: packed storage
+would be optimising something already at the noise floor, while the pair loop
+beside it costs a thousand times more.
+
+The `scan` column is the same quadratic shape without the overlap maths — for
+each entity, walk them all and keep the nearest one ahead — which is what a
+lane battler runs *instead* of collision. **Lane Battle peaks around 140
+entities**, so it lives in the third row, and this is why the spatial grid on
+the roadmap has been declined three times. It is the row you read before
+believing anything here needs optimising.
 
 Asteroids runs about 26 colliding entities; Breakout has 65 but sidesteps the
 system entirely (only the ball moves, so it tests the ball against each
@@ -668,7 +788,39 @@ The harness runs the same systems in the same order as `Engine::run`, calling
 the shared `RunBuiltinSystems` rather than repeating the list, so the two can't
 drift apart. It feeds real `SDL_Event`s into a real `InputManager`, so
 `wasKeyPressed` edge detection behaves exactly as in the game. Only rendering
-is missing, and rendering changes no state — it's verified by looking at it.
+is missing from it — and rendering is no longer checked by eye: `render_tests`
+draws real frames through SDL's `dummy` driver and asserts on the pixels read
+back, and `ui_shots` writes a PNG of every screen for a person to look at.
+
+### The other two instruments
+
+```bash
+./build/Release/campaign_probe            # every stage, 14 ways, win/loss table
+./build/Release/campaign_probe --detail   # plus seconds, castle left, shots, upgrades
+./build/Release/campaign_probe --sweep    # highest enemy income each player still beats
+./build/Release/ui_shots                  # 15 PNGs into ui_shots/ beside the binary
+```
+
+Neither is registered with `ctest`, for the same reason `engine_bench` is not:
+they answer questions assertions cannot. `campaign_probe` is how the stage
+table gets *placed* rather than guessed — `--sweep` finds each strategy's
+threshold, and a stage goes between two of them so that it asks for the thing
+that separates them. `ui_shots` is how anything about the screen gets noticed
+at all.
+
+A warning that has cost several hours: **rebuild before believing either of
+them.** Assets are copied next to the binary at build time, so editing
+`units.txt` and re-running measures the previous version and prints a
+completely believable result. `campaign_probe` prints the stage table and hero
+stats it actually loaded, above its results, for exactly this reason — read
+that header first.
+
+Three columns of that table have at various points measured *nothing*, each
+looking like a finding about the game: a strategy that never bought the upgrade
+it was named for, one whose every-frame click never released so the cannon
+never fired, and a sweep whose scratch stage was overwritten before it ran. The
+probe counts shots fired and upgrades bought now. **A column that exactly
+matches its neighbour is the tell.**
 
 ### Controls
 
@@ -702,46 +854,93 @@ starts. Where it lands across the paddle's face angles the bounce — that's the
 whole skill of it. Clear the field and the next level refills it with a faster
 ball. Missing the ball costs one of three lives.
 
-**Lane Battle** (`.uildReleaseanebattle.exe`)
+**Lane Battle** (`.\build\Release\lanebattle.exe`)
 
 An eight-stage campaign that remembers where you got to. Pick a battle from
 the list; winning one opens the next. Each stage gives the opponent a different
 economy, a different castle and — the part that actually changes the fight — a
-different army.
+different army. Three stages now ask a question that only one unit answers.
 
-Winning pays gold into a bank, double the first time you clear a stage. The
-armoury down the left of the stage list spends it on WEAPONS, RAMPARTS,
-TREASURY and CHAMPION, which are permanent. All of it is saved the moment it
-is earned, to a plain text file in your user folder that you can read and
-correct by hand.
+| Key | Action |
+| --- | --- |
+| `1`–`4` | Send the unit carried in that slot |
+| `H` | Summon your hero — once a battle, and gone for good if it falls |
+| `Z` / `X` / `C` | METEOR / HEAL / RAGE, cast from mana, which refills on its own |
+| Click the field | Fire the castle cannon, 12 gold a shot |
+| Drag, or Left / Right | Look around a field two and a half screens wide |
+| `P` | Pause |
 
-You also have a **hero**: far stronger than any unit, summoned once per
-battle, and gone for good if it falls. When you spend it is the whole
-decision — on the last stage, summoning it on the opening frame loses exactly
-as surely as never summoning it at all, because a hero with no line to fight
-behind is surrounded and killed for nothing.
+From the **stage list**, `A` opens your army and `H` opens your hero.
+
+Winning pays gold into a bank, double the first time you clear a stage. Three
+screens spend it, and everything they buy is permanent:
+
+- **The armoury**, down the left of the stage list — WEAPONS, RAMPARTS,
+  TREASURY, CHAMPION and GRANARY. GRANARY is the economy: an in-battle income
+  upgrade was measured in five configurations and every one was inert or
+  actively harmful, because gold spent during a fight is the soldier that was
+  holding your line.
+- **Your army** (`A`) — you own seven unit types and **carry four**. The same
+  screen trains any of them five levels deep, priced by what the unit costs to
+  field. The loadout rewards re-equipping for the stage you are about to fight
+  rather than bringing a balanced kit; that was measured rather than designed.
+- **Your hero** (`H`) — one of three paths, **chosen once and kept**. WARDEN is
+  a wall that walks; FALCONER is the only one that reaches the sky and pays for
+  it in health; CHAPLAIN mends the line around it. Three upgrades each, capped
+  at three levels. All three finish the campaign, at noticeably different
+  speeds.
+
+All of it saves the moment it is earned, to a plain text file in your user
+folder you can read and correct by hand.
+
+When you spend the hero is the whole decision — summoning it on the opening
+frame loses about as surely as never summoning it, because a hero with no line
+to fight behind is surrounded and killed for nothing.
+
+The seven unit types you choose four of. Every one of them is *answerable* —
+that is the rule the griffin set, because a unit nothing can counter turns out
+to be the same bug as a hero who beats everything:
+
+| Unit | Gold | Cooldown | The role |
+| --- | --- | --- | --- |
+| **RUNNER** | 35 | 1.1s | Fast and fragile. Wins on gold traded for damage. |
+| **SOLDIER** | 60 | 1.9s | The front line. Beats one runner, loses to two. |
+| **ARCHER** | 95 | 3.0s | Outranges the ground and shoots at the sky. Cannot survive being reached. |
+| **GRIFFIN** | 115 | 3.6s | Flies. Only things that reach air can touch it. |
+| **PIKEMAN** | 55 | 1.8s | The budget answer to the sky: reaches air at melee range, with a soldier's build. |
+| **OGRE** | 160 | 4.5s | A wall. Four soldiers of health, slow, and ground-only — a griffin walks over it. |
+| **BALLISTA** | 100 | 3.2s | The longest reach in the game and the softest body behind it. **Ground only**, which is what stops it being a better archer. |
+
+Three things reach the sky: the ARCHER, the PIKEMAN and a hero on the FALCONER
+path. Nothing else can touch a griffin, however close it stands.
+
+A few other inputs worth knowing:
 
 | Input | Action |
 | --- | --- |
-| Click the bar | Send that unit |
-| 1 | Send a **runner** — 35 gold, 1.1s cooldown, fast and fragile |
-| 2 | Send a **soldier** — 60 gold, 1.9s cooldown, the front line |
-| 3 | Send an **archer** — 95 gold, 3.0s cooldown, outranges everything, and the only ordinary unit that can shoot at the sky |
-| 4 | Send a **griffin** — 115 gold, 3.6s cooldown, flies; only archers and heroes can touch it |
-| Click the field | Fire the castle cannon there — 30 gold, reaches 420px |
-| Drag the field | Scroll the view |
-| Left / Right | Look up and down the field; lets go after a moment |
+| Click the bar | Send that unit — the same as its number key |
 | Click an upgrade | Buy INCOME, WALLS or SUPPLY; each costs more than the last |
-| Z / X / C | METEOR, HEAL, RAGE — cast from mana. The first two arm, then you click where |
 | Right-click | Put an armed spell away again |
-| H, or the hero button | Summon your hero — **once per battle** |
 | Enter | On the stage list, plays the furthest battle you have reached |
 
 Gold accrues on its own, and killing something pays you a share of what it cost
 its owner. Units march right, stop when an enemy is in reach, and fight until
 one falls. You can field ten at a time. Break the enemy castle to win, and lose
-if yours falls first. The opponent plays by exactly the same economy — same
-purse, same income, same costs — so difficulty is one multiplier, not a fudge.
+if yours falls first. The opponent plays by the same rules — same purse, same
+costs, same per-unit cooldowns — and a stage moves three dials on it: how fast
+it earns, how much castle it has, and **what it sends**.
+
+That third dial turned out to matter more than the other two put together.
+Giving the enemy archers drops what a ground army can survive from about 1.4
+income to about 0.6 — a bigger swing than the whole campaign's income range —
+which is why the later stages hold income roughly still and escalate on
+composition instead. None of that was designed; it came out of `--sweep`.
+
+Kill rewards are the mechanic everything else rests on, and they cut both ways:
+an early advantage compounds, and a lost front line does not come back. That is
+why the game is decisive rather than swingy, and also why an in-battle economy
+upgrade cannot work — spending gold mid-fight is spending the soldier that was
+holding your line.
 
 The battlefield is two and a half screens wide, so the camera rides with your
 front line and drifts home to your castle when you have nothing out. The strip
@@ -770,22 +969,41 @@ each upgrade has its own rule — one changes a rate, one heals a castle, one
 raises a cap. A file can change what those rules are worth, not invent a
 fourth one.
 
-The cannon only reaches 420 pixels from your own castle, so it is a defence
-rather than a way to shell the enemy from home — and each shot costs gold you
-could have spent on a unit. The first version was free and reached 780, which
-made every match a stalemate: free defensive damage that never runs out means
-neither side can ever cross the approach to a castle.
+The cannon reaches 1000 pixels and costs 12 gold a shot, and both halves of
+that took four measured attempts to settle.
+
+It shipped free with 780 reach, which made every match an 800-800 stalemate.
+Charging 30 gold fixed the stalemate and killed the weapon: the simulator later
+measured it firing **zero shots**, in every column on every stage, because 420
+reach from a castle at x=100 could only ever hit an enemy that had already
+crossed four fifths of the map. Free was then tried twice more — at 760 reach
+and at whole-field coverage — and both stalemated again, which killed the
+theory that the problem was geometry. Two guns firing forever erase both armies
+faster than either side can accumulate one.
+
+So the price was right all along and the reach was the bug. At 30 gold with the
+reach fixed the gun fired and made you *worse*: 89 shells is forty soldiers of
+gold spent on four soldiers of effect. At 12 gold — about a quarter of base
+income — shelling is a tax you can feel and can choose to stop paying, which is
+the rhythm the genre has at a price this economy survives.
 
 Each unit has its OWN cooldown, so a full purse cannot be poured into one
 type — spending it means sending something else. That is what makes the bar a
 decision rather than a shop, and it is why the ratio you send matters and not
 just the mix.
 
-There is a second lane in the air. A griffin cannot be touched by anything on
-the ground except an archer — and against an enemy that is entirely airborne,
-soldiers are worse than useless, because each one is gold and a population
-slot spent on something that can reach nothing. The counter to all-air is to
-stop building the units that normally carry you.
+There is a second lane in the air. A griffin cannot be touched from the ground
+except by an **archer** or a **pikeman**, or by a hero who took the FALCONER
+path — and against an enemy that is mostly airborne, soldiers are worse than
+useless, because each one is gold and a population slot spent on something that
+can reach nothing. The counter to an air wing is to stop building the units
+that normally carry you.
+
+That is a whole stage now. THE EYRIE fields two griffins in four, and it was
+placed there by measurement: against one griffin in three, every strategy
+performs within a whisker of every other, because a single archer already
+answers a single flyer. It takes an air *wing* before anti-air is worth a
+loadout slot.
 
 One thing worth knowing, because the game does not yet teach it: **no single
 unit type is a strategy.** An army of nothing but soldiers loses, an army of
@@ -805,6 +1023,86 @@ of somebody else. All of that is measured rather than asserted — see
 | `Accelerated renderer unavailable ...` on startup | No 3D driver available; it fell back to software rendering. Harmless — see *Graphics drivers* above. |
 | Linux: `No package 'sdl2' found` | The development headers are missing (the runtime library alone isn't enough): `sudo apt-get install libsdl2-dev libsdl2-image-dev`. |
 | Nothing opens, no error, over SSH or in CI | There's no display. Either run it locally, or set `SDL_VIDEODRIVER=dummy` to run headless. |
+
+## What Lane Battle is missing
+
+The engine's gaps are exercises. The **game's** gaps are real, and this is the
+honest list. It is ordered by what would change the most, not by effort.
+
+### Nobody has played it
+
+The largest gap by a wide margin, and it is not a feature.
+
+There are seven unit types, a hero with three exclusive upgrade paths, a
+loadout, per-unit training, spells, a castle cannon and eight tuned stages —
+all of it measured against fourteen strategies that were *invented for the
+simulator*. A thousand assertions and a campaign simulator can say the game is
+internally consistent and that no strategy dominates. Neither can say it is
+fun, and neither has ever noticed anything about how it feels.
+
+The one time a person did open it, they found in about thirty seconds that the
+entire stage-select screen was still being drawn over the battlefield — 600
+assertions had been green through every run of that bug. `run.bat lanebattle`
+is still the highest-value thing anyone can do to this project.
+
+### No art at all
+
+Lane Battle loads **zero images**. Every unit is a coloured rectangle with a
+stick figure drawn over it out of line segments, and every panel is a flat
+rect with bitmap text. That was a deliberate choice — it cost nothing and
+needed no engine work — and it is now the thing standing between this and
+looking like a game.
+
+Art needs three things the engine does not have:
+
+| Missing | Size | Notes |
+| --- | --- | --- |
+| `Animation` component + `Sprite.flip` | ~150 lines | Roadmap slice **5b**, scoped and deferred. `Sprite` already has `srcX/srcY`, so sheet slicing works; nothing advances the frame, and `SDL_FLIP_NONE` is hardcoded so a left-facing unit needs a second copy of every frame. |
+| Audio from files | small | `Audio.h` synthesises square waves in code. No music, no sound effects, no SDL_mixer. |
+| Atlas / sheet tooling | medium | `TextureCache` loads whole PNGs and owns them. Nothing packs, slices or describes a sheet. The reference game ships 2,161 unit frames; at that scale this stops being optional. |
+
+### No UI system
+
+Every panel is positioned by hand with constants. It works, and four separate
+bugs have come from two constants that had to agree being written down
+separately — the hero button over the spawn bar, the keys running out before
+the bar, the stage list over its own instructions, the loadout's empty slot.
+Each was fixed by *deriving* one constant from the other, which is the right
+patch and not a substitute for layout.
+
+With real art this gets worse rather than better. If a rewrite ever becomes
+worth it, this is the reason it will be — not the ECS, and not performance.
+
+### Balance gaps that are measured and open
+
+Run `campaign_probe` for the current numbers. As of the last retune:
+
+- **Stage 8 is a one-column wall.** Only the player using everything at once
+  wins it; the other 13 columns lose. A capstone should be hard, but a single
+  viable answer is fragile and gives the player no diagnostic.
+- **About 12% of outcomes are draws** — 400-second stalemates where neither
+  castle falls. That is the worst result for a player: not a loss you learn
+  from, just nothing happening.
+- **Carrying two specialists loses to carrying one.** The `COMBO` column
+  measures worse than either `PIKE` or `BALL`. The binding constraint is gold
+  rather than cooldowns, so more unit types splits the same purse and thins the
+  line. The loadout rewards re-equipping per stage, not a balanced kit — which
+  is a defensible design, but it was discovered rather than chosen.
+
+### No feedback when you lose
+
+A player who brings the wrong loadout to THE EYRIE — an air-heavy stage that
+wants the anti-air unit — loses without being told why. Same for committing the
+wrong hero path. Every stage now asks a specific question, and the game never
+states the question, shows what the enemy fields, or explains a defeat. This is
+cheap to add and it is what turns a difficulty spike into a lesson.
+
+### Structural, and overdue
+
+`LaneBattle.cpp` is 3,900 lines with the rules, the scenes and the UI
+interleaved. That is survivable now and it is exactly what would make any port
+painful. The roadmap flagged a decision about the repository's shape as due
+"around slice 9"; it is slice 12 and the decision has been made by drift.
 
 ## Exercises, if you want them
 

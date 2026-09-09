@@ -305,7 +305,58 @@ constexpr float kKillRewardFraction = 0.45f;
 // damage per gold", which is a number that can be compared against a unit and
 // therefore balanced. A side that shells constantly fields a smaller army,
 // which is exactly the trade that should exist.
-constexpr float kCannonCost = 30.0f;
+// Priced, and that price is load-bearing. The RANGE was the bug.
+//
+// `campaign_probe` measured this cannon firing **zero shots** — every column,
+// every stage, thirteen players, not once. So it was rebuilt, and the obvious
+// rebuild was the genre's shape: free, cooldown-limited, aimed by hand,
+// reaching the fighting instead of the gate.
+//
+// Free was measured twice and is wrong for THIS game, both times:
+//
+//   free, 760 reach   slice 8's stalemate exactly. Draws everywhere, including
+//                     the last stage drawing for the only player who could
+//                     previously win it.
+//   free, whole field WORSE. Almost every column drawing on almost every stage.
+//
+// The second run is the informative one, because it killed the theory behind
+// the first. The stalemate is not a geometry problem — it is not that a
+// partial arc draws an uncrossable line on the map, which was the hypothesis
+// and which full coverage should have removed. It is that **two guns firing
+// forever erase both armies faster than either side can accumulate one.**
+// Nobody is ever ahead, so nobody ever pushes, so the castles never fall.
+//
+// The 30-gold price is what stops that: a shell is army budget spent on
+// something other than army, so shelling has an opportunity cost and both
+// sides ration it. That was right all along. What was wrong was a reach of
+// 420 from a castle at x=100 — it stopped at x=520 on a 2400-wide field, so
+// the only enemy it could ever hit was one that had already crossed four
+// fifths of the map, which is to say an enemy you had already lost to.
+//
+// So: keep the price, fix the reach. The mechanic the reference actually
+// shares with this one is an aimed shot that reaches the FIGHT; its gun is
+// free because its battlefield is a single screen and its economy is not
+// ours. Copying that number rather than that idea is what the two runs above
+// cost.
+// Twelve, not thirty, and the arithmetic is the argument.
+//
+// With the reach fixed the gun finally fired — 36 shots on one stage, 89 on
+// another — and the GUNS column got WORSE, from four stages won to two. The
+// shells were not missing; they were being paid for at a terrible rate.
+//
+// A shell is 30 gold for about 50 damage once, counting the blast. A soldier
+// is 60 gold for 110 health it soaks AND roughly 23 damage a second for as
+// long as it survives. Per gold, the soldier is the better part of ten times
+// the weapon. Ninety shells is two and a half thousand gold — forty soldiers —
+// spent on something worth four.
+//
+// So the price has to sit where shelling is a real option rather than a
+// self-inflicted wound. Twelve gold every 3.2 seconds is 3.75 gold a second
+// against a 14/s income: about a quarter of your earnings, which is a tax you
+// can feel and can choose to stop paying. That is the rhythm the genre has,
+// and it is what "free with a cooldown" was reaching for — it is just that
+// FREE, measured twice, erases both armies and ends in a draw.
+constexpr float kCannonCost = 12.0f;
 constexpr float kCannonDamage = 26.0f;
 constexpr float kCannonBlastRadius = 46.0f;
 constexpr float kCannonCooldown = 3.2f;   // seconds between shots
@@ -313,7 +364,28 @@ constexpr float kCannonCooldown = 3.2f;   // seconds between shots
 // Deliberately less than half the distance to the middle: the cannon defends
 // the approach to your own castle, it does not contest the field. At 780 it
 // covered a third of the world from each end and there was nowhere safe left.
-constexpr float kCannonRange = 420.0f;
+// Far enough to reach the fighting.
+//
+// 420 from a castle at x=100 stopped at x=520, and the front line meets around
+// the middle of a 2400-wide world. The gun could only ever hit an enemy that
+// had already crossed four fifths of the map — which is to say, an enemy you
+// had already lost to.
+//
+// Far enough to reach the fighting, which 420 never was.
+//
+// A castle sits at x=100 on a 2400-wide field and the front lines meet around
+// the middle. 420 stopped at x=520; 1000 reaches x=1100 from your end and
+// x=1300 from theirs, so the contested middle is inside both arcs and a shot
+// can land where the battle actually is.
+//
+// This is the half of the rebuild that was genuinely broken. Reach is what
+// decides whether the weapon can be USED; the price is what decides whether
+// using it costs anything. Slice 8 fixed a stalemate by changing both at once
+// and killed the weapon with the half it did not need to change.
+//
+// Safe against castle sniping regardless of reach: `explode` only damages
+// UNITS, so a shell that lands on an enemy castle does nothing to it.
+constexpr float kCannonRange = 1000.0f;
 constexpr float kCannonFlightTime = 0.85f;
 constexpr float kCannonGravity = 900.0f;  // pixels per second per second
 
@@ -414,6 +486,19 @@ struct UpgradeKind {
 };
 
 constexpr UpgradeKind kDefaultUpgrades[] = {
+    // Left exactly as it was, and that is a result rather than an oversight.
+    //
+    // This was cheapened twice trying to make the economy matter — 80 for +5,
+    // then 45 — and both made the game WORSE, in a way worth writing down: the
+    // OPPONENT buys these too, out of true surplus, without ever risking the
+    // line it is holding. A player who buys INCOME loses the soldier that was
+    // holding theirs. So cutting the price hands the AI an economy the player
+    // still cannot safely take, and the naive on-ramp stage stopped being
+    // winnable at all.
+    //
+    // The player's economy is GRANARY, a permanent perk bought between
+    // battles. This one stays what it always was: something to spend a late
+    // surplus on when the line is already held.
     {"INCOME", 120.0f, 1.65f,   4.0f},   // extra gold per second
     {"WALLS",  150.0f, 1.70f, 260.0f},   // extra castle health, healed on purchase
     {"SUPPLY", 200.0f, 1.85f,   3.0f},   // extra population slots
@@ -550,7 +635,25 @@ int stageCount();
 //
 // Three of them, deliberately touching things the in-battle upgrades do not,
 // so the two systems are not the same choice at different speeds.
-enum class Perk { Damage, Fortify, Purse, Champion, Count };
+// GRANARY is where the economy actually works, and it is here rather than
+// in the in-battle upgrades because that is the only place it CAN work.
+//
+// The in-battle INCOME upgrade was measured in five configurations — 120 for
+// +4 and 80 for +5, each bought greedily and bought cautiously, and 45 for +5
+// capped at two levels bought early. Every one of them was inert or actively
+// harmful. Greedy buying lost stages a non-buyer won; cautious buying arrived
+// after the outcome was settled.
+//
+// The reason is structural rather than numeric, which is why no price fixed
+// it. Gold spent in a battle is gold not spent on the opening army, the
+// opening army decides the line, and kill rewards mean a lost line compounds
+// into a lost battle. An in-battle economy upgrade is therefore a bet against
+// the one mechanic the whole design rests on.
+//
+// A PERMANENT upgrade has no such competition: it is bought from the campaign
+// bank between battles, out of money that could never have been soldiers in
+// the fight it affects. Same idea, moved somewhere it is not self-defeating.
+enum class Perk { Damage, Fortify, Purse, Champion, Granary, Count };
 constexpr int kPerkCount = static_cast<int>(Perk::Count);
 
 struct PerkKind {
@@ -566,6 +669,7 @@ constexpr PerkKind kDefaultPerks[] = {
     {"RAMPARTS", "+150 CASTLE",    180.0f, 1.55f, 150.0f},
     {"TREASURY", "+40 START GOLD", 160.0f, 1.55f, 40.0f},
     {"CHAMPION", "+25% HERO",      240.0f, 1.60f, 0.25f},
+    {"GRANARY",  "+2 GOLD/S",      220.0f, 1.55f, 2.0f},
 };
 
 const PerkKind& perkKind(int perk);
@@ -1104,6 +1208,13 @@ struct Session {
     int compositionLength = 6;
     int enemyWaveSize = 3;
     float enemyIncome = 1.0f;
+
+    // What GRANARY adds to YOUR earnings, copied in when the battle starts.
+    //
+    // On the Session rather than read from the Campaign mid-fight, for the
+    // same reason the stage's numbers are: a battle is decided by one snapshot
+    // taken at the start. Yours only — the opponent earns what its stage says.
+    float bonusGoldPerSecond = 0.0f;
 
     // Counts down while the player is steering the view by hand. Above zero
     // the camera obeys the arrow keys or the drag; at zero it goes back to
