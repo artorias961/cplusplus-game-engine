@@ -195,7 +195,7 @@ build directory.
 
 | Section | Repeats | What it sets |
 | --- | --- | --- |
-| `[unit]` | once per unit type | `cost` `health` `damage` `range` `attack_delay` `speed` `cooldown` `flying` `hits_air` `width` `height` and six colour channels |
+| `[unit]` | once per unit type | `cost` `health` `damage` `range` `attack_delay` `speed` `cooldown` `flying` `hits_air` `width` `height`, six colour channels, and — when there is art — `sheet` `frame_width` `frame_height` `frame_count` `frame_seconds` |
 | `[upgrade]` | once per in-battle upgrade | `base_cost` `cost_growth` `effect` for INCOME / WALLS / SUPPLY |
 | `[stage]` | once per campaign stage | `enemy_income` `enemy_castle_health` `wave_size` `composition` |
 
@@ -1053,13 +1053,32 @@ rect with bitmap text. That was a deliberate choice — it cost nothing and
 needed no engine work — and it is now the thing standing between this and
 looking like a game.
 
-Art needs three things the engine does not have:
+**The pipeline for it is built** — slice 5b, done. A roster row can name a
+sheet and become animated art with no code change:
+
+```
+[unit]
+name          = SOLDIER
+sheet         = lanebattle/soldier.png
+frame_width   = 32
+frame_height  = 48
+frame_count   = 6
+frame_seconds = 0.09
+```
+
+`Sprite.flipX` means you draw a unit walking **one** direction and the
+opponent's copy is mirrored for free — do not draw both. And
+`ui_shots --sheet <path> <w> <h> <count>` renders any sheet as a filmstrip with
+its mirror underneath, so you can check slicing and facing before wiring
+anything up.
+
+What is still missing:
 
 | Missing | Size | Notes |
 | --- | --- | --- |
-| `Animation` component + `Sprite.flip` | ~150 lines | Roadmap slice **5b**, scoped and deferred. `Sprite` already has `srcX/srcY`, so sheet slicing works; nothing advances the frame, and `SDL_FLIP_NONE` is hardcoded so a left-facing unit needs a second copy of every frame. |
 | Audio from files | small | `Audio.h` synthesises square waves in code. No music, no sound effects, no SDL_mixer. |
-| Atlas / sheet tooling | medium | `TextureCache` loads whole PNGs and owns them. Nothing packs, slices or describes a sheet. The reference game ships 2,161 unit frames; at that scale this stops being optional. |
+| Atlas packing | medium | One sheet per unit works today. Nothing *packs* many images into one texture, which starts to matter at hundreds of units rather than seven. |
+| The art itself | — | Nobody has drawn anything. Every unit is still a coloured block. |
 
 ### No UI system
 

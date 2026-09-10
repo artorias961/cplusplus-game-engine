@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "engine/Audio.h"
+#include "engine/Resources.h"
 #include "engine/Components.h"
 #include "engine/ECS.h"
 #include "engine/Scene.h"
@@ -114,6 +115,28 @@ struct UnitKind {
 
     unsigned char leftR, leftG, leftB;     // your colours
     unsigned char rightR, rightG, rightB;  // theirs
+
+    // --- Artwork, when there is any -----------------------------------------
+    //
+    // Empty `sheet` means "draw the coloured block and the stick figure", which
+    // is every unit today: this game loads no images at all. Naming a sheet
+    // switches that unit to frame animation with no code change — which is the
+    // whole point of putting it here rather than in the renderer.
+    //
+    // A sheet is one PNG with the frames of a walk cycle laid out left to
+    // right, resolved against the executable like every other asset. Facing is
+    // handled by `Sprite.flipX`, so you draw the unit walking ONE way and the
+    // opponent's copy is mirrored for free — do not draw both.
+    //
+    // This is slice 5b, which sat deferred for ten slices because building a
+    // frame animator for art that does not exist is speculative work. The
+    // engine half is real and tested; this half is the data path, so that art
+    // arriving is a line in units.txt rather than a change to the game.
+    const char* sheet;
+    int frameWidth;
+    int frameHeight;
+    int frameCount;
+    float frameSeconds;
 };
 
 // How high the sky is. Flyers sit here instead of standing on kGroundY.
@@ -168,12 +191,12 @@ bool heroButtonHit(float screenX, float screenY);
 // filesystem. Read the live roster through `unitKind()` — never through this.
 constexpr UnitKind kDefaultUnitKinds[] = {
     // name      cost   hp     dmg   range  delay  speed  cool   w      h     fly   air    yours          theirs
-    {"RUNNER",   35.0f, 60.0f,  8.0f,  30.0f, 0.45f, 150.0f, 1.1f, 16.0f, 26.0f, false, false, 150, 215, 255, 255, 175, 150},
-    {"SOLDIER",  60.0f, 110.0f, 14.0f, 34.0f, 0.60f,  95.0f, 1.9f, 24.0f, 36.0f, false, false, 110, 190, 240, 235, 130, 110},
-    {"ARCHER",   95.0f, 55.0f,  20.0f, 135.0f, 0.95f,  70.0f, 3.0f, 18.0f, 34.0f, false, true,   90, 140, 210, 200,  95, 130},
+    {"RUNNER",   35.0f, 60.0f,  8.0f,  30.0f, 0.45f, 150.0f, 1.1f, 16.0f, 26.0f, false, false, 150, 215, 255, 255, 175, 150, nullptr, 0, 0, 0, 0.0f},
+    {"SOLDIER",  60.0f, 110.0f, 14.0f, 34.0f, 0.60f,  95.0f, 1.9f, 24.0f, 36.0f, false, false, 110, 190, 240, 235, 130, 110, nullptr, 0, 0, 0, 0.0f},
+    {"ARCHER",   95.0f, 55.0f,  20.0f, 135.0f, 0.95f,  70.0f, 3.0f, 18.0f, 34.0f, false, true,   90, 140, 210, 200,  95, 130, nullptr, 0, 0, 0, 0.0f},
     // The griffin. The only thing on this list that flies, and the reason the
     // archer stopped being optional: nothing else in the roster can touch it.
-    {"GRIFFIN", 115.0f, 95.0f,  17.0f,  40.0f, 0.70f, 112.0f, 3.6f, 26.0f, 24.0f, true,  true,  200, 170, 250, 250, 160, 200},
+    {"GRIFFIN", 115.0f, 95.0f,  17.0f,  40.0f, 0.70f, 112.0f, 3.6f, 26.0f, 24.0f, true,  true,  200, 170, 250, 250, 160, 200, nullptr, 0, 0, 0, 0.0f},
 
     // --- Three more, so that the loadout has something to choose between ----
     //
@@ -195,9 +218,9 @@ constexpr UnitKind kDefaultUnitKinds[] = {
     //   BALLISTA  the longest reach in the game and the softest body behind it.
     //             Hits air. Useless without a line in front, which is the
     //             archer's lesson taken further.
-    {"PIKEMAN",  55.0f, 105.0f, 13.0f,  46.0f, 0.70f,  88.0f, 1.8f, 20.0f, 34.0f, false, true,  120, 205, 190, 225, 145, 120},
-    {"OGRE",    160.0f, 280.0f, 30.0f,  38.0f, 1.10f,  62.0f, 4.5f, 34.0f, 46.0f, false, false, 140, 160, 235, 235, 140, 140},
-    {"BALLISTA",100.0f, 60.0f,  44.0f, 185.0f, 1.50f,  52.0f, 3.2f, 26.0f, 30.0f, false, false, 170, 195, 225, 230, 175, 155},
+    {"PIKEMAN",  55.0f, 105.0f, 13.0f,  46.0f, 0.70f,  88.0f, 1.8f, 20.0f, 34.0f, false, true,  120, 205, 190, 225, 145, 120, nullptr, 0, 0, 0, 0.0f},
+    {"OGRE",    160.0f, 280.0f, 30.0f,  38.0f, 1.10f,  62.0f, 4.5f, 34.0f, 46.0f, false, false, 140, 160, 235, 235, 140, 140, nullptr, 0, 0, 0, 0.0f},
+    {"BALLISTA",100.0f, 60.0f,  44.0f, 185.0f, 1.50f,  52.0f, 3.2f, 26.0f, 30.0f, false, false, 170, 195, 225, 230, 175, 155, nullptr, 0, 0, 0, 0.0f},
     // The hero. A roster row like any other, so it walks, fights, queues,
     // animates and is targeted by the same code as everything else — but it is
     // NOT sold from the spawn bar, does not take a number key, and never
@@ -222,7 +245,7 @@ constexpr UnitKind kDefaultUnitKinds[] = {
     // three of damage, free and instant — a decision about WHEN, which is what
     // it was always meant to be — and the probe now finds stages it does not
     // save you from.
-    {"HERO",      0.0f, 360.0f, 32.0f,  44.0f, 0.50f,  88.0f, 0.0f, 30.0f, 48.0f, false, false, 250, 235, 140, 255, 120,  90},
+    {"HERO",      0.0f, 360.0f, 32.0f,  44.0f, 0.50f,  88.0f, 0.0f, 30.0f, 48.0f, false, false, 250, 235, 140, 255, 120,  90, nullptr, 0, 0, 0, 0.0f},
 };
 constexpr int kDefaultUnitKindCount =
     static_cast<int>(sizeof(kDefaultUnitKinds) / sizeof(kDefaultUnitKinds[0]));
@@ -1330,6 +1353,15 @@ engine::Entity spawnUnit(engine::World& world, bool leftSide, int kind = 1);
 // --- Wiring ----------------------------------------------------------------
 
 void setAudioDevice(engine::AudioDevice* audio);
+
+// Where unit artwork is loaded from, when a roster row names a sheet.
+//
+// Wired the same way the audio device is, and for the same reason: the rules
+// live in a library that must run with no window, so anything owned by the
+// Engine is handed in rather than reached for. Left null — which is what every
+// test and both simulators do — a unit with a sheet simply falls back to its
+// coloured block, so nothing needs a GPU to be tested.
+void setTextureCache(engine::TextureCache* textures);
 
 // --- Scenes ----------------------------------------------------------------
 

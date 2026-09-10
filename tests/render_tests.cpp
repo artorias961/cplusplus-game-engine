@@ -26,16 +26,19 @@
 // ---------------------------------------------------------------------------
 
 #include <SDL.h>
+#include <SDL_image.h>
 
 #include <cstdio>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "engine/Components.h"
 #include "engine/ECS.h"
 #include "engine/Engine.h"
 #include "engine/Font.h"
+#include "engine/Systems.h"
 
 using namespace engine;
 
@@ -121,6 +124,81 @@ int firstLitColumn(char character) {
         if (glyphPixel(glyph, col, 0)) return col;
     }
     return -1;
+}
+
+// --- Textures, for the two tests that need real artwork ---------------------
+//
+// Everything else in this file draws untextured shapes, which is most of what
+// the renderer does. Flipping and frame animation are the two things that only
+// mean anything with an image, so these write one.
+//
+// Written to a PNG and loaded back through `TextureCache` rather than handed
+// to SDL directly, because that is the path a game uses: resolve against the
+// executable, decode, cache. A test that builds a texture some other way would
+// prove the flip works and say nothing about whether a loaded sheet does.
+
+// A two-frame sheet, 8 pixels per frame and 8 tall.
+//
+// Frame 0 is red on its LEFT half and black on its right; frame 1 is green on
+// its left. Both halves matter: the asymmetry is what makes a mirror visible
+// (a symmetric image flips to itself and proves nothing), and the two colours
+// are what make a frame change visible.
+std::string writeTestSheet() {
+    SDL_Surface* surface =
+        SDL_CreateRGBSurfaceWithFormat(0, 16, 8, 32, SDL_PIXELFORMAT_RGBA32);
+    if (!surface) return {};
+
+    auto put = [&](int x, int y, Uint32 colour) {
+        static_cast<Uint32*>(surface->pixels)[y * (surface->pitch / 4) + x] =
+            colour;
+    };
+    const Uint32 red = SDL_MapRGBA(surface->format, 220, 40, 40, 255);
+    const Uint32 green = SDL_MapRGBA(surface->format, 40, 220, 40, 255);
+    const Uint32 black = SDL_MapRGBA(surface->format, 0, 0, 0, 255);
+
+    for (int y = 0; y < 8; ++y) {
+        for (int x = 0; x < 16; ++x) {
+            const bool leftHalfOfItsFrame = (x % 8) < 4;
+            const bool secondFrame = x >= 8;
+            put(x, y, leftHalfOfItsFrame ? (secondFrame ? green : red) : black);
+        }
+    }
+
+    // Written to an absolute path, but the RELATIVE name is handed back —
+    // `TextureCache::load` resolves against the executable itself, so giving
+    // it an already-absolute path prefixes the base directory twice and finds
+    // nothing. Which is exactly what happened, and is the reason to load
+    // through the cache rather than around it: the test met the same rule a
+    // game would.
+    const char* name = "render_test_sheet.png";
+
+    std::string path = name;
+    if (char* base = SDL_GetBasePath()) {
+        path = std::string(base) + name;
+        SDL_free(base);
+    }
+    const bool saved = IMG_SavePNG(surface, path.c_str()) == 0;
+    SDL_FreeSurface(surface);
+    return saved ? std::string(name) : std::string{};
+}
+
+// A sprite showing one 8x8 frame of that sheet, drawn at twice its size so a
+// half is four screen pixels wide and easy to point at.
+Entity addSheetSprite(World& world, Engine& engine, const std::string& path,
+                      float x, float y) {
+    Entity entity = world.createEntity();
+    world.addComponent(entity, Transform{x, y, 0.0f});
+
+    Sprite sprite;
+    sprite.texture = engine.textures().load(path);
+    sprite.width = 16;
+    sprite.height = 16;
+    sprite.srcX = 0;
+    sprite.srcY = 0;
+    sprite.srcW = 8;
+    sprite.srcH = 8;
+    world.addComponent(entity, sprite);
+    return entity;
 }
 
 // --- The tests -------------------------------------------------------------
@@ -369,6 +447,77 @@ void testIncompleteEntitiesAreSkipped(Engine& engine) {
           "components without a Transform are skipped, not drawn or crashed on");
 }
 
+// --- Slice 5b: flipping and frame animation, checked in pixels -------------
+
+void testFlipXMirrorsTheArtwork(Engine& engine) {
+    const std::string sheet = writeTestSheet();
+    check(!sheet.empty(), "a test sprite sheet can be written");
+    if (sheet.empty()) return;
+
+    // Unflipped: the frame is red on its left half, black on its right. Drawn
+    // 16 wide at (40,40), so x=42 is inside the left half and x=53 the right.
+    {
+        World world;
+        const Entity entity = addSheetSprite(world, engine, sheet, 40.0f, 40.0f);
+        check(world.getComponent<Sprite>(entity)->texture != nullptr,
+              "and loaded back through the texture cache");
+
+        const Frame frame = drawOnce(engine, world);
+        check(frame.at(42, 44) == rgb(220, 40, 40),
+              "an unflipped sprite paints its left half on the left");
+        check(frame.at(53, 44) == rgb(0, 0, 0),
+              "and its right half on the right");
+    }
+
+    // Flipped: the same two probes should report the opposite colours. This is
+    // the whole of `Sprite.flipX`, and it is worth a pixel test rather than a
+    // field test because the field existing proves nothing — the renderer
+    // hardcoded SDL_FLIP_NONE for four games and would have gone on ignoring
+    // it silently.
+    {
+        World world;
+        const Entity entity = addSheetSprite(world, engine, sheet, 40.0f, 40.0f);
+        world.getComponent<Sprite>(entity)->flipX = true;
+
+        const Frame frame = drawOnce(engine, world);
+        check(frame.at(53, 44) == rgb(220, 40, 40),
+              "flipX moves the left half of the artwork to the right");
+        check(frame.at(42, 44) == rgb(0, 0, 0),
+              "and the right half to the left");
+    }
+}
+
+void testAnimationChangesWhatIsActuallyDrawn(Engine& engine) {
+    const std::string sheet = writeTestSheet();
+    if (sheet.empty()) return;
+
+    World world;
+    const Entity entity = addSheetSprite(world, engine, sheet, 40.0f, 40.0f);
+
+    Animation animation;
+    animation.frameCount = 2;
+    animation.secondsPerFrame = 0.1f;
+    world.addComponent(entity, animation);
+
+    const Frame first = drawOnce(engine, world);
+    check(first.at(42, 44) == rgb(220, 40, 40), "frame 0 is the red one");
+
+    // Through RunBuiltinSystems, so this also proves a game gets animation
+    // without asking for it.
+    RunBuiltinSystems(world, 0.1f);
+
+    const Frame second = drawOnce(engine, world);
+    check(second.at(42, 44) == rgb(40, 220, 40),
+          "advancing a frame changes the pixels that reach the screen");
+
+    // The link this is really testing is Animation -> Sprite.srcX -> the source
+    // rectangle SDL samples. Every step of that could be right in isolation
+    // and still not connect, which is how the parallax factor was nearly
+    // applied to the wrong axis.
+    check(world.getComponent<Sprite>(entity)->srcX == 8,
+          "because the source rectangle moved along the sheet");
+}
+
 void testPolygonsDraw(Engine& engine) {
     World world;
     Entity entity = world.createEntity();
@@ -433,6 +582,9 @@ int main() {
     testAnEmptyWorldDrawsNothing(*engine);
     testIncompleteEntitiesAreSkipped(*engine);
     testPolygonsDraw(*engine);
+
+    testFlipXMirrorsTheArtwork(*engine);
+    testAnimationChangesWhatIsActuallyDrawn(*engine);
 
     if (failures == 0) {
         std::printf("all %d checks passed\n", checks);

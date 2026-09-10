@@ -38,6 +38,7 @@ namespace lanebattle {
 namespace {
 
 AudioDevice* audioDevice = nullptr;
+TextureCache* textureCache = nullptr;
 
 // Where each side's castle stands, and where its units appear just clear of
 // it. All measured against the WORLD, not the window — the window is only how
@@ -862,6 +863,21 @@ bool loadBalance(const std::string& path) {
         kind.rightR = channel(*section, "right_r", kind.rightR);
         kind.rightG = channel(*section, "right_g", kind.rightG);
         kind.rightB = channel(*section, "right_b", kind.rightB);
+
+        // Artwork. Naming a sheet is what turns a unit from a coloured block
+        // into frame animation, and it is the only field here that needs its
+        // string to outlive the DataFile — hence the same owned-strings list
+        // the unit names use.
+        if (section->has("sheet")) {
+            gLoadedNames.push_back(
+                std::make_unique<std::string>(section->text("sheet", "")));
+            const std::string& owned = *gLoadedNames.back();
+            kind.sheet = owned.empty() ? nullptr : owned.c_str();
+        }
+        kind.frameWidth = section->integer("frame_width", kind.frameWidth);
+        kind.frameHeight = section->integer("frame_height", kind.frameHeight);
+        kind.frameCount = section->integer("frame_count", kind.frameCount);
+        kind.frameSeconds = section->number("frame_seconds", kind.frameSeconds);
     }
 
     // Stages, unlike units, are REPLACED rather than merged. A campaign is an
@@ -1324,7 +1340,47 @@ Entity spawnUnit(World& world, bool leftSide, int kind) {
         sprite.r = stats.rightR; sprite.g = stats.rightG; sprite.b = stats.rightB;
     }
     sprite.layer = kFieldLayer;
+
+    // Artwork, if this row has any and anything has handed us a texture cache.
+    //
+    // Both conditions matter. No sheet is every unit today. No cache is every
+    // test and both simulators, which run with no window at all — and a unit
+    // that silently fell back to a block there is exactly right, because what
+    // those measure is the fight, not the picture.
+    bool animated = false;
+    if (textureCache && stats.sheet && stats.sheet[0] != '\0' &&
+        stats.frameWidth > 0 && stats.frameHeight > 0) {
+        if (SDL_Texture* texture = textureCache->load(stats.sheet)) {
+            sprite.texture = texture;
+            sprite.srcX = 0;
+            sprite.srcY = 0;
+            sprite.srcW = stats.frameWidth;
+            sprite.srcH = stats.frameHeight;
+
+            // The tint is dropped for real artwork. r/g/b multiply into a
+            // texture, so leaving a unit's team colour in place would wash
+            // every drawn frame with it; sides are told apart by which way
+            // they face instead.
+            sprite.r = sprite.g = sprite.b = 255;
+
+            // Drawn walking one way and mirrored for the other, which is the
+            // whole reason Sprite.flipX exists: an artist draws one direction.
+            sprite.flipX = !leftSide;
+            animated = true;
+        }
+    }
+
     world.addComponent(unit, sprite);
+
+    if (animated) {
+        Animation animation;
+        animation.frameCount = std::max(1, stats.frameCount);
+        animation.frameWidth = stats.frameWidth;
+        animation.secondsPerFrame =
+            stats.frameSeconds > 0.0f ? stats.frameSeconds : 0.12f;
+        animation.loop = true;
+        world.addComponent(unit, animation);
+    }
 
     world.addComponent(unit, Team{leftSide});
 
@@ -1339,7 +1395,16 @@ Entity spawnUnit(World& world, bool leftSide, int kind) {
     component.maxHealth = stats.health * trained;
     component.hitsAir = stats.hitsAir;  // the hero's path may override this
     world.addComponent(unit, component);
-    world.getComponent<Unit>(unit)->figure = createFigure(world, unit, sprite);
+    // The stick figure is what stands in FOR artwork, so a unit that has
+    // artwork does not get one. Drawing both would put a line drawing over the
+    // top of the frame it was invented to replace.
+    //
+    // `figure` stays kInvalidEntity in that case, which every path already
+    // copes with: a death checks it before destroying it, and animateUnits
+    // walks the figures that exist rather than assuming one per unit.
+    if (!animated) {
+        world.getComponent<Unit>(unit)->figure = createFigure(world, unit, sprite);
+    }
 
     // A different pitch per kind, so you can hear what you just sent without
     // looking away from the front line.
@@ -1351,6 +1416,8 @@ Entity spawnUnit(World& world, bool leftSide, int kind) {
 }
 
 void setAudioDevice(AudioDevice* audio) { audioDevice = audio; }
+
+void setTextureCache(TextureCache* textures) { textureCache = textures; }
 
 namespace {
 
@@ -2571,7 +2638,13 @@ private:
         // while the opponent waited until it could afford a wave and an
         // upgrade it no longer needed to pay for. Asymmetry in a mechanic both
         // sides own is the bug slice 1 and slice 3 were both lost to.
-        if (kCannonCost > 0.0f) {
+        //
+        // `if constexpr` because kCannonCost is a compile-time constant, and a
+        // plain `if` on one is a warning this project does not carry. The
+        // branch stays rather than being deleted: the price has already been
+        // set to zero twice during tuning, and this is the line that keeps the
+        // opponent honest when it is.
+        if constexpr (kCannonCost > 0.0f) {
             const int nextUpgrade = cheapestUpgradeFor(session, false);
             const float reserve =
                 waveCost(session) +

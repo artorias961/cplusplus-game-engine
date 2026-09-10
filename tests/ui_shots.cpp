@@ -112,13 +112,87 @@ struct Battle {
 
 }  // namespace
 
+// --- Sheet preview ----------------------------------------------------------
+//
+// The one thing a hand-rolled engine genuinely lacks for art work is a way to
+// LOOK at an animation without first wiring it into the game. A mature engine
+// gives you a preview pane; here it is forty lines, in the same idiom as
+// everything else in this folder — render it headlessly and write a PNG.
+//
+// It answers the two questions a delivered sheet raises: are my frames sliced
+// where I think they are, and does mirroring look right? Both are geometry,
+// both are invisible until drawn, and both are the sort of thing that
+// otherwise gets found after an artist has drawn thirty of them.
+//
+//     ui_shots --sheet lanebattle/soldier.png 32 48 6
+//
+// The path resolves against the binary, like every other asset.
+int previewSheet(Engine& engine, const char* path, int frameWidth,
+                 int frameHeight, int frameCount) {
+    SDL_Texture* texture = engine.textures().load(path);
+    if (!texture) {
+        std::printf("  could not load %s (it resolves against the binary,\n"
+                    "  so it wants to be next to %s)\n",
+                    path, gOutputDirectory.c_str());
+        return 1;
+    }
+
+    // Big enough to read, small enough to fit the window. A sheet wider than
+    // the preview is scaled down rather than cropped, because a cropped
+    // filmstrip silently hides the frames that did not fit.
+    const int margin = 20;
+    int scale = 4;
+    while (scale > 1 &&
+           (frameCount * frameWidth * scale + margin * 2 > lanebattle::kWindowWidth ||
+            frameHeight * scale * 2 + margin * 3 > lanebattle::kWindowHeight)) {
+        --scale;
+    }
+
+    World world;
+    for (int frame = 0; frame < frameCount; ++frame) {
+        // Row one as drawn, row two mirrored — the pair a unit needs, from the
+        // one direction an artist has to draw.
+        for (int flipped = 0; flipped < 2; ++flipped) {
+            Entity entity = world.createEntity();
+            world.addComponent(
+                entity,
+                Transform{static_cast<float>(margin + frame * frameWidth * scale),
+                          static_cast<float>(margin +
+                                             flipped * (frameHeight * scale + margin)),
+                          0.0f});
+
+            Sprite sprite;
+            sprite.texture = texture;
+            sprite.width = frameWidth * scale;
+            sprite.height = frameHeight * scale;
+            sprite.srcX = frame * frameWidth;
+            sprite.srcY = 0;
+            sprite.srcW = frameWidth;
+            sprite.srcH = frameHeight;
+            sprite.flipX = flipped != 0;
+            sprite.screenSpace = true;
+            world.addComponent(entity, sprite);
+        }
+    }
+
+    std::printf("\n%s: %d frames of %dx%d, shown at %dx\n"
+                "  top row as drawn, bottom row mirrored by Sprite.flipX\n\n",
+                path, frameCount, frameWidth, frameHeight, scale);
+    shoot(engine, world, "sheet-preview");
+    return 0;
+}
+
 int main(int argc, char** argv) {
     // No window, no GPU. Set before the Engine touches SDL_Init.
     SDL_setenv("SDL_VIDEODRIVER", "dummy", 1);
     SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
     SDL_SetMainReady();
 
-    if (argc > 1) {
+    // `--sheet` is a different job from the screen tour, so it does not take
+    // the output directory as argv[1]; it always writes beside the binary.
+    const bool sheetMode = argc > 1 && std::strcmp(argv[1], "--sheet") == 0;
+
+    if (argc > 1 && !sheetMode) {
         gOutputDirectory = argv[1];
     } else if (char* base = SDL_GetBasePath()) {
         gOutputDirectory = std::string(base) + "ui_shots";
@@ -143,6 +217,18 @@ int main(int argc, char** argv) {
     lanebattle::loadBalance(lanebattle::kBalancePath);
 
     Engine engine("ui shots", lanebattle::kWindowWidth, lanebattle::kWindowHeight);
+
+    if (sheetMode) {
+        if (argc < 6) {
+            std::printf("\nusage: ui_shots --sheet <path> <frameW> <frameH> "
+                        "<frameCount>\n"
+                        "  e.g. ui_shots --sheet lanebattle/soldier.png 32 48 6\n"
+                        "  the path resolves against this binary, like any asset\n\n");
+            return 1;
+        }
+        return previewSheet(engine, argv[2], SDL_atoi(argv[3]),
+                            SDL_atoi(argv[4]), SDL_atoi(argv[5]));
+    }
 
     std::printf("\nWriting screens to %s\n\n", gOutputDirectory.c_str());
 

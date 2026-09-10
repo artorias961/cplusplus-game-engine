@@ -243,8 +243,14 @@ void Engine::drawSprite(World& world, Entity entity, const Camera& camera) {
             // destination rectangle, which is what you almost always want.
             const double degrees =
                 static_cast<double>(transform.rotation) * 180.0 / kPi;
+
+            // Mirroring is free here and expensive in art: SDL flips the
+            // sampling, so a unit facing left costs nothing extra, where
+            // drawing every left-facing frame by hand would double the sheet.
+            const SDL_RendererFlip flip =
+                sprite.flipX ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
             SDL_RenderCopyEx(renderer_, sprite.texture, sourcePtr, &rect,
-                             degrees, nullptr, SDL_FLIP_NONE);
+                             degrees, nullptr, flip);
         } else {
             // Note that a plain colored rectangle ignores rotation: SDL fills
             // axis-aligned rects only. Rotating untextured shapes is what the

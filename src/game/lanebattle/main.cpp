@@ -34,6 +34,11 @@ int main(int, char**) {
 
     lanebattle::setAudioDevice(&gameEngine.audio());
 
+    // Where unit sheets load from, if any roster row names one. Left unset in
+    // tests and the simulators, which have no window and want the fight rather
+    // than the picture.
+    lanebattle::setTextureCache(&gameEngine.textures());
+
     engine::SceneStack scenes;
     scenes.push(lanebattle::makeTitleScene());
 

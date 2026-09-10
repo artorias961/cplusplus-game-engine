@@ -2090,6 +2090,88 @@ void testTheShippedTableMatchesTheCompiledDefaults() {
     lanebattle::resetBalance();
 }
 
+// --- Artwork (slice 5b) ----------------------------------------------------
+
+// A roster row can name a sprite sheet, and that is the whole art pipeline.
+//
+// The engine half of slice 5b — the Animation component and Sprite.flipX — is
+// tested in engine_tests and render_tests, in logic and in pixels. This is the
+// half that matters to the game: when art arrives it should be a line in
+// units.txt, not a change to any code.
+void testARosterRowCanNameArtwork() {
+    lanebattle::resetBalance();
+    const std::string path = writeRoster("lb_art.txt", R"(
+[unit]
+name = SOLDIER
+sheet = lanebattle/soldier.png
+frame_width = 32
+frame_height = 48
+frame_count = 6
+frame_seconds = 0.09
+)");
+    check(lanebattle::loadBalance(path), "a roster naming artwork loads");
+
+    const lanebattle::UnitKind& soldier = stats(kSoldier);
+    check(soldier.sheet != nullptr &&
+              std::string(soldier.sheet) == "lanebattle/soldier.png",
+          "the sheet path survives the load");
+    check(soldier.frameWidth == 32 && soldier.frameHeight == 48,
+          "and so do the frame dimensions");
+    check(soldier.frameCount == 6, "and the frame count");
+    check(std::fabs(soldier.frameSeconds - 0.09f) < 0.001f,
+          "and how long a frame lasts");
+
+    // Merging still works: naming artwork must not disturb the balance, or
+    // adding art would silently be a retune.
+    check(soldier.cost == lanebattle::kDefaultUnitKinds[kSoldier].cost,
+          "and naming artwork changes none of the unit's numbers");
+
+    // Every other row is untouched, since [unit] merges by name.
+    check(stats(kRunner).sheet == nullptr,
+          "a row that names no sheet still has none");
+
+    lanebattle::resetBalance();
+}
+
+// With no texture cache — every test, and both simulators — a unit with a
+// sheet falls back to its coloured block and keeps its stick figure.
+//
+// This is what lets the whole suite and 800 simulated battles run with no
+// window and no GPU. If naming artwork made a headless spawn fail, or made it
+// silently textureless AND figureless, the game would be untestable the moment
+// art existed.
+void testArtworkIsOptionalWithoutATextureCache() {
+    lanebattle::resetBalance();
+    const std::string path = writeRoster("lb_art_headless.txt", R"(
+[unit]
+name = SOLDIER
+sheet = lanebattle/soldier.png
+frame_width = 32
+frame_height = 48
+frame_count = 6
+)");
+    check(lanebattle::loadBalance(path), "the roster loads");
+
+    World world;
+    SceneStack scenes;
+    harness::Harness driver(world, scenes);
+    scenes.push(lanebattle::makePlayScene());
+    driver.step(2);
+
+    const Entity unit = lanebattle::spawnUnit(world, true, kSoldier);
+    driver.step();
+
+    const Sprite* sprite = world.getComponent<Sprite>(unit);
+    check(sprite != nullptr && sprite->texture == nullptr,
+          "with no texture cache the unit is drawn as a block");
+    check(world.getComponent<Unit>(unit)->figure != kInvalidEntity,
+          "and keeps the stick figure that stands in for artwork");
+    check(!world.hasComponent<Animation>(unit),
+          "and gets no Animation it could not use");
+
+    lanebattle::resetBalance();
+}
+
 // --- The castle cannon (slice 8) -------------------------------------------
 
 // Turns a world position into the screen position that would be clicked to
@@ -4940,6 +5022,8 @@ int main() {
     testEveryVisibleSlotHasAKeyThatSendsIt();
     testTheShippedRosterIsSane();
     testTheShippedTableMatchesTheCompiledDefaults();
+    testARosterRowCanNameArtwork();
+    testArtworkIsOptionalWithoutATextureCache();
 
     testClickingTheFieldFiresTheCannon();
     testAnEmptyPurseFiresNothing();

@@ -112,6 +112,19 @@ struct Sprite {
     int srcW = 0;  // 0 means "use the whole texture"
     int srcH = 0;
 
+    // Draw the artwork mirrored left-to-right.
+    //
+    // This is the cheapest component field in the engine and it halves how much
+    // art a game needs. Without it a unit that can face either way needs a
+    // second copy of every single frame drawn, mirrored by hand — and the
+    // reference game this project is chasing ships 2,161 unit frames, so "twice
+    // as many" is not a rounding error.
+    //
+    // Only the horizontal axis, because that is what facing means in a
+    // side-on 2D game. A vertical flip is a real thing SDL can do and nothing
+    // here has ever wanted one, so it is not here.
+    bool flipX = false;
+
     int layer = 0;
     bool screenSpace = false;  // ignore the Camera; draw at fixed coordinates
     float parallax = 1.0f;     // how much of the camera's movement applies
@@ -179,6 +192,46 @@ struct CircleCollider {
 // list in every game that needs it.
 struct Lifetime {
     float secondsRemaining = 1.0f;
+};
+
+// Walks a Sprite along a row of a sprite sheet.
+//
+// A sheet is one image holding every frame of an animation side by side, and
+// `Sprite` could already select one of them: `srcX/srcY/srcW/srcH` cut a
+// rectangle out of a texture. What was missing was anything to MOVE that
+// rectangle over time, so a game had to advance the frame itself, every frame,
+// for every animated thing it owned.
+//
+// This component and its system are the whole of that. It only ever writes
+// `Sprite.srcX`, which is the deliberate limit: frames run left to right along
+// one row, and WHICH row — walking, attacking, dying — is the game's decision,
+// made by setting `Sprite.srcY`. A component that also picked the animation
+// would need to know what animations mean, and that is a game's business.
+//
+// This was slice 5b on the roadmap and it sat deferred for ten slices with the
+// note "owed the moment there are sprites", because building a frame animator
+// for art that does not exist is exactly the speculative work this project
+// keeps declining. It is here now because art is coming.
+struct Animation {
+    int frameCount = 1;
+
+    // Width of one frame in the sheet. Zero means "use Sprite.srcW", which is
+    // the common case: a sheet of equal tiles where the Sprite is already
+    // cropped to one of them.
+    int frameWidth = 0;
+
+    float secondsPerFrame = 0.1f;
+
+    // A looping animation runs forever; a one-shot stops on its last frame and
+    // clears `playing`, so a game can notice a death or an attack has finished
+    // by asking rather than by timing it itself.
+    bool loop = true;
+    bool playing = true;
+
+    // Where it has got to. Written by AnimationSystem; set `frame` to 0 and
+    // `elapsed` to 0 to restart one.
+    float elapsed = 0.0f;
+    int frame = 0;
 };
 
 // A line of text drawn at the entity's Transform, in the built-in bitmap

@@ -47,12 +47,60 @@ inline void LifetimeSystem(World& world, float dt) {
     }
 }
 
+// Advances every Animation and writes the frame it lands on into its Sprite.
+//
+// The loop that consumes `elapsed` is a `while` rather than an `if` on purpose,
+// for the same reason TickTimer's is: a frame that ran long owes more than one
+// step, and dropping the remainder makes an animation quietly run slow whenever
+// the machine is busy. Banking it instead keeps a walk cycle the same length in
+// wall-clock seconds however the frame rate wanders.
+inline void AnimationSystem(World& world, float dt) {
+    for (auto& [entity, animation] : world.view<Animation>()) {
+        Sprite* sprite = world.getComponent<Sprite>(entity);
+        if (!sprite) continue;  // an Animation with nothing to animate
+
+        // Guarded rather than assumed: `frameCount` and `secondsPerFrame` are
+        // the sort of numbers a data file supplies, and a zero interval would
+        // spin the while-loop below forever.
+        if (!animation.playing || animation.frameCount <= 1 ||
+            animation.secondsPerFrame <= 0.0f) {
+            continue;
+        }
+
+        animation.elapsed += dt;
+        while (animation.elapsed >= animation.secondsPerFrame) {
+            animation.elapsed -= animation.secondsPerFrame;
+            ++animation.frame;
+
+            if (animation.frame < animation.frameCount) continue;
+
+            if (animation.loop) {
+                animation.frame = 0;
+            } else {
+                // Held on the last frame rather than wrapping or vanishing: a
+                // death animation should leave a corpse in its final pose, and
+                // clearing `playing` is how the game knows it may now be
+                // cleaned up.
+                animation.frame = animation.frameCount - 1;
+                animation.playing = false;
+                animation.elapsed = 0.0f;
+                break;
+            }
+        }
+
+        const int width =
+            animation.frameWidth > 0 ? animation.frameWidth : sprite->srcW;
+        sprite->srcX = animation.frame * width;
+    }
+}
+
 // The systems the engine runs for every game, in the order it runs them.
 // Engine::run calls this, and so does anything driving the world without a
 // window — a test, a headless replay — so the two can't drift apart.
 inline void RunBuiltinSystems(World& world, float dt) {
     MovementSystem(world, dt);
     LifetimeSystem(world, dt);
+    AnimationSystem(world, dt);
 }
 
 }  // namespace engine

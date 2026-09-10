@@ -1092,6 +1092,98 @@ happened rather than what was asked for.
   whether or not it is on screen. SDL clips, so it is correct, and the
   measured frame cost says it is not worth an early-out yet.
 
+## Slice 5b, ten slices late and on purpose
+
+The oldest open row on the roadmap, deferred since slice 5 with the note *"owed
+the moment there are sprites"*. It was built when art was **committed to**
+rather than when it arrived, which is a slightly different trigger and worth
+being honest about: there is still no artwork in this game.
+
+### What the engine gained — exactly what the row predicted
+
+**`Animation`** — a component plus a system advancing `Sprite.srcX`, run from
+`RunBuiltinSystems` so a game gets it without asking. It writes `srcX` and
+nothing else, deliberately: frames run left to right along one row, and *which*
+row — walking, attacking, dying — is the game's decision, made by setting
+`srcY`. A component that also picked the animation would have to know what
+animations mean.
+
+Two details that are not decoration. The time-banking loop is a `while` rather
+than an `if`, for the reason `TickTimer` documents — a frame that ran long owes
+more than one step, and dropping the remainder makes every animation quietly
+run slow exactly when the machine is busy. And a one-shot holds its last frame
+and clears `playing`, so a death leaves a corpse in its final pose and the game
+can *ask* whether an attack finished rather than timing it independently.
+
+**`Sprite.flipX`** — the cheapest field in the engine, and it halves how much
+art a game needs. `SDL_FLIP_NONE` was hardcoded for four games, so a unit that
+faces both ways needed a second hand-mirrored copy of every frame. The
+reference ships 2,161 unit frames; "twice as many" is not a rounding error.
+
+### What the game gained, which is the part that matters
+
+A roster row in `units.txt` can name a sheet:
+
+    [unit]
+    name         = SOLDIER
+    sheet        = lanebattle/soldier.png
+    frame_width  = 32
+    frame_height = 48
+    frame_count  = 6
+    frame_seconds = 0.09
+
+That is the entire art pipeline. Naming a sheet swaps the coloured block for
+animated frames, drops the team tint (which would otherwise wash the artwork),
+sets `flipX` from the unit's side, and suppresses the stick figure that was
+standing in for art all along.
+
+Building only the engine half would have been the speculative work this project
+keeps declining — a frame animator nothing can reach. The rule is that the game
+pulls features out of the engine, so the game pulls this one.
+
+**With no texture cache it all falls back**, which is every test and both
+simulators: they run with no window, and a unit there is still a block with a
+figure. That is what keeps 700 assertions and 800 simulated battles running
+headlessly now that art is possible.
+
+### The preview pane, in forty lines
+
+The real gap a hand-rolled engine has for art work is not the animator — it is
+that you cannot *look* at an animation without first wiring it into the game. A
+mature engine gives you a preview pane.
+
+    ui_shots --sheet lanebattle/soldier.png 32 48 6
+
+Renders every frame side by side, with the mirrored row underneath, into a PNG.
+It answers the two questions a delivered sheet raises — are my frames sliced
+where I think they are, and does mirroring look right — both of which are
+geometry, invisible until drawn, and otherwise found after an artist has drawn
+thirty of them.
+
+### How it was verified, given there is nothing to animate
+
+Three levels, because "the field exists" proves nothing:
+
+- **Logic** (`engine_tests`, +17 checks): frames advance, loops wrap, one-shots
+  hold and stop, a long frame pays out every interval it contained, and the
+  numbers a data file could supply — a zero interval, a single frame, an
+  Animation with no Sprite — are guarded rather than trusted.
+- **Pixels** (`render_tests`, +9 checks): the test *writes a two-frame PNG*,
+  loads it back through `TextureCache`, and asserts that flipping moves the
+  red half from left to right and that advancing a frame changes the colour
+  reaching the screen. The renderer ignored `SDL_FLIP_NONE` for four games; a
+  field test would have kept ignoring it silently.
+- **Data path** (`lanebattle_tests`, +11 checks): a sheet named in a roster
+  file survives the load, changes none of the unit's balance numbers, and
+  degrades to a block when there is no texture cache.
+
+Writing the PNG caught a real mistake immediately: the test first handed
+`TextureCache::load` an absolute path, and the cache resolves against the
+executable, so it prefixed the base directory twice and found nothing. Loading
+*through* the cache rather than around it is what met that rule — a test that
+built a texture some other way would have proved the flip worked and said
+nothing about whether a delivered sheet does.
+
 ## The cannon, and the economy
 
 Two systems the probe had measured as dead: the cannon fired **zero shots** in

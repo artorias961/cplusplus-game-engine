@@ -157,6 +157,19 @@ runs on a machine with no graphics hardware, same dummy-driver trick as
 the whole point — the bug class it exists for is the one no assertion catches.
 The first run of it found five things, four of which had shipped for months.
 
+It also previews sprite sheets, which is the closest thing this engine has to
+an animation editor:
+
+```bash
+./build/Release/ui_shots --sheet lanebattle/soldier.png 32 48 6
+```
+
+Every frame side by side, with the mirrored row underneath, into
+`ui_shots/sheet-preview.png`. It answers the two questions a delivered sheet
+raises — are the frames sliced where you think, and does mirroring look right —
+before any of it is wired into a unit. The path resolves against the binary,
+like every other asset.
+
 ## campaign_probe — is the campaign asking anything?
 
 The throwaway version of this (below) got run enough times that it stopped

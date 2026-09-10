@@ -460,6 +460,145 @@ void testLifetimeSystem() {
     check(world.hasComponent<Lifetime>(longLived), "other entities are untouched");
 }
 
+// --- Animation (slice 5b) --------------------------------------------------
+
+namespace {
+
+// A sprite cropped to one 16-pixel tile of a sheet, with an animation over it.
+Entity animatedSprite(World& world, int frames, float secondsPerFrame,
+                      bool loop) {
+    Entity entity = world.createEntity();
+
+    Sprite sprite;
+    sprite.srcW = 16;
+    sprite.srcH = 16;
+    world.addComponent(entity, sprite);
+
+    Animation animation;
+    animation.frameCount = frames;
+    animation.secondsPerFrame = secondsPerFrame;
+    animation.loop = loop;
+    world.addComponent(entity, animation);
+
+    return entity;
+}
+
+}  // namespace
+
+void testAnimationWalksTheSheet() {
+    World world;
+    const Entity entity = animatedSprite(world, 4, 0.1f, true);
+
+    check(world.getComponent<Sprite>(entity)->srcX == 0, "it starts on frame 0");
+
+    AnimationSystem(world, 0.1f);
+    check(world.getComponent<Animation>(entity)->frame == 1,
+          "a full interval advances one frame");
+    check(world.getComponent<Sprite>(entity)->srcX == 16,
+          "and moves the source rectangle one frame along the sheet");
+
+    // Half an interval is not a frame. Without banked time this would either
+    // round up and run fast, or round down and never advance at all.
+    AnimationSystem(world, 0.05f);
+    check(world.getComponent<Animation>(entity)->frame == 1,
+          "half an interval advances nothing");
+    AnimationSystem(world, 0.05f);
+    check(world.getComponent<Animation>(entity)->frame == 2,
+          "and the two halves together advance one");
+}
+
+void testALoopingAnimationWrapsAndAOneShotHolds() {
+    World world;
+    const Entity looping = animatedSprite(world, 3, 0.1f, true);
+    const Entity once = animatedSprite(world, 3, 0.1f, false);
+
+    AnimationSystem(world, 0.35f);  // three intervals and a bit
+
+    check(world.getComponent<Animation>(looping)->frame == 0,
+          "a looping animation wraps back to the start");
+    check(world.getComponent<Animation>(looping)->playing,
+          "and keeps playing");
+
+    check(world.getComponent<Animation>(once)->frame == 2,
+          "a one-shot holds its last frame");
+    check(!world.getComponent<Animation>(once)->playing,
+          "and stops, so a game can notice it finished");
+    check(world.getComponent<Sprite>(once)->srcX == 32,
+          "with the sprite left showing that last frame");
+
+    // A stopped animation stays stopped however long the world runs.
+    AnimationSystem(world, 10.0f);
+    check(world.getComponent<Animation>(once)->frame == 2,
+          "and does not creep once stopped");
+}
+
+void testALongFrameOwesEveryFrameItSkipped() {
+    World world;
+    const Entity entity = animatedSprite(world, 8, 0.1f, true);
+
+    // One stalled frame worth half a second. An `if` instead of a `while`
+    // would advance one frame and silently drop the other four, which makes
+    // every animation run slow exactly when the machine is busy.
+    AnimationSystem(world, 0.5f);
+    check(world.getComponent<Animation>(entity)->frame == 5,
+          "a long frame pays out every interval it contained");
+}
+
+void testAnimationRefusesNumbersThatWouldHangIt() {
+    World world;
+
+    // Zero seconds per frame is an infinite rate, and the while-loop that
+    // banks time would never drain. These are the sort of numbers a data file
+    // supplies, so they are guarded rather than trusted.
+    const Entity instant = animatedSprite(world, 4, 0.0f, true);
+    AnimationSystem(world, 1.0f);
+    check(world.getComponent<Animation>(instant)->frame == 0,
+          "a zero interval animates nothing rather than hanging");
+
+    const Entity single = animatedSprite(world, 1, 0.1f, true);
+    AnimationSystem(world, 1.0f);
+    check(world.getComponent<Animation>(single)->frame == 0,
+          "and a one-frame animation stays on its only frame");
+
+    // An Animation on an entity with no Sprite is skipped rather than crashing.
+    Entity orphan = world.createEntity();
+    world.addComponent(orphan, Animation{});
+    AnimationSystem(world, 1.0f);
+    check(true, "an Animation with no Sprite is survivable");
+}
+
+void testTheEngineRunsAnimationForYou() {
+    World world;
+    const Entity entity = animatedSprite(world, 4, 0.1f, true);
+
+    // Through the shared entry point the real loop calls, not by calling the
+    // system directly — otherwise this proves the system works and says
+    // nothing about whether a game ever gets it.
+    RunBuiltinSystems(world, 0.1f);
+    check(world.getComponent<Animation>(entity)->frame == 1,
+          "RunBuiltinSystems advances animations, so every game gets them");
+}
+
+void testFrameWidthOverridesTheSourceRectangle() {
+    World world;
+    Entity entity = world.createEntity();
+
+    Sprite sprite;
+    sprite.srcW = 16;  // the crop
+    sprite.srcH = 16;
+    world.addComponent(entity, sprite);
+
+    Animation animation;
+    animation.frameCount = 4;
+    animation.secondsPerFrame = 0.1f;
+    animation.frameWidth = 40;  // but the frames are spaced further apart
+    world.addComponent(entity, animation);
+
+    AnimationSystem(world, 0.1f);
+    check(world.getComponent<Sprite>(entity)->srcX == 40,
+          "an explicit frameWidth wins over the sprite's crop width");
+}
+
 // --- Scenes ----------------------------------------------------------------
 
 // Records what the stack called on it, so the ordering can be asserted.
@@ -944,6 +1083,13 @@ int main() {
     testDeferredDestruction();
     testMovementSystem();
     testLifetimeSystem();
+
+    testAnimationWalksTheSheet();
+    testALoopingAnimationWrapsAndAOneShotHolds();
+    testALongFrameOwesEveryFrameItSkipped();
+    testAnimationRefusesNumbersThatWouldHangIt();
+    testTheEngineRunsAnimationForYou();
+    testFrameWidthOverridesTheSourceRectangle();
     testSceneStack();
     testFont();
     testViewTransform();
