@@ -14,6 +14,7 @@ rem     verify.bat render     the pixel tests
 rem     verify.bat bench      how much do the naive parts cost?
 rem     verify.bat clean      throw the build away and rebuild from nothing
 rem     verify.bat archive    do the frozen versions still build on their own?
+rem     verify.bat linux      the GitHub Linux job, in Docker, before you push
 rem     verify.bat all        everything. Run this before you commit.
 rem
 rem See mutate.bat for the other half: these check the code passes its tests,
@@ -44,10 +45,11 @@ echo   [5] bench    what the naive parts cost
 echo   [6] clean    rebuild from nothing, then test
 echo   [7] archive  do the frozen versions still build?
 echo   [8] all      everything (run this before committing)
+echo   [9] linux    the GitHub Linux build, in Docker
 echo.
 :menu
 set "PICK="
-set /p "PICK=Choose 1-8: "
+set /p "PICK=Choose 1-9: "
 if "%PICK%"=="1" set "CHECK=quick"
 if "%PICK%"=="2" set "CHECK=flake"
 if "%PICK%"=="3" set "CHECK=smoke"
@@ -56,6 +58,7 @@ if "%PICK%"=="5" set "CHECK=bench"
 if "%PICK%"=="6" set "CHECK=clean"
 if "%PICK%"=="7" set "CHECK=archive"
 if "%PICK%"=="8" set "CHECK=all"
+if "%PICK%"=="9" set "CHECK=linux"
 if "%CHECK%"=="" goto menu
 
 :dispatch
@@ -66,10 +69,11 @@ if /i "%CHECK%"=="render"  goto render
 if /i "%CHECK%"=="bench"   goto bench
 if /i "%CHECK%"=="clean"   goto clean
 if /i "%CHECK%"=="archive" goto archive
+if /i "%CHECK%"=="linux"   goto linux
 if /i "%CHECK%"=="all"     goto all
 
 echo Unknown check: %CHECK%
-echo Expected one of: quick flake smoke render bench clean archive all
+echo Expected one of: quick flake smoke render bench clean archive linux all
 goto done
 
 rem --- Building -------------------------------------------------------------
@@ -194,6 +198,65 @@ for /d %%V in (archive\*) do (
 )
 goto done
 
+rem The GitHub Linux job, run in Docker on this machine before you push.
+rem
+rem Everything above builds with MSVC. CI builds with GCC, and the two disagree
+rem about more than you would think: the Linux job was red for three commits
+rem because of one missing `#include <cstring>`, which MSVC and macOS both let
+rem slide. A build failure skips every later step, so for those three commits
+rem Linux ran no tests at all - and the only way to read why was to log in to
+rem GitHub. This runs the same Ubuntu, the same packages and the same steps.
+rem
+rem It tests what `git add -A` would commit: tracked files plus any new ones that
+rem are not ignored, and it lists the new ones so you can see a file the build
+rem needs that you have not added yet.
+:linux
+echo.
+echo ==============================================================
+echo   The GitHub Linux build (GCC, in Docker)
+echo ==============================================================
+docker info >nul 2>&1
+if errorlevel 1 (
+    echo.
+    echo   SKIPPED - Docker is not running.
+    echo.
+    echo   This is the only check here that uses GCC, and GCC is what the GitHub
+    echo   Linux job builds with. Start Docker Desktop, then run:
+    echo       manual_testing\verify.bat linux
+    set "FAILED=2"
+    goto done
+)
+echo Preparing the Linux image - cached after the first time...
+docker build -q -t tiny-engine-linux-ci -f manual_testing\linux-ci.Dockerfile manual_testing >nul
+if errorlevel 1 (
+    echo   FAILED: could not build the Linux image. Run the docker build by hand
+    echo   to see why: docker build -f manual_testing\linux-ci.Dockerfile manual_testing
+    set "FAILED=1"
+    goto done
+)
+
+set "FILELIST=%TEMP%\tiny-engine-linux-ci-files.txt"
+git -c core.quotepath=off ls-files -co --exclude-standard > "%FILELIST%"
+set "UNTRACKED=0"
+for /f %%N in ('git ls-files -o --exclude-standard ^| find /c /v ""') do set "UNTRACKED=%%N"
+if not "!UNTRACKED!"=="0" (
+    echo.
+    echo   Testing the tree as "git add -A" would commit it. Git is not yet
+    echo   tracking !UNTRACKED! of these files:
+    for /f "delims=" %%F in ('git -c core.quotepath^=off ls-files -o --exclude-standard') do echo     %%F
+)
+
+docker run --rm -v "%CD%:/repo:ro" -v "%FILELIST%:/files.txt:ro" tiny-engine-linux-ci bash /repo/manual_testing/linux-ci.sh
+if errorlevel 1 (
+    set "FAILED=1"
+    echo.
+    echo   FAILED - and it will fail on GitHub the same way. Fix it before pushing.
+) else (
+    echo.
+    echo   OK: the Linux job passes.
+)
+goto done
+
 :all
 call "%~f0" clean
 if errorlevel 1 set "FAILED=1"
@@ -203,6 +266,17 @@ call "%~f0" smoke
 if errorlevel 1 set "FAILED=1"
 call "%~f0" render
 if errorlevel 1 set "FAILED=1"
+rem Exit code 2 is "skipped because Docker is not running": said out loud in the
+rem verdict rather than folded into a pass, and not a failure either, because
+rem refusing to finish without Docker would just teach people to stop running
+rem this.
+set "LINUX_SKIPPED="
+call "%~f0" linux
+if errorlevel 2 (
+    set "LINUX_SKIPPED=1"
+) else if errorlevel 1 (
+    set "FAILED=1"
+)
 call "%~f0" archive
 if errorlevel 1 set "FAILED=1"
 call "%~f0" bench
@@ -210,10 +284,14 @@ echo.
 echo ==============================================================
 echo   Verdict
 echo ==============================================================
-if "%FAILED%"=="0" (
-    echo   Everything passed.
-) else (
+if not "%FAILED%"=="0" (
     echo   Something failed. Scroll up; the failures say OK or FAILED.
+) else if defined LINUX_SKIPPED (
+    echo   Everything that ran passed - but the Linux build was NOT checked,
+    echo   because Docker is not running. GitHub builds with GCC and this did
+    echo   not, so CI can still fail. Start Docker Desktop and run the linux check.
+) else (
+    echo   Everything passed, including the Linux build.
 )
 goto done
 

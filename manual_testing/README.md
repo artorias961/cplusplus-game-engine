@@ -26,6 +26,7 @@ verify.bat render     the pixel tests          ./verify.sh render
 verify.bat bench      what the slow bits cost  ./verify.sh bench
 verify.bat clean      rebuild from nothing     ./verify.sh clean
 verify.bat archive    do the frozen versions still build?
+verify.bat linux      the GitHub Linux job, in Docker
 verify.bat all        everything — run this before committing
 ```
 
@@ -79,6 +80,45 @@ Each folder under `archive/` is a frozen, self-contained copy of the project
 that the README promises still builds on its own. They are never updated, so
 the only way that promise can break is a change made *outside* them — exactly
 the kind of breakage nobody thinks to look for.
+
+### linux
+The GitHub Linux job, run on this machine before you push. Needs Docker Desktop
+running; the first run downloads Ubuntu and takes a few minutes, every run
+after that takes about one.
+
+Everything else here builds with **MSVC**. CI's Linux job builds with **GCC**,
+and the two disagree more than you'd expect. The Linux job was red for three
+commits in a row over one missing `#include <cstring>`: MSVC and macOS's libc++
+both pull it in through `<string>`, GCC's libstdc++ doesn't, so `std::strcmp`
+compiled everywhere it was ever tried. And a build failure **skips every later
+step** — for those three commits Linux ran no tests at all, and the only way to
+read why was to log in to GitHub.
+
+`manual_testing/linux-ci.Dockerfile` is the same Ubuntu as the workflow's
+`runs-on` and the same packages; `linux-ci.sh` is the same steps. It builds
+with `make -k`, so one run shows *every* compile error rather than the first —
+CI stops at the first, which is how a push that fixes one discovers the next.
+
+It tests what `git add -A` would commit — tracked files plus new ones that
+aren't ignored — and lists the new ones first. A file the build needs that git
+isn't tracking yet shows up there, before it shows up as a red build.
+
+It also prints GCC's warnings, which fail nothing but which you'd otherwise
+never see. The one left at the time of writing, `-Wnonnull` inside
+`stl_algobase.h`, is a known GCC 12/13 false positive in `std::vector`
+assignment from a brace list. The other two it found were real: an unused
+function, and a hero-upgrade array indexed without the range check its
+neighbouring lookup applies.
+
+In `all`, a machine without Docker running gets a loud **SKIPPED** in the
+verdict rather than a failure — refusing to finish would just teach people to
+stop running `all`.
+
+**Keep the Dockerfile's `FROM` and the workflow's `runs-on` in step.** The
+workflow pins `ubuntu-24.04` instead of `ubuntu-latest` for exactly this
+reason: "latest" moves to a new Ubuntu and a new GCC on GitHub's schedule, and a
+local check that has drifted from the runner is a check that passes for the
+wrong reason.
 
 ---
 

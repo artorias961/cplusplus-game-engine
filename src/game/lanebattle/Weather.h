@@ -5,7 +5,7 @@
 #include <vector>
 
 namespace lanebattle {
-enum class WeatherPreset { Clear, Rain, Snow, Hail, BloodRain, Thunderstorm, Fog, Ash, Embers, DarkStorm, Count };
+enum class WeatherPreset { Clear, Rain, Snow, Hail, BloodRain, Thunderstorm, Fog, Ash, Embers, DarkStorm, Sandstorm, Count };
 enum class LightningMode { Off, Reduced, Normal };
 struct WeatherSettings {
     WeatherPreset preset = WeatherPreset::Clear;
@@ -32,6 +32,7 @@ public:
 private:
     struct Particle { engine::Entity entity; float seed, depth; float x=0, y=0; };
     std::vector<Particle> particles_;
+    std::vector<engine::Entity> splashes_;
     engine::Entity veil_ = 0, bolt_ = 0, atmosphere_ = 0;
     engine::TextureCache* cache_ = nullptr;
     SDL_Texture* particleTexture_ = nullptr;

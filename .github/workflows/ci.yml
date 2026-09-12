@@ -7,6 +7,12 @@
 #
 # The tests need no display: none of them opens a window or initialises SDL's
 # video subsystem, which is exactly what makes them runnable on a CI box.
+#
+# The Linux job can be run on Windows before pushing: `manual_testing\verify.bat
+# linux` builds manual_testing/linux-ci.Dockerfile — the same Ubuntu and the
+# same packages as below — and runs the same steps. It exists because this job
+# was red for three commits over one missing #include that MSVC and macOS both
+# forgave, and the only way to see why was to log in and read the log.
 name: CI
 
 on:
@@ -18,9 +24,17 @@ on:
 jobs:
   linux:
     name: Linux (pkg-config)
-    runs-on: ubuntu-latest
+    # Pinned rather than `ubuntu-latest`, and matched by the FROM line in
+    # manual_testing/linux-ci.Dockerfile. "Latest" moves to a new Ubuntu and a
+    # new GCC on GitHub's schedule, not this project's; a pin means a red build
+    # is always a change in this repository, and the local check stays an exact
+    # copy. Move both lines together.
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      # v7 runs on Node 24. v4 ran on Node 20, which GitHub has deprecated and
+      # was already forcing onto Node 24 with a warning on every run — the
+      # step that turns into a hard failure the day Node 20 is removed.
+      - uses: actions/checkout@v7
 
       - name: Install SDL2
         run: |
@@ -69,7 +83,7 @@ jobs:
     name: macOS (Homebrew)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install SDL2
         run: brew install sdl2 sdl2_image pkg-config

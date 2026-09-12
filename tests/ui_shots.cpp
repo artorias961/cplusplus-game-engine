@@ -30,8 +30,16 @@
 #include <SDL_image.h>
 
 #include <cstdio>
+#include <cstring>  // std::strcmp. See below: this line is why CI was red.
 #include <string>
 #include <vector>
+
+// `<cstring>` is named rather than assumed. MSVC and macOS's libc++ both pull
+// it in through `<string>`, so `std::strcmp` compiled on every machine this was
+// written on — and GCC's libstdc++ does not, so the Linux job failed to BUILD.
+// Worse than failing: a build failure skips every later step, so for three
+// commits the Linux runner never ran a single test and nobody could tell.
+// Include what you use; transitive includes are an accident of one library.
 
 #include "Harness.h"
 #include "LaneBattle.h"

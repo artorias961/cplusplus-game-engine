@@ -11,7 +11,7 @@ constexpr const char* root = "assets/lanebattle/vector/";
 struct DriftingCloud {};
 struct Style { const char* name; const char* asset; int w, h; float fall; int count; };
 constexpr Style styles[] = {
-    {"CLEAR", "rain.svg", 2, 12, 0, 0},
+    {"OFF", "rain.svg", 2, 12, 0, 0},
     {"RAIN", "rain.svg", 2, 14, 240, 144},
     {"SNOW", "snow.svg", 6, 6, 36, 100},
     {"HAIL", "hail.svg", 5, 5, 330, 110},
@@ -20,9 +20,10 @@ constexpr Style styles[] = {
     {"FOG", "fog.svg", 300, 60, 0, 12},
     {"ASH", "ash.svg", 4, 4, 22, 90},
     {"EMBERS", "ember.svg", 4, 6, -42, 80},
-    {"DARK STORM", "wisp.svg", 7, 10, -65, 110}
+    {"DARK STORM", "wisp.svg", 7, 10, -65, 110},
+    {"SANDSTORM", "ash.svg", 5, 2, 8, 144}
 };
-int index(WeatherPreset p) { return std::clamp(static_cast<int>(p), 0, 9); }
+int index(WeatherPreset p) { return std::clamp(static_cast<int>(p), 0, static_cast<int>(WeatherPreset::Count)-1); }
 float wrap(float v, float span) { return v - std::floor(v / span) * span; }
 float finiteClamp(float v, float lo, float hi) { return std::isfinite(v) ? std::clamp(v, lo, hi) : lo; }
 Entity sprite(World& w, float x, float y, int width, int height, int layer, SDL_Texture* texture) {
@@ -68,13 +69,19 @@ void WeatherSystem::start(World& world, TextureCache* cache) {
         particles_.push_back({e,float((unsigned(i+1)*2654435761u)%10000)/10000.0f,0.45f+float(i%3)*0.275f});
     }
     veil_=sprite(world,0,90,960,220,kNearLayer,nullptr);
-    bolt_=sprite(world,630,90,48,160,kNearLayer,cache?cache->load(std::string(root)+"lightning.svg"):nullptr);
+    bolt_=sprite(world,630,90,80,180,kNearLayer,cache?cache->load(std::string(root)+"lightning-branch.svg"):nullptr);
+    for(int i=0;i<24;++i) {
+        auto e=sprite(world,float(i*41),414,6,2,kNearLayer,nullptr);
+        world.getComponent<Sprite>(e)->a=0;splashes_.push_back(e);
+    }
     world.getComponent<Sprite>(veil_)->a=0;
     world.getComponent<Sprite>(bolt_)->a=0;
     update(world,0);
 }
 void WeatherSystem::clear(World& world) {
     for (const auto& p:particles_) world.destroyLater(p.entity);
+    for(auto e:splashes_) world.destroyLater(e);
+    splashes_.clear();
     if(veil_) world.destroyLater(veil_);
     if(bolt_) world.destroyLater(bolt_);
     if(atmosphere_) world.destroyLater(atmosphere_);
@@ -82,7 +89,7 @@ void WeatherSystem::clear(World& world) {
     particleTexture_=nullptr; time_=flash_=0; nextFlash_=7;
 }
 void WeatherSystem::controls(InputManager& input) {
-    if(input.wasKeyPressed(SDL_SCANCODE_F6)) settings.preset=WeatherPreset((index(settings.preset)+1)%10);
+    if(input.wasKeyPressed(SDL_SCANCODE_F6)) settings.preset=WeatherPreset((index(settings.preset)+1)%static_cast<int>(WeatherPreset::Count));
     if(input.wasKeyPressed(SDL_SCANCODE_F7)) settings.intensity=settings.intensity>=0.99f?0.0f:std::min(1.0f,settings.intensity+0.25f);
     if(input.wasKeyPressed(SDL_SCANCODE_F8)) settings.speed=settings.speed>=3?0:settings.speed+0.5f;
     if(input.wasKeyPressed(SDL_SCANCODE_F9)) settings.wind=settings.wind>=1?-1:settings.wind+0.25f;
@@ -132,10 +139,11 @@ void WeatherSystem::update(World& world, float dt) {
         if(!s||!t) continue;
         bool fog=active_==WeatherPreset::Fog;
         s->texture=particleTexture_; s->width=std::max(1,int(style.w*p.depth)); s->height=std::max(1,int(style.h*p.depth));
+        s->r=active_==WeatherPreset::Sandstorm?210:255;s->g=active_==WeatherPreset::Sandstorm?165:255;s->b=active_==WeatherPreset::Sandstorm?95:255;
         // Integrate positions so changing speed or wind never teleports a particle.
         const float margin=fog?300.0f:150.0f;
         const float span=fog?1440.0f:1260.0f;
-        const float drift=fog?32.0f:90.0f*p.depth;
+        const float drift=fog?32.0f:(active_==WeatherPreset::Sandstorm?240.0f:90.0f)*p.depth;
         p.x=wrap(p.x+margin+dt*settings.speed*settings.wind*drift,span)-margin;
         p.y=170+wrap(p.y-170+dt*settings.speed*style.fall*p.depth,230);
         float x=p.x, y=p.y;
@@ -146,11 +154,20 @@ void WeatherSystem::update(World& world, float dt) {
         // Rain slants with wind. Snow/hail retain their blocky silhouettes.
         t->rotation=(active_==WeatherPreset::Rain||active_==WeatherPreset::BloodRain||active_==WeatherPreset::Thunderstorm)?-std::atan2(settings.wind*90,std::abs(style.fall)):0;
         float alpha=settings.opacity*(i%4==0?60.0f:125.0f)*p.depth;
-        s->a=i<std::size_t(style.count*settings.intensity)?static_cast<unsigned char>(alpha):0;
+        // Fade across the vertical recycling boundary instead of popping.
+        const float edge= fog?1.0f:std::min(1.0f,std::min(y-170.0f,400.0f-y)/18.0f);
+        s->a=i<std::size_t(style.count*settings.intensity)?static_cast<unsigned char>(alpha*std::max(0.0f,edge)):0;
         if(fog) s->layer=kNearLayer;
         else s->layer=i%4==0?kForeLayer:kNearLayer;
         // Missing SVG support must not turn fog into solid giant rectangles.
         if(!particleTexture_ && fog) s->a=0;
+    }
+    for(std::size_t i=0;i<splashes_.size();++i) {
+        auto* s=world.getComponent<Sprite>(splashes_[i]);if(!s) continue;
+        bool wet=active_==WeatherPreset::Rain||active_==WeatherPreset::BloodRain||active_==WeatherPreset::Thunderstorm||active_==WeatherPreset::Hail;
+        float phase=wrap(time_*2+float(i)*0.317f,1);
+        s->width=2+int(phase*7);s->r=active_==WeatherPreset::BloodRain?140:130;s->g=active_==WeatherPreset::BloodRain?48:155;s->b=active_==WeatherPreset::BloodRain?58:175;
+        s->a=wet&&i<std::size_t(24*settings.intensity)&&phase<0.3f?static_cast<unsigned char>((1-phase/0.3f)*80*settings.opacity):0;
     }
     if(auto* s=world.getComponent<Sprite>(veil_)) {
         s->r=active_==WeatherPreset::DarkStorm?86:155; s->g=active_==WeatherPreset::DarkStorm?65:175; s->b=195;

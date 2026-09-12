@@ -17,3 +17,7 @@
 *.ps1 text eol=crlf
 
 *.sh  text eol=lf
+
+# Read by Docker inside Linux, where a stray carriage return becomes part of a
+# path or a package name. See manual_testing/linux-ci.Dockerfile.
+*.Dockerfile text eol=lf

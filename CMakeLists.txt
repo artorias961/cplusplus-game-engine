@@ -54,7 +54,8 @@ target_link_libraries(breakout PRIVATE breakout_lib)
 
 add_library(lanebattle_lib STATIC
     "${CMAKE_SOURCE_DIR}/src/game/lanebattle/LaneBattle.cpp"
-    "${CMAKE_SOURCE_DIR}/src/game/lanebattle/Weather.cpp")
+    "${CMAKE_SOURCE_DIR}/src/game/lanebattle/Weather.cpp"
+    "${CMAKE_SOURCE_DIR}/src/game/lanebattle/Environment.cpp")
 target_include_directories(lanebattle_lib PUBLIC
     "${CMAKE_SOURCE_DIR}/src/game/lanebattle")
 target_link_libraries(lanebattle_lib PUBLIC engine)

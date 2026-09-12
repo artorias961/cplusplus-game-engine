@@ -19,6 +19,7 @@
 
 #include "LaneBattle.h"
 #include "Weather.h"
+#include "Environment.h"
 
 #include <SDL.h>
 
@@ -53,11 +54,6 @@ constexpr float kRightSpawnX = kRightCastleX - kMaxUnitWidth - 4.0f;
 // Clamped so a bad index can never index off the end of the roster. Every read
 // of a unit's stats goes through here.
 const UnitKind& kindOf(int kind) { return unitKind(kind); }
-
-const UnitKind& kindOf(World& world, Entity entity) {
-    const Unit* unit = world.getComponent<Unit>(entity);
-    return kindOf(unit ? unit->kind : 1);
-}
 
 // --- Sound -----------------------------------------------------------------
 
@@ -1642,6 +1638,7 @@ public:
     void onExit(World& world) override {
         clearField(world);
         weather_.clear(world);
+        environment_.clear(world);
         world.destroyLater(sessionEntity_);
         world.destroyLater(cameraEntity_);
         for (Entity entity : hud_) world.destroyLater(entity);
@@ -1703,10 +1700,22 @@ public:
 
         session->cannonCooldown = std::max(0.0f, session->cannonCooldown - dt);
 
+        if(input.wasKeyPressed(SDL_SCANCODE_F2)) {
+            const auto next=Environment((static_cast<int>(environment_.current())+1)%static_cast<int>(Environment::Count));
+            if(environment_.select(world,textureCache,next) && !compatibleWeather(next,weather_.settings.preset))
+                weather_.settings.preset=WeatherPreset::Clear;
+        }
+        if(input.wasKeyPressed(SDL_SCANCODE_F3)) {
+            environment_.strong=!environment_.strong;
+            weather_.settings.preset=environment_.strong?strongWeather(environment_.current()):WeatherPreset::Clear;
+        }
+        const auto oldWeather=weather_.settings.preset;
         weather_.controls(input);
+        if(input.wasKeyPressed(SDL_SCANCODE_F6)) weather_.settings.preset=nextCompatibleWeather(environment_.current(),oldWeather);
+        environment_.update(world,dt);
         weather_.update(world, dt);
         if (auto* text = world.getComponent<Text>(weatherText_))
-            text->value = std::string("F6 ") + weatherName(weather_.settings.preset) + " - F11 FLASH " +
+            text->value = std::string("F2 ") + environmentName(environment_.current()) + " F3 " + (environment_.strong?"STRONG":"CALM") + " F6 " + weatherName(weather_.settings.preset) + " F11 " +
                 (weather_.settings.lightning == LightningMode::Off ? "OFF" :
                  weather_.settings.lightning == LightningMode::Reduced ? "REDUCED" : "NORMAL");
 
@@ -1737,6 +1746,7 @@ public:
 
 private:
     WeatherSystem weather_;
+    EnvironmentSystem environment_;
     Entity weatherText_ = 0;
     void buildField(World& world) {
         // Scenery first, so it holds the lowest entity ids as well as the
@@ -1855,6 +1865,7 @@ private:
     }
 
     void buildScenery(World& world) {
+        if (environment_.select(world, textureCache, environment_.current())) return;
         if (buildVectorScenery(world, textureCache, field_)) {
             buildForeground(world);
             return;
@@ -4046,9 +4057,19 @@ public:
         }
 
         const int upgrade = heroUpgradeAt(mouseX, mouseY);
-        if (upgrade < 0) return;
+        if (upgrade < 0 || upgrade >= kHeroUpgradesPerPath) return;
 
+        // Checked here rather than trusted. `heroPath()` on the next line
+        // clamps a bad path to a real one, so the ROW it returns is always
+        // safe — but the array indexed below does no such thing, and the two
+        // sitting side by side read as if they were equally protected. GCC
+        // noticed the difference and MSVC did not: "array subscript 4 is above
+        // array bounds of int[4][3]". Nothing currently writes an out-of-range
+        // path, which is exactly the kind of guarantee that holds until a save
+        // file, a test or a refactor says otherwise.
         const int path = campaign.heroPath;
+        if (path <= 0 || path >= kHeroPathCount) return;
+
         const HeroUpgradeKind& row = heroPath(path).upgrades[upgrade];
         const int owned = campaign.heroUpgrades[path][upgrade];
         if (owned >= row.maxLevel) return;
