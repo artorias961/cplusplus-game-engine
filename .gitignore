@@ -35,3 +35,10 @@ Thumbs.db
 
 # Scratch build directories made by manual_testing/verify (archive check).
 _verify/
+
+# Scratch campaign saves. The player's real one lives in their user folder and
+# is asked for by name (usePlayerSavePath); anything that does not ask writes
+# one of these next to the binary it ran from.
+campaign-scratch.txt
+*-scratch-campaign.txt
+campaign_probe_save.txt

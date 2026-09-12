@@ -157,6 +157,19 @@ runs on a machine with no graphics hardware, same dummy-driver trick as
 the whole point — the bug class it exists for is the one no assertion catches.
 The first run of it found five things, four of which had shipped for months.
 
+It also, for a while, **wrote to the player's save**. Two of the shots are the
+victory and defeat screens, staging a victory runs the real battle logic, and
+the real battle logic banks the reward and saves — and this tool was the one
+thing that never named a save path, so it got the default, which was the real
+one. Taking screenshots paid gold into whoever's campaign was on the machine.
+Nothing failed and nothing was logged.
+
+The tool now names its own scratch file, and more to the point the default
+changed: the player's save has to be asked for by name
+(`lanebattle::usePlayerSavePath()`, called only by the game's `main`). Anything
+that forgets writes `campaign-scratch.txt` beside itself. **A diagnostic tool
+that can damage the thing it is diagnosing is worse than no tool.**
+
 It also previews sprite sheets, which is the closest thing this engine has to
 an animation editor:
 
@@ -185,7 +198,29 @@ cmake --build build --config Release --target campaign_probe && ./build/Release/
 - `--detail` — plus seconds, castle left, shots fired, upgrades bought
 - `--sweep` — the highest enemy income each player still beats, per enemy
   composition. This is the one that makes tuning possible: it turns "make
-  stage six a bit harder" into "put stage six between AIR and HERO".
+  stage six a bit harder" into "put stage six between AIR and HERO". It is also
+  much the slowest, because it plays the whole income range for every strategy.
+
+**When two instruments disagree, one of them is broken.** The sweep put MIXED's
+ceiling at 0.60 income against composition `1,1,2`, while the stage table had
+MIXED winning BLACK FIELD — the same composition at 1.15 — untouched, in 121
+seconds. Both were reporting honestly about different things, and the sweep had
+two faults behind one symptom:
+
+- its scratch stage scaled castle health at `300 + 850x` against a shipped table
+  that runs at roughly half that gradient, so it was measuring a castle 40%
+  larger than any stage ships — and a bigger castle is a longer battle, which is
+  time the enemy's economy gets to spend;
+- it stopped scanning at the first income it failed to win, on the theory that
+  outcomes are a step function. A **draw** is not a win, so one stalemate
+  truncated the whole column — and the run is not monotonic anyway, because a
+  richer enemy sends more units, more units die, and the bounty on them is the
+  player's income too. A strategy that stalls against a poor opponent really can
+  beat a rich one, and the sweep now prints `(but loses 0.90)` when it sees that
+  rather than hiding it.
+
+Every stage placed against that column was placed against a measurement that had
+quit early.
 
 **Rebuild before you believe it.** Assets are copied next to the binary at
 build time, so editing `assets/lanebattle/units.txt` and re-running without

@@ -634,7 +634,7 @@ constexpr StageKind kDefaultStages[] = {
     // finish the campaign, which is the exact failure the previous retune
     // fixed.
     {"THE EYRIE",      0.65f,  850.0f, 4, "1,3,3,1"},
-    {"BLACK FIELD",    1.15f,  900.0f, 3, "1,1,2"},
+    {"BLACK FIELD",    1.45f,  900.0f, 3, "1,1,2"},
     // Pure ground, and deliberately so. When stages 7 AND 8 both fielded
     // flyers, anti-air was mandatory twice over and the FALCONER was the only
     // path that could finish the campaign — measured, not guessed. A permanent
@@ -900,9 +900,20 @@ bool saveCampaign(const Campaign& campaign);
 bool loadCampaign(Campaign& campaign);
 std::string savePath();
 
-// Points saving somewhere else. For tests, which must not write over a real
-// player's campaign — and for anyone who wants two of them.
+// Points saving at a named file. For tests and tools, which must not write
+// over a real player's campaign — and for anyone who wants two of them.
+// Passing an empty string goes back to the unconfigured default, which is a
+// scratch file beside the running binary.
 void setSavePath(const std::string& path);
+
+// Points saving at the REAL player's campaign, in their user folder.
+//
+// The one caller is the game's main(). It is a separate function rather than
+// the default because the default is what a forgetful diagnostic tool gets,
+// and `ui_shots` proved what that costs: it staged a victory to photograph the
+// win screen and banked the gold into the player's actual save. Opting in
+// makes the tool that forgets harmless instead of destructive.
+void usePlayerSavePath();
 
 // --- The view --------------------------------------------------------------
 //
@@ -1192,9 +1203,34 @@ struct Shard {};
 // kill its own army, and where it is aimed so it knows when it has arrived —
 // a fixed flight time is simpler and more accurate than watching for the
 // ground, and it means a click always lands exactly where it was clicked.
+//
+// It carries its whole trajectory rather than a velocity, and is the one thing
+// in this game that does not move by having a Velocity integrated for it.
+//
+// It used to. `fireCannon` solved the launch velocity so that the shell would
+// arrive on target after exactly kCannonFlightTime, and then the shell was
+// flown by adding gravity to that velocity once a frame and letting
+// MovementSystem step the position — which is forward Euler, whose error in a
+// falling body is proportional to the frame length. So the arithmetic promised
+// an exact landing and the integration quietly missed it, by more on a slow
+// machine than a fast one: about twenty pixels between 15fps and 144fps,
+// against a blast radius of forty-six. The same click killed a unit on one
+// machine and not on the other.
+//
+// The closed form the aiming already assumes is evaluated directly instead.
+// Position is a function of elapsed time, so there is no accumulated error to
+// depend on the frame rate, and the shell lands precisely where the comment
+// above always said it would.
 struct Cannonball {
     bool leftSide = true;
-    float timeLeft = kCannonFlightTime;
+
+    float elapsed = 0.0f;
+
+    // Where it launched from, and the velocity solved for its arrival.
+    float startX = 0.0f;
+    float startY = 0.0f;
+    float velocityX = 0.0f;
+    float velocityY = 0.0f;
 };
 
 // The whole battle's state, on one entity — the singleton-component pattern

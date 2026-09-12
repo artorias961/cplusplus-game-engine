@@ -1722,6 +1722,212 @@ the hero has now taken the cliff out.
 That is a re-tune of the stage table, not a bug fix, and it is the next real
 piece of work.
 
+## A review from outside, and the seven things it found
+
+`docs/repository-review.md` is a code-and-headless-rendering review of the tree
+at `f88f3d3`, done from outside this conversation. It read the code, built
+Release, ran all eight ctest entries — **all eight passed** — and then compiled
+its own reproduction harness against the shipped libraries and broke seven
+things with it.
+
+That last step is the whole story. Every finding below is a rule that holds for
+the case the tests build and breaks for a case they never thought to: two
+attackers where the tests use one, a death from a spell where the tests kill
+with a blow, a key released in the same frame it was pressed, a save reloaded
+rather than merely written. A thousand assertions were green through all of it.
+
+Each was reproduced here before it was touched, and each now has a test that
+fails if it comes back — verified the only way that means anything, by breaking
+the fix on purpose and watching the test catch it.
+
+### The two that could destroy something
+
+**The screenshot tool wrote to the player's save.** `ui_shots` photographs the
+victory screen, and staging a victory runs the real battle logic, and the real
+battle logic banks the reward and calls `saveCampaign`. Every other tool names
+a scratch path; this one never did, so it got the default — which was the
+player's own file. Taking screenshots quietly paid gold into somebody's
+campaign, with nothing failing and nothing logged.
+
+Naming a path in `ui_shots` would have fixed this instance and left the trap
+armed for the next tool. The default is inverted instead: `savePath()` returns a
+scratch file beside the binary unless someone calls `usePlayerSavePath()`, and
+the only caller is the game's `main`. Forgetting now costs a stray file in a
+build folder. **The dangerous option should be the one you have to ask for.**
+
+**The battle could finish more than once, and disagree with itself.** Castle
+death was handled inside the loop over attackers, which is correct only while
+exactly one unit is in reach of a castle — which is exactly how every test that
+wins a battle is written. Three attackers finishing the same castle in one
+update ran the payout three times. Worse, with both castles on their last point
+of health, `playerWon` was written by whichever castle came up later in
+iteration order: the same update could pay out a win and then report a loss.
+
+Now a single `settleBattle` runs once per update, after everything that can
+damage a castle — a blow, a bolt, a shell — so the answer no longer depends on
+which arrived first. The simultaneous case is decided out loud rather than
+emerging: **your castle falling is a loss even if theirs fell in the same
+instant.** You have to be standing at the end. The alternative rewards ignoring
+defence entirely, in a game that already pays well for attacking.
+
+### The two that changed the balance
+
+**The dead went on fighting.** `removeTheDead` runs right after the melee, and
+both the meteor and the cannon land after that — so anything they killed sat at
+zero health until the next update, and in that update it took its swing and
+soaked up blows aimed at it. Two separate advantages to whoever fired last: a
+free attack from a corpse, and a free shield in front of the living.
+
+**Rate of fire depended on the frame rate.** The attack timer was *assigned* the
+full delay on each swing, discarding however far past zero it had gone — and how
+far that is depends entirely on how long the frame took. The same soldier
+hitting the same wall for the same sixty seconds dealt 1,260 damage at 15fps and
+1,400 at 144. Two players on different machines were playing measurably
+different games, and none of the balance measured by the probe applied to
+either. It banks the remainder now, clamped so a stall owes at most one swing.
+
+Both are corrections, and both moved the campaign. Isolating them said the
+corpse fix was much the larger: it alone took MIXED, ECON and GRAIN up a stage
+each and OGRE and COMBO down one. **The old table had been measuring the bugs.**
+Stage 6 went from "a mixed army loses" to "a mixed army wins comfortably", which
+is what the two failing assertions were saying, and the answer was to re-tune
+against the corrected simulation rather than to argue with it — BLACK FIELD from
+1.15 income to 1.45, which restores it to exactly the hero gate it was built to
+be: the three hero paths and nothing else.
+
+### The three about the player's hands
+
+**Escape closed the window from inside a screen that said GO BACK.** The engine
+took Escape unconditionally in `processEvents`, several layers below any scene,
+so the army and hero screens never saw the key they advertise. Through
+`tests/Harness.h` they worked perfectly — the harness reimplements the loop
+rather than running it, so `Engine::processEvents` was executed by no test at
+all. `Scene::escapeQuits` lets a scene claim the key; `SDL_QUIT` still cannot be
+refused, because that is the operating system talking rather than the player.
+
+**A press and its release in the same frame vanished.** `wasKeyPressed` inferred
+the edge by comparing the held set against last frame's, and a key that goes
+down and comes back up leaves that set exactly as it found it. SDL hands a whole
+queue to one poll, so a fast click, a stalled frame or a low frame rate all put
+both halves in one batch. The symptom is a purchase or a pause that occasionally
+does not happen and cannot be reproduced. Edges are recorded as the events
+arrive now — which required a guard the old approach got for free, since SDL
+repeats KEYDOWN while a key is held and a repeat is not a new press.
+
+**Loadout slots moved across a save.** The save wrote the names it had and
+skipped the holes, so loading packed them against the front:
+`[-, SOLDIER, -, ARCHER]` came back as `[SOLDIER, ARCHER, -, -]`. Every unit
+returned, which is why nothing noticed; what moved was the number key each one
+answers to — and `toggleCarried` says in as many words that it leaves a hole
+rather than shuffling the bar, because a player learns those positions. The
+promise held for the session and broke on the next launch. Empty fields are
+written now, and the slot advances on every comma.
+
+That one came with a second, uglier version of the same confusion: an empty
+loadout is indistinguishable in a save from a campaign that never chose, so it
+would hand the defaults back on the next launch. Rather than encode the
+difference, the screen refuses the drop that would empty it — and *says so*,
+which its refusals never used to. Both of the army screen's silent no-ops now
+print a line, because a click that does nothing and explains nothing is
+indistinguishable from a click the game missed, and the player's next move is to
+click it again harder.
+
+The same screen also used to take three units away for touching it: a new
+campaign carries nothing, "nothing chosen" is what makes the bar fall back to
+the first four roster rows, and clicking one of those meant "carry exactly this
+one". It writes the fallback down on first open now, so the first click is a
+toggle rather than a reset.
+
+### Three more from reading rather than running
+
+`DataSection::number` accepted `nan`, `inf` and anything that overflows to
+infinity — all of which `strtof` parses happily — and fed them straight into the
+roster. None crashes, which is the problem: a NaN cost compares false against
+every amount of gold, so the unit is neither affordable nor unaffordable and its
+button does nothing forever. They fall back now, like any other unreadable
+value.
+
+`DataWriter::save` opened the real file with `trunc`, destroying the old save as
+its first act. Every failure after that point leaves a corrupt file where a
+working one was. It writes to a sibling `.tmp` and renames now.
+
+`AnimationSystem` guarded a zero frame interval and not a tiny one. A millionth
+of a second is positive, passes every check, and then owes sixteen thousand
+steps in one frame — and small enough, the subtraction stops making progress in
+floating point at all. The step count is bounded.
+
+### And one the review only suspected
+
+The review's last note was that cannon flight "uses a continuous trajectory
+formula but advances with discrete movement and a countdown", flagged as a
+follow-up rather than a reproduction. It is real, and it is the attack-timer bug
+wearing a different hat.
+
+`fireCannon` solves the launch velocity so the shell arrives on target after
+exactly `kCannonFlightTime` — the comment above it explains at length that this
+is what makes aiming a decision rather than a feel. The shell was then flown by
+adding gravity to that velocity once a frame and letting `MovementSystem` step
+the position, which is forward Euler, whose error in a falling body is
+proportional to the frame length. So the arithmetic promised an exact landing
+and the integration quietly missed it — by more on a slow machine than a fast
+one. Half a gravity times most a second of flight times the gap between a 15fps
+frame and a 144fps one is about twenty pixels, against a blast radius of
+forty-six. **The same click killed a unit on one machine and not the other.**
+
+The shell carries its trajectory now and evaluates the closed form the aiming
+already assumed, with the elapsed time clamped to the flight time so the blast
+is on the aimed point rather than however far past it the last frame carried.
+It is the only thing in the game without a `Velocity`, which is the point.
+
+Worth recording how this one nearly went wrong. The first version of the test
+stepped each frame rate until "roughly this many seconds" had passed, which left
+the two runs holding shells of slightly different ages and then reported the age
+difference as a trajectory difference — **it failed against the fixed code**. A
+measurement that cannot distinguish the thing it measures from an artefact of
+how it measures is the same false green as everything else in this section. It
+asks the shell how long it has been up now.
+
+### And the instrument was lying
+
+Placing the retuned stage meant using `--sweep`, and the sweep disagreed with
+the stage table about the same strategy on the same composition: MIXED's ceiling
+at 0.60 income against `1,1,2`, while the table had MIXED winning BLACK FIELD —
+the same composition at 1.15 — untouched, in 121 seconds. **When two instruments
+disagree, one of them is broken**, and this one was broken twice:
+
+- its scratch stage scaled castle health at `300 + 850x` against a shipped table
+  that runs at roughly half that gradient, with a comment claiming it used "the
+  same slope the shipped table uses". It was measuring a castle 40% larger than
+  any stage ships, and a bigger castle is a longer battle, which is time the
+  enemy's economy gets to spend;
+- it stopped scanning at the first income it failed to win, on the theory that
+  outcomes are a step function. A **draw** is not a win, so a single stalemate
+  truncated the column.
+
+Fixing the second exposed something the design did not know. The curve is *not*
+monotonic: almost every strategy has a band of enemy incomes it loses and a
+higher band it wins, and the sweep prints them now as `1.20  (but loses 0.70)`.
+A richer enemy sends more units, more units die, and the bounty on the dead is
+the player's income too — so a stalemate against a poor opponent becomes a win
+against a rich one. **Turning a stage's income up can make it easier.** Every
+stage placed before the sweep could see this was placed half-blind.
+
+And `mutate.bat` had the same disease, found while using it on these fixes. It
+reported SURVIVED for a mutation that had never applied — the exact false green
+it was written to make impossible. A FIND or REPLACE containing a double quote
+or a semicolon cannot survive cmd.exe's argument parsing; both are delimiters,
+so the script was handed fragments, nothing matched, and the verification step
+then searched for the equally mangled REPLACE and found part of it. The check
+asks whether the *file changed* now, which cannot be fooled by a string, and it
+refuses a verdict when the named ctest target matches no test — because zero
+tests all pass, which is a SURVIVED with nothing behind it.
+
+Three instruments and a brand-new test, four false greens, all within one
+session — and the new test is the one worth dwelling on, because it was written
+*by* someone who had just spent a day on this exact failure mode and it still
+happened. The tools need checking as badly as the code does, and the only thing
+that ever finds it is using them on something whose answer you already know.
+
 ## Remaining slices
 
 Moved to **`docs/roadmap-cartoonwars.md`**, which lists all eleven of them

@@ -18,6 +18,7 @@
 // ---------------------------------------------------------------------------
 
 #include "LaneBattle.h"
+#include "Weather.h"
 
 #include <SDL.h>
 
@@ -259,11 +260,21 @@ Entity findTargetAhead(World& world, Entity attacker, bool leftSide,
         Team* team = world.getComponent<Team>(other);
         if (!team || team->leftSide == leftSide) return;  // friend, or teamless
 
-        // Altitude. A target in the sky can only be attacked by something that
-        // reaches it, however close it happens to be — this is the question
-        // distance cannot answer, and the reason the archer stopped being
-        // optional. Castles never fly, so they are never excluded here.
         if (Unit* targetUnit = world.getComponent<Unit>(other)) {
+            // Already dead, and simply not there any more as far as the fight
+            // is concerned. A corpse can outlive its death by a frame — a bolt
+            // or a shell lands after the dead have been cleared away, so the
+            // body waits for the next pass — and while it did, it went on
+            // soaking up blows from the units in front of it. Every hit spent
+            // on something already killed is a hit the living did not take,
+            // which is a real advantage handed to whoever fired last.
+            if (targetUnit->health <= 0.0f) return;
+
+            // Altitude. A target in the sky can only be attacked by something
+            // that reaches it, however close it happens to be — this is the
+            // question distance cannot answer, and the reason the archer
+            // stopped being optional. Castles never fly, so they are never
+            // excluded here.
             if (kindOf(targetUnit->kind).flying && !hitsAir) return;
         }
 
@@ -335,6 +346,8 @@ bool blockedByFriendly(World& world, Entity mover, bool leftSide, float moverX,
         if (other == mover) continue;
 
         Unit* otherUnit = &otherUnitRef;
+        if (otherUnit->health <= 0.0f) continue;  // a corpse is not a queue
+
         Team* team = world.getComponent<Team>(other);
         if (!team || team->leftSide != leftSide) continue;
 
@@ -384,10 +397,11 @@ Entity fireCannon(World& world, bool leftSide, float fromX, float fromY,
 
     Entity shot = world.createEntity();
     world.addComponent(shot, Transform{fromX, fromY, 0.0f});
-    world.addComponent(shot, Velocity{
-        (targetX - fromX) / flight,
-        (targetY - fromY) / flight - kCannonGravity * flight / 2.0f,
-    });
+
+    // No Velocity, deliberately: this is the one thing in the game that flies
+    // by evaluating its own trajectory rather than by being integrated. See the
+    // note on Cannonball for why. AngularVelocity stays — the shell tumbling as
+    // it goes is decoration, and decoration may drift.
     world.addComponent(shot, AngularVelocity{7.0f});
 
     Polygon ball;
@@ -404,7 +418,11 @@ Entity fireCannon(World& world, bool leftSide, float fromX, float fromY,
 
     Cannonball payload;
     payload.leftSide = leftSide;
-    payload.timeLeft = flight;
+    payload.startX = fromX;
+    payload.startY = fromY;
+    payload.velocityX = (targetX - fromX) / flight;
+    payload.velocityY =
+        (targetY - fromY) / flight - kCannonGravity * flight / 2.0f;
     world.addComponent(shot, payload);
 
     if (audioDevice) audioDevice->play(Waveform::Square, 90.0f, 0.10f, 0.16f);
@@ -549,14 +567,38 @@ float stageReward(int stage, bool firstClear) {
 }
 
 namespace {
-std::string gSavePath;  // empty means "ask SDL where the user's folder is"
+std::string gSavePath;         // a file somebody named explicitly
+bool gUsePlayerFolder = false;  // or the real one, asked for on purpose
 }  // namespace
 
-void setSavePath(const std::string& path) { gSavePath = path; }
+void setSavePath(const std::string& path) {
+    gSavePath = path;
+    gUsePlayerFolder = false;
+}
 
+void usePlayerSavePath() {
+    gSavePath.clear();
+    gUsePlayerFolder = true;
+}
+
+// Where the campaign is read from and written to.
+//
+// The default here used to be the PLAYER'S save file, and everything that did
+// not say otherwise got it. That reads as convenient and is a trap: the thing
+// most likely to forget is a diagnostic tool, and a diagnostic tool is exactly
+// what must never touch a real save. `ui_shots` stages a victory to photograph
+// the win screen, which runs the real logic, which calls saveCampaign — so
+// taking screenshots quietly banked gold into somebody's campaign. Nothing
+// failed; the tests were green; the save was simply different afterwards.
+//
+// So the dangerous option is now the one you have to ask for. `main.cpp` asks;
+// nothing else does. A tool that forgets writes a scratch file next to itself,
+// which is the right way round: forgetting should cost a stray file in a build
+// folder, not a player's progress.
 std::string savePath() {
     if (!gSavePath.empty()) return gSavePath;
-    return userPath("TinyEngine", "LaneBattle", "campaign.txt");
+    if (gUsePlayerFolder) return userPath("TinyEngine", "LaneBattle", "campaign.txt");
+    return "campaign-scratch.txt";
 }
 
 bool saveCampaign(const Campaign& campaign) {
@@ -592,11 +634,21 @@ bool saveCampaign(const Campaign& campaign) {
     // different: it outlives the roster that produced it, and an index into a
     // roster that has since gained a row in the middle is a promise nobody
     // made. Names survive that; indices do not.
+    // One field per slot, EMPTY ones included — "SOLDIER,,ARCHER," and not
+    // "SOLDIER,ARCHER".
+    //
+    // Skipping the holes packed the names together, and loading filled the
+    // slots from the front, so a loadout of [-, SOLDIER, -, ARCHER] came back
+    // as [SOLDIER, ARCHER, -, -]. Nothing was lost, which is why it went
+    // unnoticed; the units all came back. What moved was the KEY each one
+    // answers to, and toggleCarried says in as many words that it leaves a hole
+    // rather than shuffling the bar precisely because a player learns those
+    // positions. The promise held for the session and broke on the next launch.
     std::string carried;
     for (int slot = 0; slot < kLoadoutSlots; ++slot) {
+        if (slot > 0) carried += ",";
         const int kind = campaign.loadout[slot];
         if (kind < 0 || kind >= unitKindCount()) continue;
-        if (!carried.empty()) carried += ",";
         carried += unitKind(kind).name;
     }
     writer.set("loadout", carried);
@@ -664,6 +716,13 @@ bool loadCampaign(Campaign& campaign) {
     // roster no longer has is simply dropped, which turns "the file was
     // written against a roster that has changed" into an empty slot rather
     // than into somebody else's unit.
+    // Position is carried by the comma, not by the order of the names: the nth
+    // field is the nth slot, and an empty field is a slot deliberately left
+    // open. The slot counter therefore advances on EVERY separator, not only
+    // on the ones that named a unit — which is what keeps a hole a hole.
+    //
+    // A save written before this change has no holes in it to lose, so it
+    // still loads to exactly what it used to mean.
     for (int slot = 0; slot < kLoadoutSlots; ++slot) campaign.loadout[slot] = -1;
     {
         const std::string carried = section->text("loadout", "");
@@ -678,11 +737,12 @@ bool loadCampaign(Campaign& campaign) {
             if (!name.empty() && slot < kLoadoutSlots) {
                 for (int kind = 0; kind < unitKindCount(); ++kind) {
                     if (name == unitKind(kind).name && kind != heroKindIndex()) {
-                        campaign.loadout[slot++] = kind;
+                        campaign.loadout[slot] = kind;
                         break;
                     }
                 }
             }
+            ++slot;
             name.clear();
         }
     }
@@ -1533,6 +1593,11 @@ public:
 
         buildField(world);
 
+        weather_.start(world, textureCache);
+        weatherText_ = createText(world, "F6 WEATHER - F11 FLASH", 16, 164, 1,
+                                  140, 160, 180, kHudLayer);
+        hud_.push_back(weatherText_);
+
         goldText_ = createText(world, "GOLD 150", 16, 14, 3, 235, 220, 150,
                                kHudLayer);
         leftHealthText_ = createText(world, "", 16, 48, 2, 140, 200, 240,
@@ -1576,6 +1641,7 @@ public:
 
     void onExit(World& world) override {
         clearField(world);
+        weather_.clear(world);
         world.destroyLater(sessionEntity_);
         world.destroyLater(cameraEntity_);
         for (Entity entity : hud_) world.destroyLater(entity);
@@ -1637,6 +1703,13 @@ public:
 
         session->cannonCooldown = std::max(0.0f, session->cannonCooldown - dt);
 
+        weather_.controls(input);
+        weather_.update(world, dt);
+        if (auto* text = world.getComponent<Text>(weatherText_))
+            text->value = std::string("F6 ") + weatherName(weather_.settings.preset) + " - F11 FLASH " +
+                (weather_.settings.lightning == LightningMode::Off ? "OFF" :
+                 weather_.settings.lightning == LightningMode::Reduced ? "REDUCED" : "NORMAL");
+
         earnGold(*session, dt);
         handleUpgrades(world, *session, input);
         handleSpawning(world, *session, input, dt);
@@ -1650,6 +1723,12 @@ public:
         healAroundTheHero(world, dt);
         updateSpells(world, *session, input, dt);
         updateCannonballs(world, dt);
+
+        // Last, because a castle can be finished by a blow, a bolt or a shell,
+        // and asking before all three have landed is how the answer used to
+        // depend on which one got there first. See settleBattle.
+        settleBattle(world, *session);
+
         animateUnits(world, dt);
         updateCamera(world, *session, input, dt);
         refreshHud(world, *session);
@@ -1657,6 +1736,8 @@ public:
     }
 
 private:
+    WeatherSystem weather_;
+    Entity weatherText_ = 0;
     void buildField(World& world) {
         // Scenery first, so it holds the lowest entity ids as well as the
         // lowest layers. Layers alone would be enough, but keeping creation
@@ -1774,6 +1855,10 @@ private:
     }
 
     void buildScenery(World& world) {
+        if (buildVectorScenery(world, textureCache, field_)) {
+            buildForeground(world);
+            return;
+        }
         // Sky: screen-space, because it genuinely does not move. Three bands
         // standing in for a gradient the renderer cannot draw.
         field_.push_back(makeSky(world, 0.0f, 150.0f, 26, 30, 46));
@@ -2281,6 +2366,15 @@ private:
             Velocity* velocity = world.getComponent<Velocity>(attacker);
             if (!unit || !team || !at || !velocity) continue;
 
+            // The dead do not swing. They can still be here: a spell or a
+            // shell kills after removeTheDead has run for this frame, so the
+            // body is cleared on the next pass — and until this line existed
+            // it got a free attack on the way out. A unit at zero health that
+            // still deals its damage makes killing something worth less than
+            // the arithmetic says, and makes it depend on the order the blow
+            // arrived in.
+            if (unit->health <= 0.0f) continue;
+
             const UnitKind& stats = kindOf(unit->kind);
             const Entity target =
                 findTargetAhead(world, attacker, team->leftSide, at->x, stats,
@@ -2302,10 +2396,31 @@ private:
 
             // The hero's path can shorten the gap between its blows. Everything
             // else swings at whatever the roster says.
-            unit->timeUntilAttack =
-                world.hasComponent<Hero>(attacker)
-                    ? stats.attackDelay * heroDelayScale_
-                    : stats.attackDelay;
+            const float delay = world.hasComponent<Hero>(attacker)
+                                    ? stats.attackDelay * heroDelayScale_
+                                    : stats.attackDelay;
+
+            // ADDED to what is left over, not assigned. The timer is normally
+            // slightly PAST zero when a swing lands — a frame is not going to
+            // end exactly on the interval — and assigning the full delay threw
+            // that overshoot away, once per swing. It made a unit's real rate
+            // of fire depend on the frame rate: a soldier hitting a wall for a
+            // minute dealt 1,260 damage at 15 frames a second and 1,400 at
+            // sixty, because at 15 it lost a bigger slice each time. Two
+            // players on different machines were playing measurably different
+            // games, and none of the balance measured by the probe applied to
+            // either of them.
+            //
+            // Banking the remainder makes the interval mean seconds. Same
+            // reasoning as the while-loop in AnimationSystem.
+            unit->timeUntilAttack += delay;
+
+            // A single frame may owe a single swing, never a backlog. Without
+            // this a long stall — a breakpoint, a window drag, a loading
+            // hitch — would leave the timer far enough behind that the unit
+            // fired every frame for a while to catch up, turning a hiccup into
+            // a burst of damage nobody asked for.
+            if (unit->timeUntilAttack < 0.0f) unit->timeUntilAttack = 0.0f;
             unit->swing = 1.0f;  // starts the arm through its arc
 
             // WEAPONS is the player's perk, so only the player's units swing
@@ -2334,39 +2449,68 @@ private:
             } else if (Castle* castle = world.getComponent<Castle>(target)) {
                 castle->health -= damage;
                 playCastleHit();
-                if (castle->health <= 0.0f) {
-                    Team* castleTeam = world.getComponent<Team>(target);
-                    session.gameOver = true;
-                    // The player holds the left castle, so the right one
-                    // falling is a win.
-                    session.playerWon = castleTeam && !castleTeam->leftSide;
-
-                    if (session.playerWon) {
-                        // Winning opens the next stage. Clamped to the last
-                        // one, so finishing the campaign does not leave the
-                        // list pointing past its own end.
-                        Campaign& campaign = campaignOf(world);
-                        campaign.stagesUnlocked =
-                            std::min(stageCount(),
-                                     std::max(campaign.stagesUnlocked, stage_ + 2));
-
-                        // Paid out, and the first clear pays double — so
-                        // pushing forward is worth more than farming a stage
-                        // already beaten, without ever forbidding the farming.
-                        const bool firstClear =
-                            stage_ < kMaxStages && !campaign.cleared[stage_];
-                        campaign.bank += static_cast<int>(
-                            stageReward(stage_, firstClear));
-                        if (stage_ < kMaxStages) campaign.cleared[stage_] = true;
-
-                        // Saved the moment it is earned rather than on exit.
-                        // A campaign lost because the window was closed the
-                        // wrong way is a bad way to learn about save points.
-                        saveCampaign(campaign);
-                    }
-                }
+                // Whether that ENDED the battle is not decided here. See
+                // settleBattle, called once after the loop.
             }
         }
+    }
+
+    // Decides whether the battle is over, exactly once.
+    //
+    // This used to live inside the attacker loop, on the frame a castle's
+    // health crossed zero, and it did three things there that only look
+    // correct while one unit is in reach of a castle at a time:
+    //
+    //   - It paid the reward from inside a loop that keeps going. Three
+    //     attackers finishing the same castle in one update ran the payout
+    //     three times, banking double the intended first clear and saving each
+    //     time.
+    //   - It wrote `playerWon` from whichever castle happened to fall LAST in
+    //     iteration order. With both castles on their final point of health it
+    //     could pay out a win and then report a loss, in that order, in one
+    //     update.
+    //   - It ran before anything else that can damage a castle — the cannon
+    //     and a bolt both can — so those had to wait a frame to be noticed.
+    //
+    // Asking the question once, after all of this update's damage has landed,
+    // makes all three go away. The rule for the simultaneous case is stated
+    // rather than emergent: YOUR castle falling is a loss even if theirs fell
+    // in the same instant. You have to be standing at the end. The alternative
+    // rewards ignoring defence entirely, and this game already pays well for
+    // attacking.
+    void settleBattle(World& world, Session& session) {
+        if (session.gameOver) return;
+
+        const Entity mine = findCastle(world, true);
+        const Entity theirs = findCastle(world, false);
+        const Castle* myCastle = world.getComponent<Castle>(mine);
+        const Castle* theirCastle = world.getComponent<Castle>(theirs);
+
+        const bool iFell = myCastle && myCastle->health <= 0.0f;
+        const bool theyFell = theirCastle && theirCastle->health <= 0.0f;
+        if (!iFell && !theyFell) return;
+
+        session.gameOver = true;
+        session.playerWon = theyFell && !iFell;
+        if (!session.playerWon) return;
+
+        // Winning opens the next stage. Clamped to the last one, so finishing
+        // the campaign does not leave the list pointing past its own end.
+        Campaign& campaign = campaignOf(world);
+        campaign.stagesUnlocked = std::min(
+            stageCount(), std::max(campaign.stagesUnlocked, stage_ + 2));
+
+        // Paid out, and the first clear pays double — so pushing forward is
+        // worth more than farming a stage already beaten, without ever
+        // forbidding the farming.
+        const bool firstClear = stage_ < kMaxStages && !campaign.cleared[stage_];
+        campaign.bank += static_cast<int>(stageReward(stage_, firstClear));
+        if (stage_ < kMaxStages) campaign.cleared[stage_] = true;
+
+        // Saved the moment it is earned rather than on exit. A campaign lost
+        // because the window was closed the wrong way is a bad way to learn
+        // about save points.
+        saveCampaign(campaign);
     }
 
     void removeTheDead(World& world, Session& session) {
@@ -2545,11 +2689,21 @@ private:
         std::vector<Entity> landed;
 
         for (auto& [entity, shot] : world.view<Cannonball>()) {
-            Velocity* velocity = world.getComponent<Velocity>(entity);
-            if (velocity) velocity->dy += kCannonGravity * dt;
+            Transform* at = world.getComponent<Transform>(entity);
+            if (!at) continue;
 
-            shot.timeLeft -= dt;
-            if (shot.timeLeft <= 0.0f) landed.push_back(entity);
+            shot.elapsed += dt;
+
+            // Clamped, so the last frame of the flight puts the shell exactly
+            // on the point it was aimed at rather than however far past it the
+            // frame happened to carry. That overshoot is up to a whole frame of
+            // travel, which is the other half of the frame-rate dependence.
+            const float t = std::min(shot.elapsed, kCannonFlightTime);
+            at->x = shot.startX + shot.velocityX * t;
+            at->y = shot.startY + shot.velocityY * t +
+                    kCannonGravity * t * t * 0.5f;
+
+            if (shot.elapsed >= kCannonFlightTime) landed.push_back(entity);
         }
 
         // Gathered first: exploding creates shards and queues deaths, neither
@@ -3415,8 +3569,13 @@ private:
 // The army screen: what you own, what you carry, and what you have trained.
 class ArmyScene : public Scene {
 public:
+    // This screen prints "Q OR ESC TO GO BACK" and means it. Without this the
+    // engine took Escape first and closed the window instead.
+    bool escapeQuits() const override { return false; }
+
     void onEnter(World& world) override {
-        const Campaign& campaign = campaignOf(world);
+        Campaign& campaign = campaignOf(world);
+        seedLoadout(campaign);
 
         owned_.push_back(createCenteredText(world, "YOUR ARMY", 44, 4,
                                             235, 220, 150, kHudLayer));
@@ -3424,13 +3583,9 @@ public:
             world, "GOLD " + std::to_string(campaign.bank), 20, 18, 3,
             235, 220, 150, kHudLayer));
 
-        int carriedCount = 0;
-        for (int slot = 0; slot < kLoadoutSlots; ++slot) {
-            if (campaign.loadout[slot] >= 0) ++carriedCount;
-        }
         owned_.push_back(createCenteredText(
             world,
-            "CARRYING " + std::to_string(carriedCount) + " OF " +
+            "CARRYING " + std::to_string(countCarried(campaign)) + " OF " +
                 std::to_string(kLoadoutSlots) + " - CLICK A NAME TO CARRY OR DROP IT",
             88, 2, 170, 170, 195, kHudLayer));
 
@@ -3439,6 +3594,17 @@ public:
             const int kind = sellableKind(index);
             if (kind < 0) continue;
             buildRow(world, campaign, index, kind);
+        }
+
+        // Above the hint rather than in place of it, so the way out never
+        // disappears behind a message about something else — and far enough
+        // above that the two do not read as one paragraph. At 10 pixels they
+        // did: a screenshot showed the warning and GO BACK stacked tight
+        // enough to look like a single two-line block of instructions.
+        if (noticeSeconds_ > 0.0f && !notice_.empty()) {
+            owned_.push_back(createCenteredText(
+                world, notice_, static_cast<int>(kArmyHintY) - 26, 2,
+                235, 170, 110, kHudLayer));
         }
 
         owned_.push_back(createCenteredText(
@@ -3540,13 +3706,67 @@ public:
         onEnter(world);
     }
 
+    // Writes down the loadout a player already had, the first time they come
+    // to look at it.
+    //
+    // A new campaign carries nothing, and "nothing chosen" is what makes the
+    // spawn bar fall back to the first few roster rows — so the player has
+    // been fighting with four units that were never recorded anywhere. Opening
+    // this screen and clicking one of them used to mean "carry exactly this
+    // one", silently dropping the other three: the first thing the screen ever
+    // did was take three units away for touching it.
+    //
+    // Seeding makes the fallback explicit before it can be edited, so the
+    // first click is a toggle rather than a reset. It writes down what was
+    // already true, which is why it is allowed to save.
+    void seedLoadout(Campaign& campaign) {
+        for (int slot = 0; slot < kLoadoutSlots; ++slot) {
+            if (campaign.loadout[slot] >= 0) return;  // already chosen
+        }
+        for (int slot = 0; slot < kLoadoutSlots; ++slot) {
+            campaign.loadout[slot] = sellableKind(slot);
+        }
+        saveCampaign(campaign);
+    }
+
+    static int countCarried(const Campaign& campaign) {
+        int count = 0;
+        for (int slot = 0; slot < kLoadoutSlots; ++slot) {
+            if (campaign.loadout[slot] >= 0) ++count;
+        }
+        return count;
+    }
+
+    // Says why nothing happened, for a couple of seconds.
+    //
+    // Both of this screen's refusals used to be silent — dropping your last
+    // unit, and carrying one more than there are slots for. A click that does
+    // nothing and explains nothing is indistinguishable from a click the game
+    // missed, and the player's next move is to click it again harder.
+    void warn(World& world, const char* text) {
+        notice_ = text;
+        noticeSeconds_ = kNoticeSeconds;
+        rebuild(world);
+    }
+
     // Carry it, or put it back. Dropping leaves a hole rather than shuffling
     // the rest along: the slot a unit sits in is the key that sends it, and
     // re-ordering the bar under a player who has learned it is a worse cost
-    // than an empty button.
+    // than an empty button. The save keeps the holes too, which it did not
+    // always do.
     void toggleCarried(World& world, Campaign& campaign, int kind) {
         for (int slot = 0; slot < kLoadoutSlots; ++slot) {
             if (campaign.loadout[slot] == kind) {
+                // Never all the way to nothing. An empty loadout is not a
+                // strategy, it is a player who cannot spawn anything and has
+                // no way to find out why — and it is indistinguishable, in a
+                // save file, from a campaign that never chose at all, which
+                // would hand the defaults back on the next launch as if the
+                // choice had not been made.
+                if (countCarried(campaign) <= 1) {
+                    warn(world, "CARRY AT LEAST ONE UNIT");
+                    return;
+                }
                 campaign.loadout[slot] = -1;
                 saveCampaign(campaign);
                 rebuild(world);
@@ -3561,13 +3781,27 @@ public:
                 return;
             }
         }
-        // Full, and nothing happens. Silently swapping something out would
-        // make a mis-click cost a unit the player had chosen deliberately.
+        // Nothing free to put it in. Silently swapping something out would
+        // make a mis-click cost a unit the player had chosen deliberately, so
+        // the refusal stands — but it now says so.
+        warn(world, "NO FREE SLOT - DROP ONE FIRST");
     }
 
-    void update(World& world, InputManager& input, float,
+    void update(World& world, InputManager& input, float dt,
                 SceneStack& scenes) override {
         Campaign& campaign = campaignOf(world);
+
+        // A notice is on screen for a couple of seconds and then is not. The
+        // rebuild is what takes it down, so it only happens on the frame the
+        // countdown actually runs out.
+        if (noticeSeconds_ > 0.0f) {
+            noticeSeconds_ -= dt;
+            if (noticeSeconds_ <= 0.0f) {
+                noticeSeconds_ = 0.0f;
+                notice_.clear();
+                rebuild(world);
+            }
+        }
 
         if (input.wasKeyPressed(SDL_SCANCODE_Q) ||
             input.wasKeyPressed(SDL_SCANCODE_ESCAPE)) {
@@ -3592,10 +3826,16 @@ public:
         }
 
         const int level = campaign.unitLevels[kind];
-        if (level >= kMaxUnitLevel) return;
+        if (level >= kMaxUnitLevel) {
+            warn(world, "ALREADY AT THE HIGHEST LEVEL");
+            return;
+        }
 
         const float cost = trainCost(kind, level);
-        if (static_cast<float>(campaign.bank) < cost) return;
+        if (static_cast<float>(campaign.bank) < cost) {
+            warn(world, "NOT ENOUGH GOLD TO TRAIN THAT");
+            return;
+        }
 
         campaign.bank -= static_cast<int>(cost);
         ++campaign.unitLevels[kind];
@@ -3606,12 +3846,18 @@ public:
     bool simulatesWorld() const override { return false; }
 
 private:
+    static constexpr float kNoticeSeconds = 2.2f;
+
     std::vector<Entity> owned_;
+    std::string notice_;
+    float noticeSeconds_ = 0.0f;
 };
 
 // The hero screen: choose a path once, then spend the bank inside it.
 class HeroScene : public Scene {
 public:
+    bool escapeQuits() const override { return false; }  // same as ArmyScene
+
     void onEnter(World& world) override {
         const Campaign& campaign = campaignOf(world);
         const int chosen = campaign.heroPath;

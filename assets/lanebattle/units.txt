@@ -301,7 +301,7 @@ composition         = 1,3,3,1
 
 [stage]
 name                = BLACK FIELD
-enemy_income        = 1.15
+enemy_income        = 1.45
 enemy_castle_health = 900
 wave_size           = 3
 composition         = 1,1,2

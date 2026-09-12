@@ -65,6 +65,23 @@ public:
     // exactly what a pause is supposed to prevent. An overlay that means
     // "the world is holding still" returns false.
     virtual bool simulatesWorld() const { return true; }
+
+    // Should Escape close the window while this scene is on top?
+    //
+    // Escape means "out of here", and for most of this project's games there
+    // has only ever been one "here" to be out of, so the engine quitting on it
+    // was right. A game with screens inside screens breaks that: Lane Battle's
+    // army and hero screens print GO BACK next to the key, handle it in their
+    // own update, and never got the chance — the engine had already stopped
+    // the loop. The screen advertised a thing it could not do, and the player
+    // who tried it lost the window.
+    //
+    // A scene that wants Escape for itself returns false. The default stays
+    // true so the three games that never had sub-screens behave exactly as
+    // they did, and closing the window is untouched either way: SDL_QUIT is
+    // the operating system talking, not the player, and no scene may refuse
+    // it.
+    virtual bool escapeQuits() const { return true; }
 };
 
 using ScenePtr = std::unique_ptr<Scene>;
@@ -140,6 +157,10 @@ public:
     // this before running its built-in systems each frame.
     bool simulating() const {
         return scenes_.empty() ? true : scenes_.back()->simulatesWorld();
+    }
+
+    bool escapeQuits() const {
+        return scenes_.empty() ? true : scenes_.back()->escapeQuits();
     }
 
 private:

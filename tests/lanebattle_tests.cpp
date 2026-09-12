@@ -2267,6 +2267,78 @@ void testAShotLandsWhereItWasAimed() {
     }
 }
 
+// And lands in the same PLACE however fast the machine is running.
+//
+// The test above measures x only, and x is the half that cannot drift: the
+// horizontal velocity never changes, so however the frame is chopped up the
+// shell covers the same ground. Height is the other half. Gravity is applied
+// once per frame and the position is stepped with the velocity from before that
+// happened, which is forward Euler — and forward Euler's error in a falling
+// body is proportional to the step size, so the shell lands lower on a fast
+// machine than on a slow one.
+//
+// It is not small. Half a gravity, times most of a second of flight, times the
+// difference between a 15fps frame and a 144fps one, is about twenty pixels
+// against a blast radius of forty-six. A unit at the edge of the blast dies on
+// one machine and walks away on the other, from the same click.
+//
+// Measured at a fixed number of SECONDS rather than frames, because seconds are
+// what the two runs have in common and the thing being asserted is that they
+// agree about them.
+void testAShotFallsAtTheSameRateAtAnyFrameRate() {
+    // `airborne` is the flight time the SHELL has had, not the wall clock of
+    // the test, and the two frame rates are chosen so that a whole number of
+    // frames of each adds up to exactly it. That matters more than it looks:
+    // the first version of this measured "step until roughly this many seconds
+    // have passed", which left the two runs holding shells of slightly
+    // different ages, and then reported the age difference as a trajectory
+    // difference. It failed against correct code. A measurement that cannot
+    // distinguish the thing it is measuring from an artefact of how it measures
+    // is the same false green this whole exercise keeps turning up.
+    auto heightAfter = [](float dt, float airborne) {
+        Game game;
+        game.startPlaying();
+        game.suppressEnemySpawns();
+        game.session().gold = 500.0f;
+
+        game.driver.clickAt(screenXFor(game, 380.0f), kFieldClickY);
+        game.driver.step(kFireFrames, dt);
+
+        Entity shot = kInvalidEntity;
+        for (Entity entity : game.world.entities()) {
+            if (game.world.hasComponent<lanebattle::Cannonball>(entity)) {
+                shot = entity;
+            }
+        }
+        if (shot == kInvalidEntity) return 0.0f;
+
+        // Flown until the SHELL says it has been up for long enough, rather
+        // than until a frame count says so. How many frames it took to get into
+        // the air is a detail of the firing path, and counting from the click
+        // would fold that detail into the answer.
+        for (int guard = 0; guard < 10000; ++guard) {
+            const lanebattle::Cannonball* ball =
+                game.world.getComponent<lanebattle::Cannonball>(shot);
+            if (!ball || ball->elapsed >= airborne - dt * 0.5f) break;
+            game.driver.step(1, dt);
+        }
+
+        const Transform* at = game.world.getComponent<Transform>(shot);
+        return at ? at->y : 0.0f;
+    };
+
+    // 8/15 of a second: eight frames at 15fps, sixty-four at 120, and short of
+    // the flight time either way so the shell is still there to be measured.
+    const float airborne = 8.0f / 15.0f;
+    const float slow = heightAfter(1.0f / 15.0f, airborne);
+    const float fast = heightAfter(1.0f / 120.0f, airborne);
+
+    check(slow != 0.0f && fast != 0.0f, "the shell is airborne at both rates");
+    check(std::fabs(slow - fast) < 1.0f,
+          "a shell is at the same height after the same flight time at 15 fps "
+          "as at 120");
+}
+
 // Each scenario gets its own battle with exactly one unit in it. Putting an
 // enemy and a friendly side by side would have them fighting each other, and
 // then "did the cannon hurt it" cannot be told apart from "did the soldier".
@@ -4863,6 +4935,239 @@ composition         = 2,2,1
 // two pixel positions for four solid minutes, castles untouched, gold cycling
 // on a perfect period. Spending the instant you can afford to is precisely
 // what the opponent does, so playing that way mirrors it exactly and neither
+// --- What a review found, and what now notices --------------------------------
+//
+// Every case below reproduces something that was wrong in shipped code and that
+// 708 assertions did not see. They are grouped because they share a shape: each
+// one is a rule that holds for the ordinary case and breaks for a case the
+// tests never built — two attackers instead of one, a death from a spell
+// instead of from a blow, a key released in the same frame it was pressed, a
+// save reloaded rather than merely written.
+
+// Finding: the battle paid its reward once per finishing blow.
+//
+// Every test that won a battle did it with ONE unit standing at the castle,
+// which is the only arrangement where "pay when a castle falls" and "pay when
+// the battle ends" mean the same thing. Put three there and the old code ran
+// the payout three times inside the same loop over attackers.
+void testABattleFinishesExactlyOnce() {
+    Game game;
+    game.startStage(2);
+    game.suppressEnemySpawns();
+
+    const int before = lanebattle::campaignOf(game.world).bank;
+    const Entity enemyCastle = lanebattle::findCastle(game.world, false);
+    const float castleX =
+        game.world.getComponent<Transform>(enemyCastle)->x;
+
+    // Three of them, all in reach, all able to finish it this frame.
+    for (int index = 0; index < 3; ++index) {
+        const Entity mine = lanebattle::spawnUnit(game.world, true, kSoldier);
+        game.world.getComponent<Transform>(mine)->x =
+            castleX - stats(kSoldier).range + 4.0f;
+    }
+    game.world.getComponent<Castle>(enemyCastle)->health = 1.0f;
+    game.driver.step(4);
+
+    check(game.session().playerWon, "three attackers still win the stage");
+    const lanebattle::Campaign& campaign = lanebattle::campaignOf(game.world);
+    check(campaign.bank - before ==
+              static_cast<int>(lanebattle::stageReward(2, true)),
+          "and it pays for the stage, not for each unit that landed a blow");
+}
+
+// Finding: with both castles falling in one update, the game paid out a win and
+// then reported a loss — the last castle to come up in iteration order decided
+// `playerWon`, and the payout had already happened by then.
+//
+// The rule is now stated: you have to be standing at the end.
+void testBothCastlesFallingInOneUpdateIsALoss() {
+    Game game;
+    game.startStage(2);
+    game.suppressEnemySpawns();
+
+    const int before = lanebattle::campaignOf(game.world).bank;
+
+    const Entity theirCastle = lanebattle::findCastle(game.world, false);
+    const Entity myCastle = lanebattle::findCastle(game.world, true);
+
+    const Entity mine = lanebattle::spawnUnit(game.world, true, kSoldier);
+    game.world.getComponent<Transform>(mine)->x =
+        game.world.getComponent<Transform>(theirCastle)->x -
+        stats(kSoldier).range + 4.0f;
+
+    const Entity theirs = lanebattle::spawnUnit(game.world, false, kSoldier);
+    game.world.getComponent<Transform>(theirs)->x =
+        game.world.getComponent<Transform>(myCastle)->x +
+        lanebattle::kCastleWidth + 4.0f;
+
+    game.world.getComponent<Castle>(theirCastle)->health = 1.0f;
+    game.world.getComponent<Castle>(myCastle)->health = 1.0f;
+    game.driver.step(6);
+
+    check(game.session().gameOver, "the battle ends");
+    check(!game.session().playerWon,
+          "and losing your own castle is a loss however theirs went");
+    check(lanebattle::campaignOf(game.world).bank == before,
+          "a loss pays nothing, even one that killed the enemy castle");
+}
+
+// Finding: a unit killed by a spell or a shell went on fighting for a frame.
+//
+// The dead are cleared right after the melee, and both the meteor and the
+// cannon land after that — so anything they killed sat at zero health until the
+// next update, and in that update it took its swing and soaked up blows aimed
+// at it. Neither is visible unless something kills OUTSIDE the melee, which is
+// why every existing combat test missed it.
+void testTheDeadDoNotFight() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const Entity mine = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const Entity theirs = lanebattle::spawnUnit(game.world, false, kSoldier);
+
+    // Nose to nose, so they are certainly in reach of each other.
+    Transform* at = game.world.getComponent<Transform>(mine);
+    game.world.getComponent<Transform>(theirs)->x =
+        at->x + stats(kSoldier).range - 4.0f;
+
+    // Killed where no clean-up will see it before the next fight, which is
+    // exactly the state a bolt or a shell leaves behind.
+    Unit* corpse = game.world.getComponent<Unit>(theirs);
+    corpse->health = 0.0f;
+    corpse->timeUntilAttack = 0.0f;
+
+    const float myHealthBefore = game.world.getComponent<Unit>(mine)->health;
+    game.driver.step();
+
+    Unit* survivor = game.world.getComponent<Unit>(mine);
+    check(survivor != nullptr, "the living unit is still here");
+    if (survivor) {
+        check(survivor->health == myHealthBefore,
+              "a unit at zero health lands no last blow on its way out");
+    }
+}
+
+// The other half of the same finding: a corpse must not absorb hits either.
+// A body that is still a valid target is a free shield for the side that lost
+// it, and the hits spent on it are hits the living did not take.
+void testACorpseIsNotAShield() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const Entity mine = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const float from = game.world.getComponent<Transform>(mine)->x;
+
+    // A dead one in front, and a live one just behind it, both in reach.
+    const Entity corpse = lanebattle::spawnUnit(game.world, false, kSoldier);
+    game.world.getComponent<Transform>(corpse)->x =
+        from + stats(kSoldier).range - 12.0f;
+    game.world.getComponent<Unit>(corpse)->health = 0.0f;
+
+    const Entity live = lanebattle::spawnUnit(game.world, false, kSoldier);
+    game.world.getComponent<Transform>(live)->x =
+        from + stats(kSoldier).range - 6.0f;
+    const float liveBefore = game.world.getComponent<Unit>(live)->health;
+
+    game.world.getComponent<Unit>(mine)->timeUntilAttack = 0.0f;
+    game.driver.step();
+
+    Unit* target = game.world.getComponent<Unit>(live);
+    check(target != nullptr, "the living target is still here");
+    if (target) {
+        check(target->health < liveBefore,
+              "the blow goes through the corpse to the unit behind it");
+    }
+}
+
+// Finding: a unit's real rate of fire depended on the frame rate.
+//
+// Resetting the timer to the full delay threw away however far past zero it had
+// gone, and how far that is depends entirely on how long a frame took. The same
+// soldier hitting the same wall for the same sixty seconds did measurably less
+// damage on a slower machine.
+//
+// Measured as damage dealt over a fixed number of SECONDS at two very different
+// step sizes, because that is the thing that was wrong — not the timer, the
+// game.
+void testAttacksLandAtTheSameRateAtAnyFrameRate() {
+    auto damageOverAMinute = [](float dt) {
+        const int steps = static_cast<int>(60.0f / dt);
+        Game game;
+        game.startPlaying();
+        game.suppressEnemySpawns();
+
+        const Entity mine = lanebattle::spawnUnit(game.world, true, kSoldier);
+        const Entity enemyCastle = lanebattle::findCastle(game.world, false);
+        game.world.getComponent<Transform>(mine)->x =
+            game.world.getComponent<Transform>(enemyCastle)->x -
+            stats(kSoldier).range + 4.0f;
+
+        Castle* castle = game.world.getComponent<Castle>(enemyCastle);
+        castle->health = 1.0e6f;  // far too much to break, so nothing ends
+        const float before = castle->health;
+        game.driver.step(steps, dt);
+        return before - game.world.getComponent<Castle>(enemyCastle)->health;
+    };
+
+    const float slow = damageOverAMinute(1.0f / 15.0f);
+    const float fast = damageOverAMinute(1.0f / 144.0f);
+
+    check(slow > 0.0f && fast > 0.0f, "the castle is being hit at both rates");
+    // One swing of slack either way: which side of a frame boundary the last
+    // blow falls on is a real difference and a tiny one. Six percent was not.
+    const float slack = stats(kSoldier).damage * 1.5f;
+    check(std::fabs(slow - fast) <= slack,
+          "a minute of attacking deals the same damage at 15 fps as at 144");
+}
+
+// Finding: the loadout came back from a save with its holes closed up.
+//
+// The save wrote the names it had and skipped the empty slots, so loading
+// packed them against the front. Everything came back, which is why nothing
+// noticed; what moved was which NUMBER KEY each unit answers to, and the army
+// screen promises in as many words that dropping a unit leaves a hole rather
+// than shuffling the bar.
+void testDroppingAUnitLeavesItsHoleAcrossASave() {
+    Game game;
+    lanebattle::Campaign saved;
+    saved.loadout[0] = -1;
+    saved.loadout[1] = kSoldier;
+    saved.loadout[2] = -1;
+    saved.loadout[3] = kArcher;
+    check(lanebattle::saveCampaign(saved), "the campaign saved");
+
+    lanebattle::Campaign loaded;
+    check(lanebattle::loadCampaign(loaded), "and loaded again");
+    check(loaded.loadout[0] == -1 && loaded.loadout[1] == kSoldier &&
+              loaded.loadout[2] == -1 && loaded.loadout[3] == kArcher,
+          "every unit comes back in the slot it was put in");
+}
+
+// Finding: the screenshot tool wrote to the player's real save file.
+//
+// It stages a victory to photograph the win screen, and staging one runs the
+// real logic, which banks the reward and saves. It never named a save path, and
+// the default was the player's own. Now the default is a scratch file and the
+// real one has to be asked for, so forgetting costs a stray file rather than a
+// campaign.
+void testTheRealSaveHasToBeAskedForByName() {
+    const std::string configured = lanebattle::savePath();
+
+    lanebattle::setSavePath("");  // back to the unconfigured default
+    const std::string byDefault = lanebattle::savePath();
+    lanebattle::usePlayerSavePath();
+    const std::string players = lanebattle::savePath();
+
+    check(byDefault != players,
+          "a tool that names no save path does not get the player's");
+    check(!players.empty(), "and the player's own is still reachable by name");
+
+    lanebattle::setSavePath(configured);  // the rest of the suite wants it back
+}
+
 // front line ever moves.
 //
 // Banking the gold and sending a wave breaks it immediately — the extra
@@ -5028,6 +5333,7 @@ int main() {
     testClickingTheFieldFiresTheCannon();
     testAnEmptyPurseFiresNothing();
     testAShotLandsWhereItWasAimed();
+    testAShotFallsAtTheSameRateAtAnyFrameRate();
     testAShotDamagesEnemiesAndSparesFriends();
     testTheCannonCannotReachAcrossTheField();
     testDraggingDoesNotFire();
@@ -5114,6 +5420,14 @@ int main() {
     testTheSkyIsItsOwnQueue();
     testAStageCanFieldFlyers();
     testAWallOfSoldiersCannotAnswerTheSky();
+
+    testABattleFinishesExactlyOnce();
+    testBothCastlesFallingInOneUpdateIsALoss();
+    testTheDeadDoNotFight();
+    testACorpseIsNotAShield();
+    testAttacksLandAtTheSameRateAtAnyFrameRate();
+    testDroppingAUnitLeavesItsHoleAcrossASave();
+    testTheRealSaveHasToBeAskedForByName();
 
     testABattleCanBeWon();
     testOneUnitTypeIsNotEnough();

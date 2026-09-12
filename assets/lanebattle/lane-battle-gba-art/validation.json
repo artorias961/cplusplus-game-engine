@@ -1,0 +1,472 @@
+[
+  {
+    "file": "units/friendly/runner.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 288,
+    "expectedHeight": 288,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/friendly/soldier.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 288,
+    "expectedHeight": 288,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/friendly/archer.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 288,
+    "expectedHeight": 288,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/friendly/pikeman.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 384,
+    "expectedHeight": 384,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/friendly/ogre.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 576,
+    "expectedHeight": 576,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/friendly/ballista.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 576,
+    "expectedHeight": 576,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/friendly/griffin.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 576,
+    "expectedHeight": 576,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/friendly/hero.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 384,
+    "expectedHeight": 384,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/friendly/hero-warden.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 384,
+    "expectedHeight": 384,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/friendly/hero-falconer.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 384,
+    "expectedHeight": 384,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/friendly/hero-chaplain.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 384,
+    "expectedHeight": 384,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/enemy/runner.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 288,
+    "expectedHeight": 288,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/enemy/soldier.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 288,
+    "expectedHeight": 288,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/enemy/archer.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 288,
+    "expectedHeight": 288,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/enemy/pikeman.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 384,
+    "expectedHeight": 384,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/enemy/ogre.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 576,
+    "expectedHeight": 576,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/enemy/ballista.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 576,
+    "expectedHeight": 576,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/enemy/griffin.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 576,
+    "expectedHeight": 576,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/enemy/hero.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 384,
+    "expectedHeight": 384,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/enemy/hero-warden.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 384,
+    "expectedHeight": 384,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/enemy/hero-falconer.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 384,
+    "expectedHeight": 384,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "units/enemy/hero-chaplain.png",
+    "width": 1254,
+    "height": 1254,
+    "expectedWidth": 384,
+    "expectedHeight": 384,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "effects/dagger-slash.png",
+    "width": 2172,
+    "height": 724,
+    "expectedWidth": 192,
+    "expectedHeight": 32,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "effects/sword-arc.png",
+    "width": 2172,
+    "height": 724,
+    "expectedWidth": 384,
+    "expectedHeight": 64,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "effects/spear-spark.png",
+    "width": 2172,
+    "height": 724,
+    "expectedWidth": 192,
+    "expectedHeight": 32,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "effects/arrow.png",
+    "width": 2172,
+    "height": 724,
+    "expectedWidth": 192,
+    "expectedHeight": 32,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "effects/ballista-bolt.png",
+    "width": 2172,
+    "height": 724,
+    "expectedWidth": 384,
+    "expectedHeight": 64,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "effects/club-impact.png",
+    "width": 2172,
+    "height": 724,
+    "expectedWidth": 384,
+    "expectedHeight": 64,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "effects/griffin-claw.png",
+    "width": 2172,
+    "height": 724,
+    "expectedWidth": 384,
+    "expectedHeight": 64,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "effects/shield-block.png",
+    "width": 2172,
+    "height": 724,
+    "expectedWidth": 192,
+    "expectedHeight": 32,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "effects/damage-impact.png",
+    "width": 2172,
+    "height": 724,
+    "expectedWidth": 192,
+    "expectedHeight": 32,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "effects/stun-stars.png",
+    "width": 1717,
+    "height": 916,
+    "expectedWidth": 192,
+    "expectedHeight": 32,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "effects/healing.png",
+    "width": 2172,
+    "height": 724,
+    "expectedWidth": 384,
+    "expectedHeight": 64,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "effects/rage-aura.png",
+    "width": 2172,
+    "height": 724,
+    "expectedWidth": 384,
+    "expectedHeight": 64,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "effects/cannon-explosion.png",
+    "width": 2172,
+    "height": 724,
+    "expectedWidth": 576,
+    "expectedHeight": 96,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "effects/meteor-impact.png",
+    "width": 2172,
+    "height": 724,
+    "expectedWidth": 576,
+    "expectedHeight": 96,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "scenery/layers/sky.png",
+    "width": 1672,
+    "height": 941,
+    "expectedWidth": 960,
+    "expectedHeight": 540,
+    "exactDimensions": false,
+    "pixelFormat": "Format24bppRgb",
+    "copyVerified": true
+  },
+  {
+    "file": "scenery/layers/mountains.png",
+    "width": 1672,
+    "height": 941,
+    "expectedWidth": 960,
+    "expectedHeight": 540,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "scenery/layers/distant-ruins.png",
+    "width": 1672,
+    "height": 941,
+    "expectedWidth": 960,
+    "expectedHeight": 540,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "scenery/layers/nearby-vegetation.png",
+    "width": 1672,
+    "height": 941,
+    "expectedWidth": 960,
+    "expectedHeight": 540,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "scenery/layers/ground.png",
+    "width": 1672,
+    "height": 941,
+    "expectedWidth": 960,
+    "expectedHeight": 540,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "scenery/layers/foreground.png",
+    "width": 1672,
+    "height": 941,
+    "expectedWidth": 960,
+    "expectedHeight": 540,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "scenery/animated/banner.png",
+    "width": 2172,
+    "height": 724,
+    "expectedWidth": 192,
+    "expectedHeight": 32,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "scenery/animated/grass.png",
+    "width": 2172,
+    "height": 724,
+    "expectedWidth": 192,
+    "expectedHeight": 32,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "scenery/animated/torch.png",
+    "width": 1717,
+    "height": 916,
+    "expectedWidth": 192,
+    "expectedHeight": 32,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "scenery/layers/clouds.png",
+    "width": 1672,
+    "height": 941,
+    "expectedWidth": 960,
+    "expectedHeight": 540,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  },
+  {
+    "file": "scenery/animated/leaves.png",
+    "width": 2172,
+    "height": 724,
+    "expectedWidth": 192,
+    "expectedHeight": 32,
+    "exactDimensions": false,
+    "pixelFormat": "Format32bppArgb",
+    "copyVerified": true
+  }
+]

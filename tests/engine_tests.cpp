@@ -565,6 +565,26 @@ void testAnimationRefusesNumbersThatWouldHangIt() {
     world.addComponent(orphan, Animation{});
     AnimationSystem(world, 1.0f);
     check(true, "an Animation with no Sprite is survivable");
+
+    // Guarding zero handles the loop that cannot end. It does nothing about the
+    // one that merely takes far too long: a millionth of a second is a positive
+    // interval, so it passes every check above and then owes sixteen thousand
+    // steps in a single frame — for frames going past faster than a screen can
+    // show them. Small enough and the subtraction stops making progress in
+    // floating point at all, and it never finishes.
+    //
+    // If this ever regresses, the suite hangs rather than failing, which is
+    // worth knowing before it happens on a build machine.
+    const Entity absurd = animatedSprite(world, 4, 1.0e-9f, true);
+    AnimationSystem(world, 1.0f);
+    Animation* capped = world.getComponent<Animation>(absurd);
+    check(capped != nullptr, "the animation is still there");
+    if (capped) {
+        check(capped->frame >= 0 && capped->frame < 4,
+              "an impossibly small interval lands on a real frame");
+        check(capped->elapsed == 0.0f,
+              "and banks no debt to pay again next frame");
+    }
 }
 
 void testTheEngineRunsAnimationForYou() {
@@ -857,6 +877,97 @@ void testMouseInput() {
           "and does not affect the left one");
 }
 
+// A press and its release arriving in the SAME frame.
+//
+// This is not exotic. SDL hands a whole queue of events to one poll, so a fast
+// click, a stalled frame or a low frame rate all put both halves in one batch —
+// and the old implementation could not see it. It inferred the edge by
+// comparing the held set against last frame's, and a key that goes down and
+// comes back up leaves that set exactly as it found it. Nothing happened, as
+// far as the comparison could tell, so the press was dropped: a purchase that
+// occasionally does not happen, a pause that occasionally does not open, with
+// no way to reproduce either.
+//
+// Every existing test missed it because the harness taps a key for a whole
+// frame and releases it on the next, which is the one case the old code got
+// right.
+void testAPressAndReleaseInOneFrameIsStillAPress() {
+    InputManager input;
+
+    SDL_Event down{};
+    down.type = SDL_KEYDOWN;
+    down.key.keysym.scancode = SDL_SCANCODE_P;
+    SDL_Event up{};
+    up.type = SDL_KEYUP;
+    up.key.keysym.scancode = SDL_SCANCODE_P;
+
+    input.beginFrame();
+    input.handleEvent(down);
+    input.handleEvent(up);
+
+    check(input.wasKeyPressed(SDL_SCANCODE_P),
+          "a key pressed and released in one frame still counts as pressed");
+    check(input.wasKeyReleased(SDL_SCANCODE_P), "and as released");
+    check(!input.isKeyDown(SDL_SCANCODE_P), "while not being held any more");
+
+    // Nothing survives into the next frame; an edge is about one frame only.
+    input.beginFrame();
+    check(!input.wasKeyPressed(SDL_SCANCODE_P),
+          "and the edge is gone on the frame after");
+
+    // The same for the mouse, which is where it costs money.
+    SDL_Event clickDown{};
+    clickDown.type = SDL_MOUSEBUTTONDOWN;
+    clickDown.button.button = SDL_BUTTON_LEFT;
+    clickDown.button.x = 64;
+    clickDown.button.y = 32;
+    SDL_Event clickUp{};
+    clickUp.type = SDL_MOUSEBUTTONUP;
+    clickUp.button.button = SDL_BUTTON_LEFT;
+    clickUp.button.x = 64;
+    clickUp.button.y = 32;
+
+    input.beginFrame();
+    input.handleEvent(clickDown);
+    input.handleEvent(clickUp);
+    check(input.wasMousePressed(),
+          "a click that opens and closes in one frame still buys something");
+    check(input.wasMouseReleased(), "and still ends a drag");
+    check(input.mouseX() == 64, "and still says where it happened");
+}
+
+// SDL sends KEYDOWN over and over while a key is held. A repeat is the
+// keyboard's autorepeat, not a new press, and counting one would put every menu
+// key back where it was before edges existed: pause, unpause, pause, unpause,
+// from half a second of resting a finger on P.
+//
+// Worth pinning precisely because the fix above moved from held-state
+// comparison — which was immune to this by construction — to watching events,
+// which is not.
+void testKeyRepeatIsNotANewPress() {
+    InputManager input;
+
+    SDL_Event down{};
+    down.type = SDL_KEYDOWN;
+    down.key.keysym.scancode = SDL_SCANCODE_P;
+    down.key.repeat = 0;
+
+    input.beginFrame();
+    input.handleEvent(down);
+    check(input.wasKeyPressed(SDL_SCANCODE_P), "the first press counts");
+
+    SDL_Event repeat{};
+    repeat.type = SDL_KEYDOWN;
+    repeat.key.keysym.scancode = SDL_SCANCODE_P;
+    repeat.key.repeat = 1;
+
+    input.beginFrame();
+    input.handleEvent(repeat);
+    check(!input.wasKeyPressed(SDL_SCANCODE_P),
+          "and the autorepeat that follows it does not");
+    check(input.isKeyDown(SDL_SCANCODE_P), "though the key is certainly held");
+}
+
 // --- Data files ------------------------------------------------------------
 //
 // The engine could load PNGs and nothing else, so every number that balanced a
@@ -934,6 +1045,93 @@ gold_per_second = 14
           "and one that is not there is null, not a crash");
     check(units[0]->has("cost") && !units[0]->has("speed"),
           "has() reports what is actually present");
+}
+
+// A number that parses and is still not a number a game can use.
+//
+// "nan" and "inf" are things strtof accepts, and so is 1e40 — it overflows to
+// infinity and reports success. All three used to go straight into the roster,
+// and none of them crashes, which is the problem: a NaN cost compares false
+// against every amount of gold, so the unit is neither affordable nor
+// unaffordable and its button does nothing, forever, with no error anywhere. An
+// infinite range lets one unit hit the far castle from the spawn point.
+//
+// A file saying something impossible is the same kind of event as a file saying
+// something unreadable, so it gets the same answer: the caller's fallback.
+void testImpossibleNumbersFallBack() {
+    const std::string path = writeTempFile("engine_test_impossible.txt",
+                                           "[unit]\n"
+                                           "cost = nan\n"
+                                           "range = inf\n"
+                                           "health = -inf\n"
+                                           "damage = 1e40\n"
+                                           "speed = 1e-40\n"
+                                           "sane = 12.5\n");
+    DataFile file;
+    check(file.load(path), "the file loaded");
+    const DataSection* unit = file.first("unit");
+    check(unit != nullptr, "and has its section");
+    if (!unit) return;
+
+    check(nearly(unit->number("cost", 7.0f), 7.0f), "NaN falls back");
+    check(nearly(unit->number("range", 7.0f), 7.0f), "infinity falls back");
+    check(nearly(unit->number("health", 7.0f), 7.0f),
+          "and so does negative infinity");
+    check(nearly(unit->number("damage", 7.0f), 7.0f),
+          "a value that overflows to infinity falls back too");
+
+    // Underflow is NOT rejected: it produces zero or a denormal, both of which
+    // are ordinary numbers that behave. Rejecting them would be guessing at
+    // what the author meant.
+    check(unit->number("speed", 7.0f) != 7.0f,
+          "a very SMALL number is still a number and is kept");
+    check(nearly(unit->number("sane", 0.0f), 12.5f),
+          "and the readable values in the same section are untouched");
+}
+
+// Writing a save must not destroy the one already there before it knows the new
+// bytes are good.
+//
+// The old implementation opened the real path with `trunc`, which throws the
+// existing contents away as its first act. Everything after that — a full disk,
+// a lost network drive, a process killed mid-write — left a truncated file
+// where a working save used to be. A save system whose failure mode is "your
+// progress is now corrupt" is worse than one that cannot save at all.
+//
+// What is checked here is the visible consequence: the file is never observed
+// half-written, and a failed save leaves no debris behind.
+void testSavingDoesNotDestroyWhatIsAlreadyThere() {
+    const std::string path = writeTempFile("engine_test_atomic.txt",
+                                           "[campaign]\nbank = 500\n");
+
+    DataWriter writer;
+    writer.beginSection("campaign");
+    writer.set("bank", 900);
+    check(writer.save(path), "a save over an existing file succeeds");
+
+    DataFile reloaded;
+    check(reloaded.load(path), "and the file is readable afterwards");
+    const DataSection* section = reloaded.first("campaign");
+    check(section != nullptr && section->integer("bank", 0) == 900,
+          "holding the new contents, complete");
+
+    // The temporary is a means, not an output. One left lying around would be
+    // the tell that the rename never happened.
+    std::ifstream leftover(path + ".tmp");
+    check(!leftover.good(), "and no half-written temporary is left behind");
+
+    // A path that cannot be written reports failure and touches nothing.
+    DataWriter doomed;
+    doomed.beginSection("campaign");
+    doomed.set("bank", 1);
+    check(!doomed.save("no/such/folder/anywhere/save.txt"),
+          "an unwritable path is reported rather than pretended");
+
+    DataFile again;
+    check(again.load(path), "and the good save is still exactly where it was");
+    const DataSection* still = again.first("campaign");
+    check(still != nullptr && still->integer("bank", 0) == 900,
+          "with the contents it had");
 }
 
 // A missing file is the normal case for a game run from a bare build
@@ -1096,12 +1294,16 @@ int main() {
     testParallax();
     testViewRoundTrip();
     testMouseInput();
+    testAPressAndReleaseInOneFrameIsStillAPress();
+    testKeyRepeatIsNotANewPress();
     testDataFileParsing();
     testMissingDataFileIsNotFatal();
     testDataFileEdgeCases();
+    testImpossibleNumbersFallBack();
     testDataWriterRoundTrip();
     testDataWriterHandlesAnEmptyAndOddContents();
     testWritingSomewhereImpossibleFails();
+    testSavingDoesNotDestroyWhatIsAlreadyThere();
 
     if (failures == 0) {
         std::printf("all %d checks passed\n", checks);

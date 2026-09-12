@@ -132,6 +132,11 @@ private:
     // Set by the scene-driven run(); null means "always simulate".
     std::function<bool()> shouldSimulate_;
 
+    // "May Escape close the window right now?" Empty means yes, which is what
+    // the plain callback form of run() wants; the scene-driven form points it
+    // at the top scene. See Scene::escapeQuits.
+    std::function<bool()> escapeQuits_;
+
     // Kept between frames so the per-frame draw list and the point buffer
     // reuse their capacity instead of reallocating sixty times a second.
     std::vector<DrawItem> drawList_;

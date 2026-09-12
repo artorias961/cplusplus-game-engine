@@ -53,13 +53,18 @@ add_executable(breakout "${CMAKE_SOURCE_DIR}/src/game/breakout/main.cpp")
 target_link_libraries(breakout PRIVATE breakout_lib)
 
 add_library(lanebattle_lib STATIC
-    "${CMAKE_SOURCE_DIR}/src/game/lanebattle/LaneBattle.cpp")
+    "${CMAKE_SOURCE_DIR}/src/game/lanebattle/LaneBattle.cpp"
+    "${CMAKE_SOURCE_DIR}/src/game/lanebattle/Weather.cpp")
 target_include_directories(lanebattle_lib PUBLIC
     "${CMAKE_SOURCE_DIR}/src/game/lanebattle")
 target_link_libraries(lanebattle_lib PUBLIC engine)
 
 add_executable(lanebattle "${CMAKE_SOURCE_DIR}/src/game/lanebattle/main.cpp")
 target_link_libraries(lanebattle PRIVATE lanebattle_lib)
+
+add_executable(weather_preview "${CMAKE_SOURCE_DIR}/tests/weather_preview.cpp")
+target_link_libraries(weather_preview PRIVATE lanebattle_lib)
+add_test(NAME weather_render_tests COMMAND weather_preview --verify)
 
 # --- Tests ------------------------------------------------------------------
 add_executable(engine_tests "${CMAKE_SOURCE_DIR}/tests/engine_tests.cpp")
@@ -172,7 +177,7 @@ endforeach()
 # the shipped assets/lanebattle/units.txt and checks it parses into a sane
 # roster, so the data file the player actually gets is covered rather than
 # only the parser that reads it.
-foreach(target asteroids lanebattle lanebattle_tests campaign_probe ui_shots)
+foreach(target asteroids lanebattle lanebattle_tests campaign_probe ui_shots weather_preview)
     add_custom_command(TARGET ${target} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_SOURCE_DIR}/assets

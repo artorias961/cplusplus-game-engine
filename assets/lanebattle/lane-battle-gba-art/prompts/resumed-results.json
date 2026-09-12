@@ -1,0 +1,51 @@
+[
+  {
+    "id": "ambient-banner",
+    "file": "scenery/animated/banner.png",
+    "cell": 32,
+    "cols": 6,
+    "rows": 1,
+    "prompt": "Original Lane Battle fantasy castle-defense GBA-era pixel art, playful battle-ready silhouettes, crisp pixels, dark navy outlines, compact palette, two-tone shading small highlights. No copied characters, gradients, antialiasing, blur, 3D, text, watermark, borders or labels. Genuine transparent PNG background, never painted checkerboard. Environmental six-frame seamless animation sheet: weathered blue-teal banner fluttering on short wooden pole. Exact 192x32 PNG six 32x32 cells in one row. Stable fixed base anchor, small natural changes, consistent palette, no camera movement. Standalone transparent sprite animation asset not scenery illustration.",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-b4821c88-0478-47c8-b39d-ea3cbfcc8447.png",
+    "status": "generated-needs-grid-validation"
+  },
+  {
+    "id": "ambient-grass",
+    "file": "scenery/animated/grass.png",
+    "cell": 32,
+    "cols": 6,
+    "rows": 1,
+    "prompt": "Original Lane Battle fantasy castle-defense GBA-era pixel art, playful battle-ready silhouettes, crisp pixels, dark navy outlines, compact palette, two-tone shading small highlights. No copied characters, gradients, antialiasing, blur, 3D, text, watermark, borders or labels. Genuine transparent PNG background, never painted checkerboard. Environmental six-frame seamless animation sheet: anchored grass tuft gently swaying. Exact 192x32 PNG six 32x32 cells in one row. Stable fixed base anchor, small natural changes, consistent palette, no camera movement. Standalone transparent sprite animation asset not scenery illustration.",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-effef050-ce8a-46fe-b0f2-f74b3142960c.png",
+    "status": "generated-needs-grid-validation"
+  },
+  {
+    "id": "ambient-torch",
+    "file": "scenery/animated/torch.png",
+    "cell": 32,
+    "cols": 6,
+    "rows": 1,
+    "prompt": "Original Lane Battle fantasy castle-defense GBA-era pixel art, playful battle-ready silhouettes, crisp pixels, dark navy outlines, compact palette, two-tone shading small highlights. No copied characters, gradients, antialiasing, blur, 3D, text, watermark, borders or labels. Genuine transparent PNG background, never painted checkerboard. Environmental six-frame seamless animation sheet: small torch flame flickering on fixed bracket. Exact 192x32 PNG six 32x32 cells in one row. Stable fixed base anchor, small natural changes, consistent palette, no camera movement. Standalone transparent sprite animation asset not scenery illustration.",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-84e02d45-4e1f-4e14-8037-d7638942f8d4.png",
+    "status": "generated-needs-grid-validation"
+  },
+  {
+    "id": "scenery-clouds",
+    "file": "scenery/layers/clouds.png",
+    "width": 960,
+    "height": 540,
+    "prompt": "Original Lane Battle GBA-era side-view pixel art ruined border valley environment. Three widely spaced muted blue-gray clouds in upper y40-180 sky region only. Other areas transparent. Horizontal drifting cloud layer. Single separate layer on exact 960x540 canvas aligned to battlefield ground y420 and HUD starts y480. Genuinely transparent background. Dark navy limited palette two-tone shading broad crisp pixel clusters no antialiasing gradients blur text labels borders characters castles UI or collage. Scenery quieter and lower contrast than units. This is one layer only, not a diagram of layers.",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-d3ef0a27-c81e-46f8-ac17-ba006c1c0990.png",
+    "status": "generated-needs-grid-validation"
+  },
+  {
+    "id": "ambient-leaves",
+    "file": "scenery/animated/leaves.png",
+    "cell": 32,
+    "cols": 6,
+    "rows": 1,
+    "prompt": "Original Lane Battle fantasy castle-defense GBA-era pixel art, playful battle-ready silhouettes, crisp pixels, dark navy outlines, compact palette, two-tone shading small highlights. No copied characters, gradients, antialiasing, blur, 3D, text, watermark, borders or labels. Genuine transparent PNG background, never painted checkerboard. Environmental six-frame seamless animation sheet: small leafy branch gently swaying. Exact 192x32 PNG six 32x32 cells in one row. Stable fixed base anchor, small natural changes, consistent palette, no camera movement. Standalone transparent sprite animation asset not scenery illustration.",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-700212b0-465c-45a1-ab3d-372a456d5788.png",
+    "status": "generated-needs-grid-validation"
+  }
+]

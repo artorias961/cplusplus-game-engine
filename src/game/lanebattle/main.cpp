@@ -39,6 +39,12 @@ int main(int, char**) {
     // than the picture.
     lanebattle::setTextureCache(&gameEngine.textures());
 
+    // This is the one place that may touch the player's real campaign file.
+    // Everything else — tests, the probe, the screenshot tool — gets a scratch
+    // file unless it names one, because a tool that forgets should cost a
+    // stray file rather than somebody's progress.
+    lanebattle::usePlayerSavePath();
+
     engine::SceneStack scenes;
     scenes.push(lanebattle::makeTitleScene());
 

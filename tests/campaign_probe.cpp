@@ -417,17 +417,79 @@ void sweep(const std::vector<Strategy>& strategies, const char* composition,
 
     for (const Strategy& strategy : strategies) {
         float best = 0.0f;
-        for (float income = 0.40f; income <= 3.01f; income += 0.10f) {
-            // Castle health rides with income on the same slope the shipped
-            // table uses, so one number moves the difficulty rather than two.
-            const float castle = 300.0f + income * 850.0f;
+        float firstFailure = 0.0f;
+        int consecutiveFailures = 0;
+        for (float income = 0.40f; income <= 4.01f; income += 0.10f) {
+            // Castle health rides with income on the slope the shipped table
+            // actually uses, so one number moves the difficulty rather than
+            // two — and so a threshold measured here means something about a
+            // stage placed there.
+            //
+            // It said it did this before and it did not: the old figures were
+            // 300 + 850x, against a shipped table that runs at roughly half
+            // that gradient. The two instruments therefore measured different
+            // games and quietly disagreed about the same one. The sweep put
+            // MIXED's ceiling at 0.60 income against composition 1,1,2 while
+            // the stage table had MIXED winning BLACK FIELD — 1,1,2 at 1.15 —
+            // untouched, in 121 seconds. Neither number was wrong about what
+            // it measured; the sweep was simply measuring a castle 40% larger
+            // than any stage ships, and a bigger castle is a longer battle,
+            // which is time the enemy's economy gets to spend.
+            //
+            // Least squares over the shipped stages, with THE EYRIE left out
+            // as the deliberate outlier it is (the air stage buys its
+            // difficulty with composition, not income):
+            //
+            //     0.40 -> 480   1.00 -> 740   1.15 ->  900   1.55 -> 1100
+            //     0.60 -> 600   1.25 -> 860   2.10 -> 1300
+            //
+            // giving 291 + 490x, within about 5% across the whole range.
+            const float castle = 290.0f + income * 490.0f;
             const Outcome outcome =
                 playCustom(strategy, income, castle, composition, waveSize);
-            if (outcome.result == 1) best = income;
-            else break;  // past the step; nothing above it will win either
+            if (outcome.result == 1) {
+                best = income;
+                consecutiveFailures = 0;
+            } else {
+                if (firstFailure <= 0.0f) firstFailure = income;
+                // Five in a row — half a point of income — and this strategy is
+                // taken to be finished. A bound is needed because the range
+                // runs to 4.00 and a draw costs a full 400 simulated seconds:
+                // scanning every point for every strategy against every
+                // composition turned a one-minute tool into a ten-minute one,
+                // which is a tool that stops being run.
+                //
+                // Five rather than one, because one was the bug. A single
+                // stalemate is not the end of a strategy's range, and this
+                // still sees a hole and prints it.
+                if (++consecutiveFailures >= 5) break;
+            }
         }
+
+        // The whole range is played, every time.
+        //
+        // This used to stop at the first income it failed to win, on the stated
+        // grounds that outcomes are a step function and nothing above the step
+        // will win either. Two things are wrong with that. A DRAW is not a win,
+        // so a single stalemate truncated the scan; and the run is not actually
+        // monotonic, because a richer enemy sends more units, more units die,
+        // and the bounty on them is the player's income too. A strategy that
+        // stalls against a poor opponent can beat a rich one.
+        //
+        // Both together put MIXED's ceiling at 0.60 against composition 1,1,2
+        // while the stage table had MIXED winning BLACK FIELD — the same
+        // composition at 1.15 — untouched. The stage table was right. The sweep
+        // had stopped scanning at the first draw and reported the number before
+        // it, and every stage placed using that column was placed against a
+        // measurement that had quit early.
         if (best <= 0.0f) {
             std::printf("    %-6s  nothing\n", strategy.name);
+        } else if (firstFailure > 0.0f && firstFailure < best) {
+            // Worth seeing rather than smoothing over: it means this strategy
+            // has a hole in the middle of its range, and a stage placed in the
+            // hole is one it cannot beat despite beating harder ones.
+            std::printf("    %-6s  %.2f  (but loses %.2f)\n", strategy.name,
+                        best, firstFailure);
         } else {
             std::printf("    %-6s  %.2f\n", strategy.name, best);
         }

@@ -38,6 +38,7 @@
 #include "engine/ECS.h"
 #include "engine/Engine.h"
 #include "engine/Font.h"
+#include "engine/Scene.h"
 #include "engine/Systems.h"
 
 using namespace engine;
@@ -540,6 +541,82 @@ void testPolygonsDraw(Engine& engine) {
 
 }  // namespace
 
+// --- The real loop ---------------------------------------------------------
+//
+// Not a pixel test, and here anyway: this file owns the only live Engine in the
+// suite. Everything else drives scenes through tests/Harness.h, which
+// reimplements the loop rather than running it — so Engine::processEvents, and
+// every decision it makes about an event before game code ever sees it, was
+// executed by no test at all.
+//
+// That is precisely where this bug lived. Escape closed the window
+// unconditionally, several layers below any scene, so Lane Battle's army and
+// hero screens — which print GO BACK next to the key and handle it in their own
+// update — never got the chance. Through the Harness they worked perfectly.
+// Through the real loop the window shut.
+
+// Counts the frames it is given, and can be told whether it wants Escape.
+class CountingScene : public Scene {
+public:
+    explicit CountingScene(bool letEscapeQuit) : letEscapeQuit_(letEscapeQuit) {}
+
+    bool escapeQuits() const override { return letEscapeQuit_; }
+    void update(World&, InputManager&, float, SceneStack&) override { ++frames_; }
+
+    int frames() const { return frames_; }
+
+private:
+    bool letEscapeQuit_;
+    int frames_ = 0;
+};
+
+void pushEscape() {
+    SDL_Event event{};
+    event.type = SDL_KEYDOWN;
+    event.key.keysym.scancode = SDL_SCANCODE_ESCAPE;
+    event.key.state = SDL_PRESSED;
+    SDL_PushEvent(&event);
+}
+
+void testASceneCanKeepEscapeForItself(Engine& engine) {
+    // A bound on the loop, because the whole point of the first case is that
+    // nothing else is going to stop it.
+    SDL_setenv("TINY_ENGINE_MAX_FRAMES", "5", 1);
+
+    // The claiming scene runs FIRST, deliberately: an Engine that has stopped
+    // stays stopped, so a run that quits would make every later one return
+    // immediately and pass this test for the wrong reason.
+    {
+        World world;
+        SceneStack scenes;
+        auto owned = std::make_unique<CountingScene>(false);
+        CountingScene* scene = owned.get();
+        scenes.push(std::move(owned));
+
+        pushEscape();
+        engine.run(world, scenes);
+
+        check(scene->frames() == 5,
+              "Escape does not close the window while a scene wants the key");
+    }
+
+    {
+        World world;
+        SceneStack scenes;
+        auto owned = std::make_unique<CountingScene>(true);
+        CountingScene* scene = owned.get();
+        scenes.push(std::move(owned));
+
+        pushEscape();
+        engine.run(world, scenes);
+
+        check(scene->frames() < 5,
+              "and still closes it for a scene that does not");
+    }
+
+    SDL_setenv("TINY_ENGINE_MAX_FRAMES", "", 1);
+}
+
 int main() {
     std::printf("render tests\n");
 
@@ -585,6 +662,10 @@ int main() {
 
     testFlipXMirrorsTheArtwork(*engine);
     testAnimationChangesWhatIsActuallyDrawn(*engine);
+
+    // Last, because it runs the engine's own loop to completion and an Engine
+    // that has been told to stop stays stopped.
+    testASceneCanKeepEscapeForItself(*engine);
 
     if (failures == 0) {
         std::printf("all %d checks passed\n", checks);

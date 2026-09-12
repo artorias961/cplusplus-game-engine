@@ -44,6 +44,7 @@
 
 #include <SDL.h>
 
+#include <cstdio>   // std::remove, std::rename — see DataWriter::save
 #include <cstdlib>
 #include <limits>
 #include <fstream>
@@ -58,6 +59,12 @@ namespace engine {
 class DataSection {
 public:
     explicit DataSection(std::string name) : name_(std::move(name)) {}
+
+    // Anything past this is treated as infinity and rejected. Deliberately far
+    // below FLT_MAX: no quantity in a game this size — a cost, a range, a
+    // health pool, an interval — is legitimately 1e30, so a value up here is a
+    // typo or an overflow rather than a number somebody meant.
+    static constexpr float kLargestUsable = 1.0e30f;
 
     const std::string& name() const { return name_; }
     bool has(const std::string& key) const {
@@ -82,7 +89,27 @@ public:
         const char* start = found->second.c_str();
         char* end = nullptr;
         const float parsed = std::strtof(start, &end);
-        return (end == start) ? fallback : parsed;
+        if (end == start) return fallback;
+
+        // NaN and infinity are things strtof will happily hand back — the
+        // strings "nan" and "inf" parse, and so does 1e40 by overflowing. They
+        // are not numbers a game can use: a NaN unit cost compares false
+        // against everything, so it is neither affordable nor unaffordable and
+        // the button that spends it does nothing forever; an infinite range
+        // makes one unit able to hit the far castle from the spawn point.
+        // Neither crashes, which is the problem — they propagate quietly into
+        // arithmetic and come out the other end as a game that misbehaves for
+        // no visible reason.
+        //
+        // A file saying something impossible is the same kind of event as a
+        // file saying something unparseable, so it gets the same answer: the
+        // caller's fallback, which is the compiled-in default it would have
+        // used had the line been absent.
+        if (!(parsed == parsed)) return fallback;                 // NaN
+        if (parsed > kLargestUsable || parsed < -kLargestUsable) {  // ±inf too
+            return fallback;
+        }
+        return parsed;
     }
 
     // Clamped to what an int can hold before the cast, not after.
@@ -164,11 +191,37 @@ public:
     // Returns false if the file could not be written — a full disk, a
     // read-only folder, a path that does not exist. Callers are expected to
     // carry on: failing to save is a thing to report, not to die of.
+    // Written to a sibling file first, then moved over the target.
+    //
+    // Opening the real path with `trunc` destroys the old contents before a
+    // single byte of the new ones is known to be writable. Everything after
+    // that point — a full disk, a lost network drive, the process being killed
+    // — leaves the player with a truncated or half-written save where a
+    // perfectly good one used to be, and the old one is already gone. A save
+    // system whose failure mode is "your progress is now corrupt" is worse
+    // than one that cannot save at all.
+    //
+    // The temporary lands beside the target rather than in a system temp
+    // folder, so the rename stays on one filesystem and is therefore the
+    // atomic operation this depends on. std::rename will not overwrite on
+    // Windows, so the old file is removed first — the one instant where
+    // neither file is the save, narrowed to the gap between two syscalls.
     bool save(const std::string& path) const {
-        std::ofstream file(path, std::ios::trunc);
-        if (!file) return false;
-        file << text_;
-        return file.good();
+        const std::string temporary = path + ".tmp";
+        {
+            std::ofstream file(temporary, std::ios::trunc);
+            if (!file) return false;
+            file << text_;
+            file.flush();
+            if (!file.good()) return false;
+        }  // closed here, so the bytes are the operating system's problem now
+
+        std::remove(path.c_str());
+        if (std::rename(temporary.c_str(), path.c_str()) != 0) {
+            std::remove(temporary.c_str());
+            return false;
+        }
+        return true;
     }
 
     const std::string& text() const { return text_; }

@@ -68,7 +68,29 @@ inline void AnimationSystem(World& world, float dt) {
         }
 
         animation.elapsed += dt;
+
+        // The step count is bounded as well as the interval.
+        //
+        // Guarding `secondsPerFrame <= 0` above stops the loop that cannot
+        // terminate; it does nothing about the one that merely takes far too
+        // long. An interval of a millionth of a second is a positive number, so
+        // it passes, and then owes this loop sixteen thousand steps per frame —
+        // for a sheet whose frames nobody could see going past anyway. Small
+        // enough and the subtraction stops making progress in floating point at
+        // all, and it never finishes.
+        //
+        // A data file supplies this number, so "no sensible author would write
+        // that" is not a guarantee. A cap is.
+        constexpr int kMaxStepsPerFrame = 1024;
+        int steps = 0;
+
         while (animation.elapsed >= animation.secondsPerFrame) {
+            if (++steps > kMaxStepsPerFrame) {
+                // Whatever is left is unpayable at this rate. Dropping it stops
+                // the debt compounding into every later frame.
+                animation.elapsed = 0.0f;
+                break;
+            }
             animation.elapsed -= animation.secondsPerFrame;
             ++animation.frame;
 

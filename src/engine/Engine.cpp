@@ -101,9 +101,13 @@ void Engine::processEvents() {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
+            // The operating system, not the player. Always obeyed.
             running_ = false;
-        } else if (event.type == SDL_KEYDOWN &&
-                   event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+        } else if (event.type == SDL_KEYDOWN && event.key.repeat == 0 &&
+                   event.key.keysym.scancode == SDL_SCANCODE_ESCAPE &&
+                   (!escapeQuits_ || escapeQuits_())) {
+            // The player asking to leave — unless the scene on top wants the
+            // key for going back a screen instead. See Scene::escapeQuits.
             running_ = false;
         }
         // Every other key event goes to the InputManager so game code can
@@ -454,6 +458,10 @@ void Engine::run(World& world, SceneStack& scenes) {
     // immediately rather than a frame late.
     shouldSimulate_ = [&scenes]() { return scenes.simulating(); };
 
+    // Consulted while the events are still being polled, so a screen that
+    // handles Escape itself is asked before the loop is stopped.
+    escapeQuits_ = [&scenes]() { return scenes.escapeQuits(); };
+
     run(world, [&scenes, this](World& w, InputManager& input, float dt) {
         scenes.update(w, input, dt);
 
@@ -471,6 +479,7 @@ void Engine::run(World& world, SceneStack& scenes) {
     // callback would then call it. Clearing it makes "always simulate" the
     // default again, which is what the callback form expects.
     shouldSimulate_ = nullptr;
+    escapeQuits_ = nullptr;
 }
 
 }  // namespace engine

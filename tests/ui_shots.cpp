@@ -188,6 +188,11 @@ int main(int argc, char** argv) {
     SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
     SDL_SetMainReady();
 
+    // Said out loud rather than left to the default, because this tool photographs
+    // a VICTORY, and staging one runs the real logic — which banks the reward and
+    // saves. It did that to the player's own campaign until the default changed.
+    lanebattle::setSavePath("ui_shots-scratch-campaign.txt");
+
     // `--sheet` is a different job from the screen tour, so it does not take
     // the output directory as argv[1]; it always writes beside the binary.
     const bool sheetMode = argc > 1 && std::strcmp(argv[1], "--sheet") == 0;
@@ -306,6 +311,42 @@ int main(int argc, char** argv) {
         driver.tap(SDL_SCANCODE_A);
         driver.step(3);
         shoot(engine, world, "03d-army-loadout-and-training");
+    }
+    {
+        // The army screen REFUSING something.
+        //
+        // Both of this screen's refusals were silent until recently, which is
+        // indistinguishable from a click the game missed — so the player clicks
+        // again, harder. The message that replaced the silence has to be
+        // readable and has to not sit on top of the way out, and no assertion
+        // anywhere can tell me whether it does.
+        //
+        // Carrying exactly one unit and clicking it is the refusal that matters
+        // most: an empty loadout leaves a player unable to spawn anything, with
+        // nothing on screen explaining why.
+        World world;
+        SceneStack scenes;
+        harness::Harness driver(world, scenes);
+        scenes.push(lanebattle::makeTitleScene());
+        driver.step();
+        lanebattle::Campaign& campaign = lanebattle::campaignOf(world);
+        campaign.stagesUnlocked = 6;
+        campaign.bank = 40;  // too little to train anything, which also shows
+        campaign.loadout[0] = lanebattle::sellableKind(1);  // SOLDIER, alone
+        for (int slot = 1; slot < lanebattle::kLoadoutSlots; ++slot) {
+            campaign.loadout[slot] = -1;
+        }
+        driver.tap(SDL_SCANCODE_SPACE);
+        driver.step(2);
+        driver.tap(SDL_SCANCODE_A);
+        driver.step(3);
+
+        // Click the name of the only unit carried — the drop that cannot be
+        // allowed.
+        driver.clickAt(static_cast<int>(lanebattle::kArmyX) + 60,
+                       static_cast<int>(lanebattle::armyTop(1)) + 20);
+        driver.step(2);
+        shoot(engine, world, "03e-army-refusing-a-drop");
     }
 
     // --- The battle, empty -------------------------------------------------

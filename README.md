@@ -67,7 +67,7 @@ whole battles rather than individual rules found the game unwinnable twice
 before it was playable — and `docs/roadmap-cartoonwars.md` has what is left of
 the original plan.
 
-**1,021 assertions** across five test binaries, plus three measuring tools that
+**1,104 assertions** across five test binaries, plus three measuring tools that
 pass and fail nothing: a benchmark, a campaign simulator, and a screenshotter.
 
 The exercises at the bottom are **exercises, not debt** — each is a next thing
@@ -108,7 +108,7 @@ engine_project/
 │   ├── render_tests.cpp      Draws frames headlessly and checks the pixels
 │   ├── engine_bench.cpp      Measures the naive parts; not a pass/fail test
 │   ├── campaign_probe.cpp    Plays the whole campaign 14 ways; prints a table
-│   └── ui_shots.cpp          Writes a PNG of all 15 screens; cannot fail
+│   └── ui_shots.cpp          Writes a PNG of all 16 screens; cannot fail
 ├── .github/workflows/
 │   └── ci.yml          Builds and tests on Linux and macOS
 ├── docs/               Screenshots, v3-plan.md, roadmap-cartoonwars.md
@@ -229,7 +229,7 @@ The file and the header hold two copies of the shipped balance and they have to
 agree, so there is a test that says so
 (`testTheShippedTableMatchesTheCompiledDefaults`). Change one, change both.
 
-### The save — written where SDL says user files go
+### The save — written where SDL says user files go, *if asked*
 
 `saveCampaign` / `loadCampaign` write the same text format `DataFile` reads, to
 `SDL_GetPrefPath` rather than next to the executable, because the folder a game
@@ -240,7 +240,26 @@ training.
 Everything in it is **written by name and clamped on the way in**, because a
 save is a text file a player can edit: a level past its cap comes back as the
 cap, and a unit name the roster no longer has is dropped rather than resolved
-to whatever now sits at that index.
+to whatever now sits at that index. Empty loadout slots are written too — as
+empty fields between the commas — because the slot a unit sits in is the key
+that sends it, and a save that packs the names together moves everyone's
+shortcuts one along.
+
+**Only `main.cpp` may touch the real file**, via `usePlayerSavePath()`. That
+used to be the default and everything got it, which is backwards: the code most
+likely to forget is a diagnostic tool, and a diagnostic tool is exactly what
+must never write to a real save. `ui_shots` stages a victory in order to
+photograph the win screen, staging one runs the real logic, and the real logic
+banks the reward — so taking screenshots quietly paid gold into whoever's
+campaign was on the machine. Nothing failed and nothing was logged. Now anything
+that names no path writes `campaign-scratch.txt` beside itself, so forgetting
+costs a stray file rather than somebody's progress.
+
+Saving is also **write-then-rename**: the new contents go to a sibling `.tmp`
+and are moved over the target only once they are safely written. Opening the
+real file with `trunc` destroys the old save as its first act, which makes every
+later failure — a full disk, a lost drive, a killed process — leave a corrupt
+file where a working one was.
 
 ## How it fits together
 
@@ -798,7 +817,7 @@ back, and `ui_shots` writes a PNG of every screen for a person to look at.
 ./build/Release/campaign_probe            # every stage, 14 ways, win/loss table
 ./build/Release/campaign_probe --detail   # plus seconds, castle left, shots, upgrades
 ./build/Release/campaign_probe --sweep    # highest enemy income each player still beats
-./build/Release/ui_shots                  # 15 PNGs into ui_shots/ beside the binary
+./build/Release/ui_shots                  # 16 PNGs into ui_shots/ beside the binary
 ```
 
 Neither is registered with `ctest`, for the same reason `engine_bench` is not:
@@ -825,8 +844,13 @@ matches its neighbour is the tell.**
 ### Controls
 
 All three open on a title screen where `SPACE` starts and `Q` quits. In each,
-`P` pauses, `R` plays again from the game-over screen, and `Escape` quits from
-anywhere.
+`P` pauses, `R` plays again from the game-over screen, and `Escape` quits.
+
+`Escape` is the engine's, unless a scene asks for it — `Scene::escapeQuits`.
+Lane Battle's army and hero screens do, because they print GO BACK next to the
+key; everywhere else it closes the window. Before that existed the engine took
+Escape several layers below any scene, so those two screens advertised a way
+back that shut the game instead.
 
 **Asteroids** (`.\build\Release\asteroids.exe`)
 
@@ -1101,7 +1125,16 @@ Run `campaign_probe` for the current numbers. As of the last retune:
   viable answer is fragile and gives the player no diagnostic.
 - **About 12% of outcomes are draws** — 400-second stalemates where neither
   castle falls. That is the worst result for a player: not a loss you learn
-  from, just nothing happening.
+  from, just nothing happening. The probe imposes that cutoff; **the live game
+  has no stalemate rule at all**, so what the probe scores as a draw is, on a
+  real machine, two lines standing still until somebody closes the window.
+- **Difficulty is not monotonic in enemy income.** Almost every strategy has a
+  band of enemy incomes it loses and a *higher* band it wins — `--sweep` prints
+  them as `1.20  (but loses 0.70)`. A richer opponent sends more units, more
+  units die, and the bounty on the dead is the player's income too, so a
+  stalemate against a poor enemy becomes a win against a rich one. Turning a
+  stage's income up can make it easier. Nothing in the design intends this, and
+  every stage placed before the sweep could see it was placed half-blind.
 - **Carrying two specialists loses to carrying one.** The `COMBO` column
   measures worse than either `PIKE` or `BALL`. The binding constraint is gold
   rather than cooldowns, so more unit types splits the same purse and thins the
@@ -1138,10 +1171,6 @@ callback is the only thread), and self-observation (the engine can't report its
 own frame time or entity count). A platformer would force the first; a
 persistent high score is a thirty-line way into the second.
 
-- **Sprite-sheet animation**: `Sprite` already has a source rect, so an
-  animated sprite needs only an `Animation` component (a list of frames and a
-  frame duration) and a system that advances `srcX` over time — the same
-  shape as `MovementSystem`, operating on a different field.
 - **A collision broad phase**: `CollisionSystem` still compares every
   collidable pair. Breakout sidesteps it — only the ball moves, so it tests
   the ball against each collider instead, which is O(n) rather than O(n²) —

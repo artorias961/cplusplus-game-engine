@@ -76,6 +76,25 @@ if not exist "%FILE%" (
     exit /b 1
 )
 
+rem An empty FIND is the loudest symptom of the quoting problem described below
+rem the replacement, and it is worth catching here because .NET's String.Replace
+rem throws on one - which would leave the file untouched and the run looking
+rem ordinary. It happens when the text passed in contained a double quote or a
+rem semicolon: cmd.exe treats both as argument delimiters, so the script is
+rem handed the fragments rather than the string.
+if "%FIND%"=="" (
+    echo.
+    echo   Nothing to find - the FIND argument arrived empty.
+    echo.
+    echo   If what you typed contained a double quote or a semicolon, that is
+    echo   why: cmd.exe splits on both before this script runs. Choose a
+    echo   quote-free fragment of the same line - mutating
+    echo     if ^(slot ^> 0^) carried    to    if ^(slot ^> 9^) carried
+    echo   breaks exactly the same behaviour as rewriting the whole statement.
+    pause
+    exit /b 1
+)
+
 set "BACKUP=%TEMP%\mutate_backup_%RANDOM%.bak"
 copy /y "%FILE%" "%BACKUP%" >nul
 
@@ -84,8 +103,13 @@ if defined VCPKG_ROOT if exist "%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake" s
 if not defined TOOLCHAIN if exist "C:\vcpkg\scripts\buildsystems\vcpkg.cmake" set "TOOLCHAIN=C:\vcpkg\scripts\buildsystems\vcpkg.cmake"
 
 echo Mutating %FILE%
-echo    from: %FIND%
-echo      to: %REPLACE%
+rem Echoed through PowerShell rather than with `echo`, because C++ is full of
+rem `>` and `<` and cmd.exe treats both as REDIRECTS even in the middle of an
+rem echo. Printing a mutation of `if (slot > 0) carried` therefore created a
+rem file in the repository root actually named `0)` containing the first half of
+rem the line - four of them accumulated before anyone looked. The text is passed
+rem in the environment, where cmd's parser cannot reach it.
+powershell -NoProfile -Command "Write-Host ('   from: ' + $env:FIND); Write-Host ('     to: ' + $env:REPLACE)"
 
 rem A literal replacement through .NET, so punctuation in the pattern is not
 rem treated as a regular expression. Doing this with a text-substitution tool
@@ -99,12 +123,42 @@ powershell -NoProfile -Command "$p=$env:FILE; $c=[IO.File]::ReadAllText($p); $c=
 
 rem Verified rather than assumed: a mutation that did not apply produces a
 rem green run that looks exactly like a surviving mutant.
-findstr /c:"%REPLACE%" "%FILE%" >nul
-if errorlevel 1 (
+rem
+rem The check is "did the file CHANGE", not "does it contain the replacement",
+rem and the difference is not pedantic - the second version of this check let a
+rem non-mutation report SURVIVED, which is the one outcome this script exists to
+rem make impossible.
+rem
+rem What happened: an argument containing both a double quote and a semicolon
+rem cannot survive cmd.exe's argument parsing. Both are delimiters, so the batch
+rem file received something other than what was typed, the replacement never
+rem matched, the file was untouched - and findstr then searched for the equally
+rem mangled REPLACE, found a fragment of it somewhere in the file, and reported
+rem success. Green tests on unmodified code, presented as a surviving mutant.
+rem Comparing against the backup cannot be fooled that way, because it asks
+rem about the file rather than about the strings.
+rem
+rem You will still hit the underlying limit: a FIND or REPLACE containing a
+rem double quote or a semicolon cannot be passed through cmd at all. This now
+rem says so instead of lying. Pick a quote-free part of the line - mutating
+rem `if (slot > 0) carried` to `if (slot > 9) carried` breaks exactly the same
+rem behaviour as rewriting the whole statement.
+fc /b "%FILE%" "%BACKUP%" >nul 2>&1
+if errorlevel 2 (
     echo.
-    echo   THE MUTATION DID NOT APPLY.
-    echo   The text was not found. Copy the line exactly as it appears in the
-    echo   file, including indentation inside the quotes if you need it.
+    echo   Could not compare the file against its backup, so whether the
+    echo   mutation applied is unknown. Refusing to report a verdict.
+    goto restore_and_exit
+)
+if not errorlevel 1 (
+    echo.
+    echo   THE MUTATION DID NOT APPLY - the file is byte-for-byte unchanged.
+    echo.
+    echo   Copy the text exactly as it appears in the file, including any
+    echo   indentation you put inside the quotes. If your FIND or REPLACE
+    echo   contains a double quote or a semicolon, cmd.exe will mangle it
+    echo   before this script ever sees it: choose a quote-free fragment of
+    echo   the same line instead.
     goto restore_and_exit
 )
 
@@ -123,6 +177,20 @@ if errorlevel 1 (
     echo   That is not a result: pick a change that builds, so the tests get a
     echo   chance to have an opinion.
     goto restore_and_exit
+)
+
+rem A named target that matches nothing runs zero tests, and zero tests all
+rem pass. That is a SURVIVED verdict with nothing behind it - the same false
+rem green as a mutation that never applied, arriving through the other door.
+if not "%TARGET%"=="" (
+    ctest --test-dir build -C Release -N -R "^%TARGET%$" | findstr /c:"Total Tests: 0" >nul
+    if not errorlevel 1 (
+        echo.
+        echo   No test named "%TARGET%". Nothing would have run, and nothing
+        echo   running is not the same as nothing noticing.
+        echo   Run: ctest --test-dir build -C Release -N
+        goto restore_and_exit
+    )
 )
 
 echo Testing...
