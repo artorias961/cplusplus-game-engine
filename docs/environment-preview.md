@@ -48,4 +48,6 @@ ctest --test-dir build -C Debug -R weather_render_tests --output-on-failure
 
 Verification enumerates every scene/weather combination offered by the preview, in calm and strong states, and checks three camera positions per combination. It exports PNGs plus `combinations.json`, checks lane and HUD pixels, verifies units never move from presentation updates, verifies entity cleanup, tests zero-speed motion, wind changes, input clamping and lightning constraints. These are real engine captures, not browser mockups.
 
+The completed run passed 72 combinations and 216 camera checks with zero failures. Representative screenshots from all seven scenes were visually inspected. Game logic, renderer tests and game startup also passed. Open `manual_testing/environment_shots/index.html` for the screenshot gallery.
+
 Storm audio, dynamic accumulation, environmental damage and physically simulated water are outside this presentation feature. Fog/smoke/dust-devil effects are deliberately stylized and low-opacity. Scenes switch immediately; individual atmospheric motions loop continuously. CPU particle pools and transparent overdraw still cost work; GPU performance has not been benchmarked.

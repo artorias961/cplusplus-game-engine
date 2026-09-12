@@ -1,0 +1,56 @@
+{
+  "transparentAttempts": [
+    {
+      "id": "storm",
+      "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-56aa0d1d-4b55-43d8-a233-9acdb885b3f8.png",
+      "prompt": "Edit this landscape image only to remove the entire gray/white checkerboard background above and between the landscape silhouettes, including inside ruined arch openings. Deliver ACTUAL transparent alpha there, not a depiction of a transparency checkerboard. Preserve all colored pixels of the architecture, mountains, terrain, snow, trees and lower ground, the exact silhouette, dimensions, pixel-art style and composition. Do not add sky, weather, clouds, borders or labels. This is a transparent cutout production PNG, not a presentation."
+    },
+    {
+      "id": "frozen",
+      "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-d82c04bb-8dc1-404a-8b4e-2227d329a959.png",
+      "prompt": "Edit this landscape image only to remove the entire gray/white checkerboard background above and between the landscape silhouettes, including inside ruined arch openings. Deliver ACTUAL transparent alpha there, not a depiction of a transparency checkerboard. Preserve all colored pixels of the architecture, mountains, terrain, snow, trees and lower ground, the exact silhouette, dimensions, pixel-art style and composition. Do not add sky, weather, clouds, borders or labels. This is a transparent cutout production PNG, not a presentation."
+    },
+    {
+      "id": "blood",
+      "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-e4f30836-c8ca-45ac-8b73-18c2ff1ca68c.png",
+      "prompt": "Edit this landscape image only to remove the entire gray/white checkerboard background above and between the landscape silhouettes, including inside ruined arch openings. Deliver ACTUAL transparent alpha there, not a depiction of a transparency checkerboard. Preserve all colored pixels of the architecture, mountains, terrain, snow, trees and lower ground, the exact silhouette, dimensions, pixel-art style and composition. Do not add sky, weather, clouds, borders or labels. This is a transparent cutout production PNG, not a presentation."
+    },
+    {
+      "id": "ashen",
+      "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-ef058fe8-c237-465d-ada5-64e7e9dce611.png",
+      "prompt": "Edit this landscape image only to remove the entire gray/white checkerboard background above and between the landscape silhouettes, including inside ruined arch openings. Deliver ACTUAL transparent alpha there, not a depiction of a transparency checkerboard. Preserve all colored pixels of the architecture, mountains, terrain, snow, trees and lower ground, the exact silhouette, dimensions, pixel-art style and composition. Do not add sky, weather, clouds, borders or labels. This is a transparent cutout production PNG, not a presentation."
+    },
+    {
+      "id": "marsh",
+      "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-7b48a17f-09c9-4422-9d1c-373d2f3d2516.png",
+      "prompt": "Edit this landscape image only to remove the entire gray/white checkerboard background above and between the landscape silhouettes, including inside ruined arch openings. Deliver ACTUAL transparent alpha there, not a depiction of a transparency checkerboard. Preserve all colored pixels of the architecture, mountains, terrain, snow, trees and lower ground, the exact silhouette, dimensions, pixel-art style and composition. Do not add sky, weather, clouds, borders or labels. This is a transparent cutout production PNG, not a presentation."
+    },
+    {
+      "id": "desert",
+      "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-a170be73-a870-4ce6-afd5-cc8375965308.png",
+      "prompt": "Edit this landscape image only to remove the entire gray/white checkerboard background above and between the landscape silhouettes, including inside ruined arch openings. Deliver ACTUAL transparent alpha there, not a depiction of a transparency checkerboard. Preserve all colored pixels of the architecture, mountains, terrain, snow, trees and lower ground, the exact silhouette, dimensions, pixel-art style and composition. Do not add sky, weather, clouds, borders or labels. This is a transparent cutout production PNG, not a presentation."
+    }
+  ],
+  "opaque": [
+    {
+      "id": "storm",
+      "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-485d0811-809e-4612-b97e-1d5506392053.png",
+      "prompt": "Edit this PNG. Replace ALL gray-and-white checkerboard pixels with solid flat dark color #161c29, including sky and arch openings. The checkerboard is unwanted visible artwork: remove it completely. DO NOT output transparency or any checkerboard anywhere. Output an opaque PNG with a plain dark sky. Keep the colored ruined architecture, mountains and terrain unchanged, same pixel art, exact placement and dimensions. No clouds, moon, particles, text or new objects."
+    },
+    {
+      "id": "frozen",
+      "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-cabddbcc-63f4-4804-a807-b5d1ac897834.png",
+      "prompt": "Edit this PNG. Replace ALL gray-and-white checkerboard pixels with solid flat dark color #263142, including sky and arch openings. The checkerboard is unwanted visible artwork: remove it completely. DO NOT output transparency or any checkerboard anywhere. Output an opaque PNG with a plain dark sky. Keep the colored ruined architecture, mountains and terrain unchanged, same pixel art, exact placement and dimensions. No clouds, moon, particles, text or new objects."
+    },
+    {
+      "id": "blood",
+      "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-3a0d6d0c-4212-4b85-ae01-08b7b16de656.png",
+      "prompt": "Edit this PNG. Replace ALL gray-and-white checkerboard pixels with solid flat dark color #251325, including sky and arch openings. The checkerboard is unwanted visible artwork: remove it completely. DO NOT output transparency or any checkerboard anywhere. Output an opaque PNG with a plain dark sky. Keep the colored ruined architecture, mountains and terrain unchanged, same pixel art, exact placement and dimensions. No clouds, moon, particles, text or new objects."
+    },
+    {
+      "id": "ashen",
+      "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-5a7b4609-d1cf-47b4-8bb2-421f622bd321.png",
+      "prompt": "Edit this PNG. Replace ALL gray-and-white checkerboard pixels with solid flat dark color #1f191e, including sky and arch openings. The checkerboard is unwanted visible artwork: remove it completely. DO NOT output transparency or any checkerboard anywhere. Output an opaque PNG with a plain dark sky. Keep the colored ruined architecture, mountains and terrain unchanged, same pixel art, exact placement and dimensions. No clouds, moon, particles, text or new objects."
+    }
+  ]
+}

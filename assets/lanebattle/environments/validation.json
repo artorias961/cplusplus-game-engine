@@ -1,0 +1,51 @@
+{
+  "selected": [
+    {
+      "file": "reference.png",
+      "width": 1672,
+      "height": 941,
+      "sha256": "DA897411F12A0B08A5014AFBFDD8CD9376AB764FE5A3368DD5A93D4D2D6BDB4D"
+    },
+    {
+      "file": "storm-opaque.png",
+      "width": 1895,
+      "height": 830,
+      "sha256": "F201F493C87959A9E502C539215ABFF941CA18643C0048164A8FF12C4AD844D8"
+    },
+    {
+      "file": "frozen-opaque.png",
+      "width": 1893,
+      "height": 831,
+      "sha256": "ADDFB3A9F78C6391F73ADE497B52E061E67209750336C88A5A1F532F121E77BF"
+    },
+    {
+      "file": "blood-opaque.png",
+      "width": 1895,
+      "height": 830,
+      "sha256": "7F9F144EA3750CD78B76D9C279B2EB69D4FC5A9BCE2BC46C216CEFAB30BB9C89"
+    },
+    {
+      "file": "ashen-opaque.png",
+      "width": 1895,
+      "height": 830,
+      "sha256": "D00CB5B6470A06B35885E7EE72FC51DD02B3CA2549CEFBBCA8C4170FA41F7668"
+    },
+    {
+      "file": "marsh-opaque.png",
+      "width": 1895,
+      "height": 830,
+      "sha256": "87F0A0EC514853CC2FE1A3BF5F9B5A92051128CDE68874528FDA27207D1A0D08"
+    },
+    {
+      "file": "desert-opaque.png",
+      "width": 1895,
+      "height": 830,
+      "sha256": "97C2CB355B150AA241682C86C2D9F0495377A04A6F82DD6852774EAC093EA2C2"
+    }
+  ],
+  "cameraChecks": 216,
+  "failures": 0,
+  "layerLimitation": "New PNGs combine static sky, mountains and architecture; animated effects are independent",
+  "gallery": "manual_testing/environment_shots/index.html",
+  "verifiedCombinations": 72
+}
