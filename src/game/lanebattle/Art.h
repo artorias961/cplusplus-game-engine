@@ -137,9 +137,18 @@ enum class Pose { Idle, Move, Attack, Hurt, Stunned, Death, Count };
 Pose choosePose(bool moving, bool attacking, bool hurt);
 
 // The frame interval for a walk, from how fast the unit actually moves: one
-// full cycle per `stride` pixels travelled, so feet do not slide over the
-// ground. A runner's legs go faster than an ogre's without either being told.
+// full cycle per `stride` pixels travelled, so a runner's legs go faster than
+// an ogre's without either being told — held inside the range where a
+// six-frame pixel-art cycle reads as walking at all (about 6 to 14 frames a
+// second). Outside it, a fast unit strobes and a slow one sticks.
 float walkFrameSeconds(float speed, float stride, int frames);
+
+// How far a figure's body lifts, in pixels, at a point `progress` (0..1) of its
+// cycle. A walker rises twice a cycle — once per step — and a flyer once, on
+// its downstroke. The generated sheets keep the body level in every frame, so
+// without this a unit's legs cycle while its body glides at one height, which
+// reads as sliding, and a griffin reads as a cut-out being pulled on a wire.
+float strideLift(float progress, float height, bool flying);
 
 // --- Components ------------------------------------------------------------------
 
@@ -154,6 +163,21 @@ struct ArtFigure {
     float lastHealth = -1.0f;
     float attackLeft = 0.0f;
     float hurtLeft = 0.0f;
+
+    // Rows of cell pixels skipped at the top of every frame: where the row
+    // ABOVE in the sheet spills into this one. Generated sheets are not
+    // padded, and the feet of one pose drew as specks over the head of the
+    // next — most visibly above a flying griffin.
+    int inset = 0;
+
+    // Where a walk had got to when it was interrupted, so a unit that stops
+    // for a moment in a queue picks its stride up again instead of restarting
+    // it from the first frame every time.
+    int walkFrame = 0;
+    float walkElapsed = 0.0f;
+    float sinceWalk = 1000.0f;
+    float stillFor = 0.0f;  // how long it has stood still; brief stops do not count
+    bool flying = false;
 };
 
 // What is left of a unit with artwork: its death row playing out where it fell,

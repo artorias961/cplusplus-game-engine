@@ -648,7 +648,13 @@ constexpr StageKind kDefaultStages[] = {
     // single griffin in a composition differentiates nothing — the sweep puts
     // every strategy within a whisker of each other against "1,3,1", because
     // one archer already answers one flyer. Two griffins in four collapses
-    // every ground answer to 0.50 income and leaves the PIKEMAN at 1.30.
+    // every ground answer to 0.60 income and leaves the PIKEMAN at 1.30.
+    //
+    // It was 0.50 until the queue freeze was fixed (see blockedByFriendly):
+    // the freeze had been giving air wings a frozen turret at their own gate.
+    // Re-measured without it, this stage still asks exactly what it asked —
+    // every column's verdict is the same at 0.55 as at 0.65, and only GRAIN's
+    // moves by 0.75 — so its income did not need to move with the threshold.
     //
     // The income DROPS here, which looks wrong next to a table that otherwise
     // climbs, and is not. Composition is far the stronger dial: an air wing at
@@ -1099,6 +1105,11 @@ static_assert(kLoadoutSlots <= kMaxVisibleButtons,
 // true rather than hopeful — and it means a roster longer than the bar is a
 // genuine limit, which is the honest thing for it to be until there is a way
 // to choose which units you bring.
+//
+// It is how many SLOTS the bar spans — one past the last one carrying
+// anything — and not how many units are carried. The two differ exactly when
+// a dropped unit leaves a hole, and the count, used as a bound, hid everything
+// after the hole. Loop to this and skip the empty slots.
 int visibleButtonCount();
 
 // Which unit kind a bar slot sells, or -1 for an empty slot. The bar skips the
@@ -1186,6 +1197,15 @@ struct Unit {
 
     float timeUntilAttack = 0.0f;
 
+    // A multiplier on this unit's blows. 1 for everything the bar sells and
+    // every wave the opponent pays for — multiplying by exactly one changes no
+    // number the campaign was tuned on — and more for the swarm, which has to
+    // BREAK a line rather than only outlast it. See updateSwarm.
+    float power = 1.0f;
+
+    // Sent by the swarm, and so grows with it for as long as it stands.
+    bool swarm = false;
+
     // Where the walk cycle has got to, advanced by distance travelled rather
     // than by time — so a runner's legs move faster than a soldier's for free,
     // and nothing slides with its feet still.
@@ -1259,6 +1279,131 @@ struct Cannonball {
     float velocityY = 0.0f;
 };
 
+// --- The clock, and the swarm ----------------------------------------------
+//
+// A battle neither side can finish now ends anyway. Ten minutes in, if your
+// army has not broken their castle, their castle stops paying for its army:
+// the SWARM pours out of the gate, faster and tougher the longer it goes on,
+// until one castle or the other falls.
+//
+// There used to be no rule at all. The simulator called four hundred seconds a
+// draw, and about one battle in eight ended that way — while the game itself
+// had nothing, so on a real machine a draw was two lines standing still until
+// somebody closed the window. Not a loss you could learn from; just nothing
+// happening.
+//
+// Why the swarm leans against YOU, rather than a tie-break on "whoever has more
+// castle left". That was measured before anything was written: in all thirteen
+// of the simulator's draws your castle was untouched and theirs had taken a
+// scratch or two — while buying walls over and over with the surplus, THE
+// GATES growing from 1,100 to 2,660. Counted as a share of each castle's walls,
+// the usual tie-break would have handed the player nearly every stalemate, and
+// an army of nothing but soldiers would have won four stages the campaign was
+// placed to stop it winning. Counted in raw points, it would have handed every
+// one to the enemy for having bought walls. Neither says who was winning the
+// fight. You are the one attacking, and an attack that has not broken through
+// in ten minutes meets the garrison it was meant to beat — but the battle is
+// not taken away from you: break their castle during the swarm and you win.
+//
+// Ten minutes because it cuts no decided battle short, by a distance. The
+// longest win the simulator records is a little over six minutes (THE GATES,
+// taken with a ballista), and a person is slower than the probe.
+constexpr float kBattleSeconds = 600.0f;
+
+// The clock is on screen from the start, dim, and turns red for the last
+// stretch — a rule you only discover when it ends your battle is a trap.
+constexpr float kClockWarningSeconds = 60.0f;
+
+// The swarm: their stage's own composition, sent free of gold, cooldowns and
+// the population cap. It has to END a stalemate, which a fixed swarm cannot
+// promise — a line strong enough to hold the first minute of it would hold the
+// tenth — so it quickens and strengthens without limit. Only its presence on
+// the field is capped, because every unit is an entity and a figure and a
+// corpse.
+//
+// Numbers alone do not do it, and that was measured rather than assumed. Units
+// QUEUE: however many pour out of the gate, only the one at the front of the
+// line is fighting, and the rest stand behind it. The first swarm grew only
+// tougher, and five minutes into it the probe's mixed army was still holding
+// on its untouched castle with 2,240 gold in the bank — each swarm unit took
+// longer to kill but hit no harder, and every kill paid a bounty that bought
+// the soldier it had cost. A column of thirty red soldiers waiting its turn is
+// a queue, not a swarm. So each one hits harder as well as lasting longer, and
+// the one at the front is what breaks the line.
+//
+// And the queue struck twice more. Strengthened as each left the gate, the
+// front of a thirty-unit column had left it thirty kills earlier — a
+// generation behind the formula — so every swarm unit on the field now grows
+// with the swarm, wherever it stands, and their ordinary army joins it at the
+// clock. Even then one army held: thirty of theirs stood FROZEN at their own
+// gate, every one on exactly the same pixel, each waiting for another to move —
+// a bug in the queue older than the swarm, fixed in blockedByFriendly. And the
+// swarm does not queue at all. It is a mob, and presses forward until
+// something is in reach.
+constexpr float kSwarmStartRate = 1.5f;      // units a second when it begins
+constexpr float kSwarmRateGrowth = 1.0f / 30.0f;  // one more a second, every thirty seconds
+constexpr float kSwarmMaxRate = 5.0f;
+constexpr float kSwarmStrengthenSeconds = 30.0f;  // each half-minute adds a whole unit's health and blows
+constexpr int kSwarmCeiling = 30;                 // of theirs on the field at once
+constexpr float kSwarmBannerSeconds = 3.0f;
+
+// How long before the next swarm unit, this far into the swarm.
+float swarmGap(float secondsIntoSwarm);
+
+// How many times its roster row's health and blows a swarm unit has, this far
+// in.
+float swarmStrength(float secondsIntoSwarm);
+
+// "7:00", "0:59". Whole seconds, rounded UP, so the clock never shows 0:00
+// while there is still time on it.
+std::string clockText(float seconds);
+
+// --- The battle record -----------------------------------------------------
+//
+// What happened in one battle, kept so that losing it can be explained.
+//
+// A screen that says DEFEAT and nothing else teaches nothing, and this game
+// makes that expensive: every stage asks a particular question — an air wing
+// that wants something that reaches the sky, a line that wants the hero — and
+// a player who brings the wrong answer loses without being told the question
+// existed. Everything here is a count or a sum, gathered where it happens, so
+// the explanation is built from what the battle DID rather than from a guess
+// about what the stage is like.
+struct BattleRecord {
+    int sent[kMaxUnitKinds] = {};       // yours, by kind — the hero included
+    int enemySent[kMaxUnitKinds] = {};  // theirs
+    int lost[kMaxUnitKinds] = {};       // yours that fell
+    int killed[kMaxUnitKinds] = {};     // theirs that you felled
+
+    // Damage done TO you — your units and your castle together — by each of
+    // their kinds, and by their cannon.
+    float damageTakenFrom[kMaxUnitKinds] = {};
+    float cannonDamageTaken = 0.0f;
+
+    // What you did to their castle, which is the whole of a stalemate's story.
+    float castleDamageDealt = 0.0f;
+
+    // What you walked in with, taken when the battle starts. A copy rather
+    // than a read of the loadout later, so the record describes this battle
+    // even if the army is changed before anyone reads it.
+    int carried[kLoadoutSlots];
+    bool heroReachesSky = false;
+
+    // The hero's one outing: when it came out, when it fell (-1 for never),
+    // and how many of your own were on the field to fight in front of it.
+    float heroSummonedAt = -1.0f;
+    float heroFellAt = -1.0f;
+    int heroEscort = 0;
+
+    // Units the swarm sent. Kept apart from `enemySent`, which is their ARMY:
+    // "they sent 200 soldiers" would be true and would teach nothing.
+    int swarmSent = 0;
+
+    BattleRecord() {
+        for (int& slot : carried) slot = -1;
+    }
+};
+
 // The whole battle's state, on one entity — the singleton-component pattern
 // used by the other games, which is what lets a test read the gold without
 // the scene exposing anything.
@@ -1329,7 +1474,59 @@ struct Session {
     // How many of each upgrade each side has bought.
     int upgrades[kUpgradeCount] = {};
     int enemyUpgrades[kUpgradeCount] = {};
+
+    // Seconds of fighting so far. Advanced by the battle itself, so it stops
+    // while the game is paused and once the battle is over.
+    float elapsed = 0.0f;
+
+    // The clock has run out and the swarm is coming. When the next swarm unit
+    // is due, and where it is in the stage's composition.
+    bool swarming = false;
+    float swarmTimer = 0.0f;
+    int swarmIndex = 0;
+
+    BattleRecord record;
+
+    // The record as it stood when the swarm began. A battle lost to the swarm
+    // is explained from THIS — the ten minutes that did not break through —
+    // because afterwards the swarm is always what hurt most, and saying so
+    // teaches nothing.
+    BattleRecord beforeSwarm;
+
+    // Set by the defeat screen when the player asks to go back to the stage
+    // list — to change the army that just lost — rather than to try again.
+    bool leaveAfterDefeat = false;
 };
+
+// --- Explaining a defeat ---------------------------------------------------
+//
+// The defeat screen, in words: what happened, what they sent, and why it went
+// wrong, each reason written as the fact and then the fix.
+//
+// A pure function of the Session, so every rule in it can be tested by filling
+// in a record by hand — no battle has to be staged to find out whether "your
+// hero went out alone" is said about a hero that did.
+struct DefeatReport {
+    std::string headline;               // YOUR CASTLE FELL AT 2:14
+    std::string enemyArmy;              // THEY SENT 9 SOLDIERS AND 4 GRIFFINS
+    std::vector<std::string> reasons;   // at most kMaxDefeatReasons, best first
+};
+
+constexpr int kMaxDefeatReasons = 3;
+
+// How wide a line of the defeat screen may be before it wraps: the window, less
+// the panel's margin either side and the text's margin inside the panel. Here
+// rather than in the scene so the test that holds every reason to ONE line is
+// measuring against the same number the screen uses.
+constexpr float kDefeatPanelX = 70.0f;
+constexpr int kDefeatTextWidth =
+    kWindowWidth - 2 * static_cast<int>(kDefeatPanelX) - 40;
+
+DefeatReport explainDefeat(const Session& session);
+
+// A roster name made plural for a sentence: SOLDIERS, PIKEMEN, OGRES. The font
+// has one case and no apostrophes, so this is the whole of the grammar.
+std::string pluralName(const char* name, int count);
 
 // --- Queries (used by the game and by its tests) ---------------------------
 

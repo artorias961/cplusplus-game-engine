@@ -355,31 +355,54 @@ Pose choosePose(bool moving, bool attacking, bool hurt) {
 }
 
 float walkFrameSeconds(float speed, float stride, int frames) {
-    if (speed <= 0.0f || stride <= 0.0f || frames <= 0) return 0.15f;
-    // Clamped at both ends: a unit crawling at one pixel a second should not
-    // hold a frame for ten seconds, and one that sprints should not strobe.
-    return std::clamp(stride / speed / static_cast<float>(frames), 0.03f, 0.25f);
+    if (speed <= 0.0f || stride <= 0.0f || frames <= 0) return 0.12f;
+    // Clamped to where a six-frame pixel-art cycle still reads as a walk.
+    //
+    // The first version clamped at 0.03 and 0.25 and used a stride of 0.9 of
+    // the unit's height, and the motion study showed what that did: the
+    // runner's cycle played at twenty-six frames a second, a full stride every
+    // quarter of a second, which reads as vibrating rather than running. A
+    // stride is longer than that (a pace is most of a body's height, and a
+    // cycle is two paces), and no speed should push a cycle past fourteen
+    // frames a second or below six. A little foot-slide at the extremes is
+    // the ordinary price every sprite game pays for that.
+    return std::clamp(stride / speed / static_cast<float>(frames), 0.07f, 0.17f);
+}
+
+float strideLift(float progress, float height, bool flying) {
+    constexpr float kTwoPi = 6.2831853f;
+    const float p = progress - std::floor(progress);
+    if (flying) {
+        // One rise per wingbeat, about a fourteenth of the body's height.
+        return height * 0.07f * (0.5f + 0.5f * std::sin(kTwoPi * p));
+    }
+    // Two small bumps a cycle, one per step, about a thirtieth of the height:
+    // one or two pixels on a soldier, which is all a bob needs to be.
+    return height * 0.035f * std::fabs(std::sin(kTwoPi * p));
 }
 
 // --- In battle --------------------------------------------------------------------------------
 
 namespace {
 
-// Places a figure's feet on its unit's feet. Whole pixels, because generated
-// pixel art drawn at a fractional position shimmers as it moves.
+// Places a figure's feet on its unit's feet, `lift` pixels above them. Whole
+// pixels, because generated pixel art drawn at a fractional position shimmers
+// as it moves — and a bob of one or two pixels is exactly the size of motion
+// that fractional placement would smear into a blur.
 void placeOnFeet(Transform& at, const Sprite& sprite, const ArtFigure& art,
-                 float feetX, float feetY) {
+                 float feetX, float feetY, float lift) {
     const float anchorX = sprite.flipX
                               ? static_cast<float>(art.sheet->frameWidth) - art.sheet->anchorX
                               : art.sheet->anchorX;
     at.x = std::round(feetX - anchorX * art.scale);
-    at.y = std::round(feetY - art.sheet->anchorY * art.scale);
+    at.y = std::round(feetY - (art.sheet->anchorY - static_cast<float>(art.inset)) * art.scale -
+                      lift);
 }
 
 void setPose(Sprite& sprite, Animation& animation, const ArtFigure& art, Pose pose,
              float frameSeconds, bool loop) {
     const int row = std::clamp(static_cast<int>(pose), 0, art.sheet->rows - 1);
-    sprite.srcY = row * art.sheet->frameHeight;
+    sprite.srcY = row * art.sheet->frameHeight + art.inset;
     sprite.srcX = 0;
     animation.frame = 0;
     animation.elapsed = 0.0f;
@@ -391,12 +414,31 @@ void setPose(Sprite& sprite, Animation& animation, const ArtFigure& art, Pose po
 }
 
 // Sizes a sprite to its sheet so the standing figure is `height` pixels tall.
+//
+// The top few rows of every cell are left out: in these generated sheets the
+// pose in the row above runs a few pixels past its own cell, and drawing the
+// whole cell drew those pixels as specks floating over the next pose's head —
+// a griffin in flight carried a little cloud of its own idle row's claws.
+// Four percent of a cell is eight pixels here, about two on screen.
 void fitToHeight(Sprite& sprite, ArtFigure& art, float height) {
     art.scale = height / art.sheet->figureHeight;
+    art.inset = art.sheet->rows > 1
+                    ? static_cast<int>(std::lround(art.sheet->frameHeight * 0.04f))
+                    : 0;
     sprite.srcW = art.sheet->frameWidth;
-    sprite.srcH = art.sheet->frameHeight;
+    sprite.srcH = art.sheet->frameHeight - art.inset;
     sprite.width = std::max(1, static_cast<int>(std::lround(art.sheet->frameWidth * art.scale)));
-    sprite.height = std::max(1, static_cast<int>(std::lround(art.sheet->frameHeight * art.scale)));
+    sprite.height = std::max(
+        1, static_cast<int>(std::lround((art.sheet->frameHeight - art.inset) * art.scale)));
+}
+
+// How long a frame of this figure's walk — or wingbeat — lasts.
+float moveFrameSeconds(const ArtFigure& art, const UnitKind& stats, float height) {
+    // A flyer's wings beat at their own pace, whatever the ground speed: a
+    // griffin gliding slowly does not flap in slow motion.
+    if (art.flying) return 0.085f;
+    // A stride is most of a body's height per pace, two paces a cycle.
+    return walkFrameSeconds(stats.speed, height * 1.5f, art.sheet->columns);
 }
 
 SDL_Texture* loadSheet(const char* file) {
@@ -427,6 +469,7 @@ Entity createArtFigure(World& world, Entity owner, int kind, bool leftSide) {
 
     ArtFigure art;
     art.sheet = sheet;
+    art.flying = stats.flying;
 
     Sprite sprite;
     sprite.texture = texture;
@@ -438,8 +481,7 @@ Entity createArtFigure(World& world, Entity owner, int kind, bool leftSide) {
     fitToHeight(sprite, art, height);
 
     Animation animation;
-    setPose(sprite, animation, art, Pose::Move,
-            walkFrameSeconds(stats.speed, height * 0.9f, sheet->columns), true);
+    setPose(sprite, animation, art, Pose::Move, moveFrameSeconds(art, stats, height), true);
     art.pose = static_cast<int>(Pose::Move);
 
     world.addComponent(figure, sprite);
@@ -499,10 +541,24 @@ void poseArtFigure(World& world, Entity figure, float dt) {
     art->attackLeft = std::max(0.0f, art->attackLeft - dt);
     art->hurtLeft = std::max(0.0f, art->hurtLeft - dt);
 
-    const bool moving = std::fabs(velocity->dx) > 0.01f;
+    // A stop shorter than a tenth of a second is a stumble in a queue — the
+    // unit ahead paused for a frame — not a halt, and it keeps the walk going.
+    // Without this the pose flickered walk-idle-walk every time a line bunched
+    // up, restarting the stride at its first frame each time.
+    const bool movingNow = std::fabs(velocity->dx) > 0.01f;
+    art->stillFor = movingNow ? 0.0f : art->stillFor + dt;
+    const bool moving =
+        movingNow || (art->pose == static_cast<int>(Pose::Move) && art->stillFor < 0.1f);
     const Pose pose = choosePose(moving, art->attackLeft > 0.0f, art->hurtLeft > 0.0f);
 
     if (static_cast<int>(pose) != art->pose) {
+        // Leaving a walk: remember where the stride was, so a unit that sets
+        // off again soon picks it up rather than starting it over.
+        if (art->pose == static_cast<int>(Pose::Move)) {
+            art->walkFrame = animation->frame;
+            art->walkElapsed = animation->elapsed;
+            art->sinceWalk = 0.0f;
+        }
         const int frames = art->sheet->columns;
         switch (pose) {
             case Pose::Attack: {
@@ -514,19 +570,41 @@ void poseArtFigure(World& world, Entity figure, float dt) {
                 setPose(*sprite, *animation, *art, pose, 0.22f / frames, false);
                 break;
             case Pose::Move:
-                setPose(*sprite, *animation, *art, pose,
-                        walkFrameSeconds(stats.speed, height * 0.9f, frames), true);
+                setPose(*sprite, *animation, *art, pose, moveFrameSeconds(*art, stats, height),
+                        true);
+                if (art->sinceWalk < 0.6f) {
+                    animation->frame = std::clamp(art->walkFrame, 0, frames - 1);
+                    animation->elapsed = art->walkElapsed;
+                    sprite->srcX = animation->frame * art->sheet->frameWidth;
+                }
                 break;
             default:
-                setPose(*sprite, *animation, *art, pose, 0.16f, true);
+                // Idle: a flyer hovers with its wings still beating; anything
+                // on the ground shifts its weight, slowly.
+                setPose(*sprite, *animation, *art, pose, art->flying ? 0.1f : 0.16f, true);
                 break;
         }
         art->pose = static_cast<int>(pose);
     }
+    if (pose != Pose::Move) art->sinceWalk += dt;
+
+    // How far through its cycle the figure is — frame and the part of a frame
+    // already spent — which is what the bob follows, so the body rises with
+    // the step the legs are taking rather than on a clock of its own.
+    const float spf = animation->secondsPerFrame > 0.0f ? animation->secondsPerFrame : 1.0f;
+    const float progress =
+        (static_cast<float>(animation->frame) + std::min(1.0f, animation->elapsed / spf)) /
+        static_cast<float>(std::max(1, animation->frameCount));
+    float lift = 0.0f;
+    if (art->flying) {
+        lift = strideLift(progress, height, true);  // a flyer is never still
+    } else if (pose == Pose::Move) {
+        lift = strideLift(progress, height, false);
+    }
 
     // Feet on the unit's feet: the bottom centre of its footprint, which is
     // the ground for a soldier and the sky for a griffin.
-    placeOnFeet(*at, *sprite, *art, body->x + stats.width / 2.0f, body->y + stats.height);
+    placeOnFeet(*at, *sprite, *art, body->x + stats.width / 2.0f, body->y + stats.height, lift);
 }
 
 Entity leaveCorpse(World& world, Entity figure) {
@@ -550,7 +628,8 @@ Entity leaveCorpse(World& world, Entity figure) {
     world.addComponent(corpse, animation);
 
     Corpse remains;
-    remains.groundY = kGroundY - art->sheet->anchorY * art->scale;
+    remains.groundY =
+        kGroundY - (art->sheet->anchorY - static_cast<float>(art->inset)) * art->scale;
     world.addComponent(corpse, remains);
     return corpse;
 }

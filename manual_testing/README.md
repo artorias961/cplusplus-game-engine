@@ -171,6 +171,22 @@ decided there was nothing to do — leaving correct source and **mutated
 binaries**, a state that looks fine and fails mysteriously. Both scripts now
 bump the timestamp, rebuild, and confirm the suite is green before they finish.
 
+Two more, from running a batch of sixteen mutations from PowerShell:
+
+- **A caller with a deadline kills it mid-mutation.** A batch of mutations takes
+  half an hour; the shell it was launched from gave up at ten minutes and took
+  the script down between applying the first mutation and restoring it, leaving
+  `const bool timeUp = false;` in the tree. Long batches go in a detached process
+  (`Start-Process`), fed a newline for the `pause` at the end. If one is ever
+  killed, the original is in `%TEMP%\mutate_backup_*.bak` — compare before you
+  copy it back, so you know the mutated line is the only difference.
+- **A find with no spaces in it can lose its quotes.** PowerShell quotes an
+  argument for cmd only if it contains a space, and cmd then reads `<` and `>`
+  as redirects: `static_cast<int>(std::ceil(seconds))` asked for input from a
+  file called `int`. The script never started, so there was no verdict at all —
+  one line, "The system cannot find the file specified", in the middle of a
+  log of CAUGHTs. Pick a fragment with a space in it, which gets quoted.
+
 ---
 
 ## ui_shots — what does the screen actually look like?
@@ -233,6 +249,36 @@ binary, like every other asset, which is why it starts `assets/`. It scales
 DOWN to fit; it used to crop, silently, which cut the last frames off every
 1254-pixel generated sheet.
 
+And it studies **motion**, which no single screenshot can show:
+
+```bash
+./build/Release/ui_shots --motion
+```
+
+Every unit walks in place, then stands, then swings, photographed twenty times
+a second into `ui_shots/motion-study.png` — a row per unit, a column per moment,
+with a line where the feet belong — plus a log of which pose and frame each one
+showed, and a count of how often units in a real 20-second battle changed pose
+and cut a walk short. It exists because the question "do the units walk
+naturally?" got asked by a person watching the game, and the first answer had
+to be a measurement: it showed every frame WAS being used, and that the runner's
+cycle strobed at 26 frames a second, the bodies never bobbed, and the griffin
+carried specks of its own sheet's row above. All three were fixed against it.
+
+The defeat screens are **played, not staged**. Since the defeat screen explains
+what the battle did, a staged battle — one enemy soldier set down at your gate
+— gives it nothing to say. `12-defeat` is soldiers alone against THE EYRIE's
+air wing, fought to the end; `13-battle-swarm-coming`, `14-the-swarm` and
+`15-defeat-to-the-swarm` are the mixed army that holds THE GATES and never
+breaks them, fast-forwarded to the red clock, into the swarm, and on to
+whatever the swarm decides. Two findings came out of these before any number
+did. The first played defeat said the player ended with 979 gold unspent and
+never mentioned sending soldiers, because none had been sent — a hole in slot
+one hid the soldier in slot two from its key (see `v3-plan.md`). And the first
+swarm screenshot, five minutes into the swarm, showed the mixed army still
+holding on an untouched castle behind a queue of thirty red soldiers: a swarm
+that only got tougher was a queue, and needed to hit harder too.
+
 ## art_probe — is this art usable?
 
 ```bash
@@ -280,12 +326,20 @@ table to read rather than passing or failing.
 cmake --build build --config Release --target campaign_probe && ./build/Release/campaign_probe
 ```
 
-- no arguments — every stage played seven ways, win/loss per stage
-- `--detail` — plus seconds, castle left, shots fired, upgrades bought
+- no arguments — every stage played fourteen ways: `WIN`, `loss`, or `swarm` (a
+  loss after the ten-minute clock: the line held, never broke theirs, and the
+  swarm broke it). It plays five minutes past the game's clock rather than
+  imposing a cutoff of its own, so `draw` means the swarm failed to end a
+  battle and should never appear
+- `--detail` — plus seconds, both castles, shots fired, upgrades bought
 - `--sweep` — the highest enemy income each player still beats, per enemy
   composition. This is the one that makes tuning possible: it turns "make
   stage six a bit harder" into "put stage six between AIR and HERO". It is also
   much the slowest, because it plays the whole income range for every strategy.
+  `--sweep 1,3,3,1 4` sweeps one composition and wave size of your own instead
+  of the three built in — which is how THE EYRIE's thresholds were checked
+  before and after the queue freeze was fixed (0.50 to 0.60 for the armies with
+  no anti-air, nothing else moved).
 
 **When two instruments disagree, one of them is broken.** The sweep put MIXED's
 ceiling at 0.60 income against composition `1,1,2`, while the stage table had

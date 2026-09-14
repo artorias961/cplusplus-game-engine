@@ -674,6 +674,14 @@ rock-paper-scissors answer rather than a tax: the counter to all-air is to
 The test asserting this was written the other way round first, and the
 measurement corrected it.
 
+**Later, and the other way again:** the first two rows were largely a bug. A
+queue freeze (two units on one pixel each waiting for the other) turned the
+griffins attacking soldiers at their own castle into a frozen turret that no
+soldier could touch. Fixed, soldiers walk under an all-griffin army and take its
+castle in 56 seconds. The sky's real lesson — an air wing needs soldiers in
+front of it, and against THAT the answer is a line plus something that reaches
+the sky — is in *A clock, a swarm, and a defeat that explains itself*, below.
+
 #### Two mutations survived, and both were tests measuring the wrong rule
 
 - **"The two lanes share one queue" passed cleanly.** The shipped griffin
@@ -2030,6 +2038,40 @@ everything, and make the sizes relevant to the game.
   loader skipped without a word (CHAMPION is a perk), and the effect defaults
   carried a `HIT` nothing asked for. Both removed.
 
+### "They don't walk naturally" — and the flyers least of all
+
+The first person to watch it said the units did not look like they were
+walking, especially the griffins, and suspected not all the animation was used.
+The answer had to be measured, so `ui_shots --motion` was built: every unit on a
+treadmill, sampled twenty times a second, with a log of pose and frame.
+
+It said the suspicion was wrong and the observation right. Every row WAS playing
+all six frames. What was wrong was around them:
+
+- **Tempo.** Stride was taken as 0.9 of a body's height per cycle, so the
+  runner played its six frames at 26 a second — a stride every quarter second,
+  which reads as vibrating. A cycle is two paces, about one and a half body
+  heights, and the rate is now held between six and fourteen frames a second.
+- **No bob.** The generated sheets keep the body level in every frame. Legs
+  cycled under a body that glided at one height: sliding, on the ground. The
+  figure now lifts a pixel or two per step, following the animation's own
+  progress so it rises with the step the legs are taking.
+- **Flyers.** The griffin's flight row holds its wings nearly still — a glide —
+  and it flew at one fixed altitude. It now beats at its own tempo whatever its
+  ground speed and rises and sinks once per beat. The row itself still wants a
+  real downstroke; that is an art fix.
+- **Specks.** The row above each pose in these unpadded sheets spills a few
+  pixels into the next, and a flying griffin carried a little cloud of its own
+  idle row's claws. The top four percent of every cell is skipped now.
+- **Queues.** In a real battle, stop-and-go in a queue cut 14 walks short of one
+  cycle in twenty seconds, each restarting the stride at frame zero. A stop
+  shorter than a tenth of a second no longer counts, and a walk resumes where
+  it left off: 3 in twenty seconds.
+
+The verifier now watches a walker and a griffin in a real battle and fails if
+either figure's height never changes — and removing the bob was checked to make
+it fail.
+
 ### And the README had drifted
 
 A verification pass found about twenty claims in the README the code
@@ -2038,6 +2080,209 @@ loader does not read, a sheet path that would not load, an ogre with four
 soldiers' health that has two and a half, "the game is silent" in a project
 that synthesises sound, balance claims measured by the broken sweep. It was
 rewritten against the code and the measurements, not against memory.
+
+## A clock, a swarm, and a defeat that explains itself
+
+Asked for directly: a stalemate rule, and feedback when you lose. The outside
+review of September 9 had both on its list, and the README had carried them as
+open for longer than that. The rule went through two shapes — a seven-minute
+clock that scored a stalemate as a loss, and then, on the user's call, a
+ten-minute clock that does not end the battle at all but sends a swarm — and
+the swarm through four versions, three of which the queue defeated.
+
+### The first rule was chosen by a measurement, not by the usual answer
+
+The usual stalemate rule is "time runs out, whoever has more castle left wins".
+Before writing it, the probe's `--detail` got a row it had never printed —
+**their** castle, beside yours — and the thirteen draws turned out to be
+entirely one-sided:
+
+- in every one, YOUR castle was untouched at 800;
+- THEIRS had taken a scratch or two, and had meanwhile bought WALLS over and
+  over with the surplus: THE FOOTHILLS from 740 to 2,040, THE GATES from 1,100
+  to 2,660.
+
+So "more castle left", counted as a share of each castle's walls, would have
+handed the player almost every stalemate, and NAIVE — soldiers only, the column
+the campaign exists to stop — would have won four stages it currently draws.
+Counted in raw points it goes the other way: the enemy "wins" every one, for
+having bought walls. Neither is a tie-break; both decide a stalemate on
+something that happened outside the fight, and the first is a retune by
+accident. The rule is the plain one: **you are the attacker, and when the clock
+runs out without either castle falling, the attack has failed.** A loss. Every
+stage keeps asking the question it was placed to ask.
+
+Seven minutes, because it cuts nothing short. The longest decided battle in the
+probe is 362 seconds (BALL on THE GATES). With the clock in place every WIN in
+the table is still a WIN at exactly the same second, all thirteen draws became
+`time`, and no column's stage count moved. The castles are read before the
+clock, so a castle broken on the final frame is still a win, and the clock only
+runs while the battle updates — pausing stops it, and so does the end.
+
+The probe no longer imposes its own cutoff. It plays past the game's clock and
+lets the game decide; `draw` in its table now means the rule failed. GUNS on
+THE GATES ran out of time with their castle on 8 points, which is exactly the
+story the defeat screen is for.
+
+### Then: ten minutes, and a swarm instead of a verdict
+
+The user's call, on seeing it: ten minutes, and when the time runs out do not
+end the game — send a swarm. It is a better rule than the one it replaced. A
+stalemate scored as a loss tells the player they lost; a swarm pouring out of
+the gate SHOWS them what an attack that did not break through runs into, and
+leaves the battle theirs to win if they can still break the castle.
+
+Ten minutes also let two battles finish that seven had cut short: PIKE takes THE
+FOOTHILLS at 7:14 and GUNS takes THE GATES at 8:31 — the one that had run out of
+time eight points short. Both columns gain a stage.
+
+The swarm is the stage's own composition, out of the gate free of gold,
+cooldowns and the population cap, quickening every half-minute. It has to END a
+stalemate, not decorate one, and it took four versions to, because of one fact
+about this game that was known and not thought through: **units queue.**
+However many come out of the gate, only the one at the front of the line is
+fighting.
+
+Eleven battles in the probe reach the swarm (the thirteen stalemates, less the
+two that ten minutes now finishes). The versions, against those eleven:
+
+1. **Tougher only: it ended none of them.** Each swarm unit came out with more
+   health. Five minutes into it, `ui_shots` showed the mixed army still holding
+   THE GATES on an untouched castle with 2,240 gold, behind a queue of thirty
+   red soldiers, and the probe had all eleven still standing at the five-minute
+   mark. Each unit took longer to kill and hit no harder, and every kill paid a
+   bounty that bought the soldier it had cost.
+2. **Harder blows too: eight of eleven.** Three held for five minutes — COMBO
+   on OLD ROAD and THE GATES, PIKE on OLD ROAD. Each unit had been strengthened
+   as it LEFT THE GATE, and the one at the front of a thirty-unit queue had left
+   it thirty kills earlier: a generation behind the formula, falling further
+   behind as each kill took longer. Now every swarm unit on the field grows with
+   the swarm, wherever it stands.
+3. **Grown in place, their army joining it: ten of eleven.** COMBO on OLD ROAD
+   still held, its castle untouched, theirs at 2,319. The guess was SUPPLY — a
+   ten-minute stalemate banks bounties into three more slots a level, enough
+   for their ordinary army to fill the field to the swarm's ceiling on its own
+   — so at the clock their army now joins the swarm and their castle stops
+   paying for another. Sensible, and it changed nothing: the draw stood.
+4. **A mob: eleven of eleven, 9 to 36 seconds after the clock.** Watching the
+   battle instead of guessing found it in one print: all thirty of theirs at
+   x = 2272.00, speed zero — every one on the same pixel, at their own gate,
+   while ten ballistas 182 pixels away shot them one at a time. The queue rule
+   ("wait if a stopped friend is ahead of me") counts a friend on exactly the
+   same spot as ahead, so two units on one pixel each wait for the other
+   forever, and everything that comes out of the gate joins the pile. The
+   freeze is now fixed for every unit (below), and the swarm still does not
+   queue at all: it is a mob and presses forward until something is in reach,
+   which is the first version in which its numbers mean anything — a queue,
+   frozen or not, puts one unit at a time against your line. It comes out of
+   the gate one at a time, each clear of the last, so it looks like a crowd
+   arriving rather than one unit.
+
+The final table: every battle that reaches the swarm ends inside forty seconds
+of it, and every result before ten minutes is the ten-minute table's, to the
+second. Thirteen probe outcomes used to be draws. Two now finish inside the ten
+minutes (PIKE on THE FOOTHILLS, GUNS on THE GATES), and eleven meet the swarm
+and are broken by it.
+
+### The freeze, fixed, and the sky re-measured
+
+Two units on exactly the same pixel froze each other, anywhere, not only in the
+swarm. The fix is one line — on a tie, only the older counts as ahead, the rule
+targeting already uses — and it was held back at first, because it broke two
+balance assertions: **a line of soldiers beat an all-griffin stage**, in 56
+seconds against archers' 104. The freeze had been building a turret. A griffin
+attacking soldiers at its own castle stands in the gate; the next griffin out
+lands on the same pixel; both fight, both stop when the soldiers die, and both
+freeze — killing every soldier who later reaches the castle, from a spot no
+soldier can touch. "A ground army cannot answer the sky" had been measured with
+that turret in place.
+
+The user's call was to fix it and rebalance the sky. Measuring first said the
+sky needed no number moved:
+
+- **All 112 probe verdicts are unchanged** with the fix — every WIN, loss and
+  swarm, every column's stage count. Only timings moved (GRAIN takes THE GATES
+  at 8:42 rather than 5:09).
+- **THE EYRIE's row is the same at 0.55 income as at 0.65**, and the first
+  verdict to move going up is GRAIN's, at 0.75. The shipped 0.65 sits inside a
+  band where nothing changes, with room either side.
+- **The sweep moved one step.** Against THE EYRIE's composition, the armies
+  without real anti-air beat up to 0.60 income rather than 0.50 — at the
+  sweep's castle slope, which is smaller than the stage's 850. Everything with
+  anti-air, and every hero path, is where it was.
+- **The claim that fell was about griffins with nobody on the ground**, which
+  no stage fields. The griffins at THE EYRIE come with soldiers, and the
+  soldiers are what guard the castle. So the test now measures the true
+  lesson on that shape: soldiers alone lose, archers alone lose, a line with
+  archers behind it wins — and a wing with nobody on the ground holds nothing.
+
+What is left is a design question, not a bug. A flyer cannot stop anything
+walking underneath it, so an army of pure griffins cannot defend its own
+castle. Nothing in the campaign needs one to; if flyers should ever hold
+ground, that is a new mechanic — diving on what passes beneath — and not a
+number in `units.txt`.
+
+### The defeat screen is built from what the battle did
+
+A `BattleRecord` on the Session, filled where things happen: what each side
+sent (counted in `spawnUnit`, the one door every unit comes through), what each
+enemy kind did to you and what their cannon did, what you did to their castle,
+who died, and the hero's one outing — when, how many were in front of it, when
+it fell. `explainDefeat` turns that into a headline, what they sent, and at most
+three reasons, each the fact and then the fix, in a fixed order of how likely
+it is to be THE reason:
+
+1. nothing you carried hits their flyers (two or more — one griffin is answered
+   by whatever walks beneath it, which is what the stage table found);
+2. you sent only one kind;
+3. your hero went out alone (fell within twenty seconds, fewer than two ahead);
+4. more ranged units than front line;
+5. their flyers did 40% or more of the damage, though you could reach them;
+6. on the clock: how little reached their castle, and how often they rebuilt it;
+7. you never summoned your hero (after thirty seconds, when it could matter);
+8. gold left unspent (a hundred or more);
+9. whatever did the most damage, if nothing above named it.
+
+A pure function of the Session, so every rule has a test that fills a record by
+hand, and one test plays THE EYRIE with soldiers to the end and reads the
+screen. Every line is held to one line of the panel at the longest the shipped
+roster can make it, and to the font — the screen wraps anyway, because names
+come from a data file. `Q` on the defeat screen goes back to the stage list: a
+loss used to offer only the same battle again or closing the game, which made
+"carry pikemen" advice the player had no way to take.
+
+### What it found that was not asked for
+
+**A hole in the loadout hid everything after it.** The first played defeat
+screenshot said the player ended with 979 gold unspent and said nothing about
+sending only soldiers — because none had been sent. `visibleButtonCount()`
+returned how many slots were FILLED and every caller used it as a slot bound,
+so a loadout of `{empty, SOLDIER, empty, empty}` stopped looking at slot one.
+The likeliest real case is dropping the runner from the front of the default
+loadout: the griffin in slot four then had no button, no click and no key. The
+army screen promises that a drop leaves a hole rather than shuffling the bar,
+so this was a normal state, and the defeat screen had just started sending
+players to exactly that screen. It spans to the last carried slot now.
+
+**And the bar's labels printed the roster row, not the key.** `kind + 1` rather
+than `slot + 1`, left from before the loadout existed — identical for the
+default loadout, which carries the first four rows in order, and wrong for every
+other. An OGRE carried first read "6 OGRE" while 1 sent it and 6 did nothing. The
+new test carries an ogre, not a griffin, in slot four for this reason: the
+griffin's roster row is also four, so the wrong label would have read correctly.
+
+### Still open
+
+- The information comes one defeat late. The stage list still does not show what
+  the enemy fields, so the first attempt at every stage is blind.
+- The thresholds were chosen against the simulator's battles. Whether a person
+  losing reads "went out alone and fell in 9s" as the reason is unmeasured.
+- Ten minutes of a held line is a long way to learn that it needed breaking,
+  and the swarm, once it comes, decides the battle inside forty seconds — so
+  in practice past ten minutes is a loss with a spectacle. That is the rule as
+  asked for; whether a person wants more of a fighting chance in it is a
+  playtest question. The rule ends stalemates; it does nothing to make them
+  rarer.
 
 ## Remaining slices
 

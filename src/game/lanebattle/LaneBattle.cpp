@@ -368,6 +368,21 @@ bool blockedByFriendly(World& world, Entity mover, bool leftSide, float moverX,
         const float centreAhead = (otherCenter - moverCenter) * direction;
         if (centreAhead < 0.0f) continue;  // behind me
 
+        // Exactly level: only the OLDER of the two is ahead — the tie-break
+        // targeting already uses, lower id first.
+        //
+        // Without it, two units on the same pixel each counted the other as the
+        // one in front, both waited, and neither ever moved again. Units come
+        // out of a gate at one fixed x, so it took only a queue backed up to a
+        // gate. The swarm found it — thirty frozen at x = 2272.00 while ten
+        // ballistas shot them one at a time for five minutes — and it had been
+        // in every battle before the swarm existed, building a turret: griffins
+        // attacking soldiers at their own castle froze on one spot and killed
+        // every soldier who arrived, from where no soldier could reach. "Ground
+        // cannot answer the sky" was partly measured against that turret.
+        // Fixing it moved no verdict in the campaign; see v3-plan.md.
+        if (centreAhead == 0.0f && other > mover) continue;
+
         const float gap = centreAhead - (stats.width + otherStats.width) / 2.0f;
         if (gap < kRankGap) return true;
     }
@@ -1292,12 +1307,26 @@ bool inLoadout(int kind) {
 // something free would be a slot wasted.
 int kindForButton(int slot) { return loadoutKind(slot); }
 
+// One past the LAST carried slot — not how many slots are carried.
+//
+// It was the count, and every caller loops `slot < visibleButtonCount()`, so a
+// hole anywhere but the end hid whatever came after it. Drop the RUNNER from
+// the front of the default loadout and you carry three units in slots two to
+// four; the count said three, the loops stopped at slot three, and the GRIFFIN
+// in slot four had no button, no click and no key. Nothing in the game could
+// send it. The army screen promises that dropping a unit leaves a hole rather
+// than shuffling the bar, so holes are a normal state rather than an edge case
+// — and found only because the defeat screen started sending players back to
+// that screen, and a screenshot of a soldiers-only army said it had sent none.
+//
+// Every caller already skips an empty slot inside the span, so the bar draws
+// the hole as a gap and its key does nothing, which is what a hole means.
 int visibleButtonCount() {
-    int shown = 0;
+    int span = 0;
     for (int slot = 0; slot < kLoadoutSlots && slot < kMaxVisibleButtons; ++slot) {
-        if (loadoutKind(slot) >= 0) ++shown;
+        if (loadoutKind(slot) >= 0) span = slot + 1;
     }
-    return shown;
+    return span;
 }
 
 float trainCost(int kind, int owned) {
@@ -1515,6 +1544,15 @@ Entity spawnUnit(World& world, bool leftSide, int kind) {
         world.getComponent<Unit>(unit)->figure = createFigure(world, unit, sprite);
     }
 
+    // Counted here, the one door every unit comes through — the bar, the
+    // hero's button and the opponent's waves all end in this function — so the
+    // record of what each side sent cannot disagree with what took the field.
+    if (kind >= 0 && kind < kMaxUnitKinds) {
+        if (Session* session = findSession(world)) {
+            ++(leftSide ? session->record.sent : session->record.enemySent)[kind];
+        }
+    }
+
     // A different pitch per kind, so you can hear what you just sent without
     // looking away from the front line.
     if (audioDevice) {
@@ -1529,23 +1567,322 @@ void setAudioDevice(AudioDevice* audio) { audioDevice = audio; }
 void setTextureCache(TextureCache* textures) { textureCache = textures; }
 TextureCache* currentTextureCache() { return textureCache; }
 
+// --- The clock, and explaining a defeat -------------------------------------
+
+std::string clockText(float seconds) {
+    const int whole = std::max(0, static_cast<int>(std::ceil(seconds)));
+    const int tens = (whole % 60) / 10;
+    const int units = whole % 10;
+    return std::to_string(whole / 60) + ":" + static_cast<char>('0' + tens) +
+           static_cast<char>('0' + units);
+}
+
+float swarmGap(float secondsIntoSwarm) {
+    const float into = std::max(0.0f, secondsIntoSwarm);
+    const float rate = std::min(kSwarmMaxRate, kSwarmStartRate + kSwarmRateGrowth * into);
+    return 1.0f / rate;
+}
+
+float swarmStrength(float secondsIntoSwarm) {
+    return 1.0f + std::max(0.0f, secondsIntoSwarm) / kSwarmStrengthenSeconds;
+}
+
+std::string pluralName(const char* name, int count) {
+    std::string word = name ? name : "";
+    if (count == 1 || word.empty()) return word;
+
+    auto endsWith = [&word](const char* tail) {
+        const std::size_t length = std::char_traits<char>::length(tail);
+        return word.size() >= length &&
+               word.compare(word.size() - length, length, tail) == 0;
+    };
+    if (endsWith("MAN")) {  // PIKEMAN, and any data file's LANCEMAN
+        word[word.size() - 2] = 'E';
+        return word;
+    }
+    if (endsWith("S") || endsWith("X") || endsWith("CH") || endsWith("SH")) {
+        return word + "ES";
+    }
+    return word + "S";
+}
+
+namespace {
+
+// The thresholds a defeat is judged against. Each is the point past which the
+// fact stops being noise and starts being the reason — and each is a number a
+// person can check against the battle they just lost.
+//
+// A sky threat is two flyers, not one: the stage table found that a single
+// griffin is answered by whatever happens to be walking beneath it, and it
+// takes a wing before anti-air is worth a slot.
+constexpr int kFlyersThatNeedAnAnswer = 2;
+// Flyers that did this share of everything you took were the problem even if
+// something you carried could reach them — you did not carry enough of it.
+constexpr float kFlyerShareThatMatters = 0.40f;
+// A hero that falls this soon after coming out, with this few in front of it,
+// was thrown away rather than spent.
+constexpr float kHeroWastedWithin = 20.0f;
+constexpr int kHeroNeedsAnEscortOf = 2;
+// Not worth mentioning the hero to a player who lost before it could matter.
+constexpr float kHeroMattersAfter = 30.0f;
+// Reach past this is range, and range needs somebody standing in front of it.
+constexpr float kRangedReach = 90.0f;
+// Gold still in the purse at the end, that could have been most of a soldier.
+constexpr float kGoldWorthMentioning = 100.0f;
+
+// "PIKEMEN OR ARCHERS": the cheapest two things that reach the sky, from the
+// roster rather than from a list written here, so a data file's new anti-air
+// unit is recommended without anybody editing this.
+std::string skyAnswers() {
+    std::vector<int> answers;
+    const int hero = heroKindIndex();
+    for (int kind = 0; kind < unitKindCount(); ++kind) {
+        if (kind != hero && unitKind(kind).hitsAir) answers.push_back(kind);
+    }
+    std::stable_sort(answers.begin(), answers.end(), [](int a, int b) {
+        return unitKind(a).cost < unitKind(b).cost;
+    });
+    if (answers.empty()) return "";
+    std::string text = pluralName(unitKind(answers[0]).name, 2);
+    if (answers.size() > 1) text += " OR " + pluralName(unitKind(answers[1]).name, 2);
+    return text;
+}
+
+// "9 SOLDIERS, 4 GRIFFINS AND 3 RUNNERS", most first. Past four kinds the tail
+// is summarised, because the line has a window to fit in.
+std::string armyText(const int* counts) {
+    std::vector<int> kinds;
+    const int roster = std::min(unitKindCount(), kMaxUnitKinds);
+    for (int kind = 0; kind < roster; ++kind) {
+        if (counts[kind] > 0) kinds.push_back(kind);
+    }
+    std::stable_sort(kinds.begin(), kinds.end(),
+                     [counts](int a, int b) { return counts[a] > counts[b]; });
+
+    std::vector<std::string> parts;
+    int others = 0;
+    for (std::size_t i = 0; i < kinds.size(); ++i) {
+        const int count = counts[kinds[i]];
+        if (i < 3 || kinds.size() == 4) {
+            parts.push_back(std::to_string(count) + " " +
+                            pluralName(unitKind(kinds[i]).name, count));
+        } else {
+            others += count;
+        }
+    }
+    if (others > 0) parts.push_back(std::to_string(others) + " MORE");
+
+    std::string text;
+    for (std::size_t i = 0; i < parts.size(); ++i) {
+        if (i > 0) text += (i + 1 == parts.size()) ? " AND " : ", ";
+        text += parts[i];
+    }
+    return text;
+}
+
+std::string percent(float share) {
+    return std::to_string(static_cast<int>(std::lround(share * 100.0f))) + "%";
+}
+
+}  // namespace
+
+DefeatReport explainDefeat(const Session& session) {
+    // A battle lost to the swarm is explained by the ten minutes before it.
+    // Afterwards the swarm is always what hurt most, and "their soldiers did
+    // 90% of the damage" would be true of every such defeat and useful in none.
+    const BattleRecord& record = session.swarming ? session.beforeSwarm : session.record;
+    const int roster = std::min(unitKindCount(), kMaxUnitKinds);
+    const int hero = heroKindIndex();
+    DefeatReport report;
+
+    // What happened.
+    const std::string when = clockText(std::floor(session.elapsed));
+    report.headline =
+        session.swarming
+            ? "THE SWARM OF " + std::to_string(session.record.swarmSent) +
+                  " BROKE YOUR CASTLE AT " + when
+            : "YOUR CASTLE FELL AT " + when;
+
+    const std::string theirs = armyText(record.enemySent);
+    if (!theirs.empty()) report.enemyArmy = "THEY SENT " + theirs;
+
+    // The facts every reason below is judged on.
+    int enemyFlyers = 0;
+    int flyerKind = -1;
+    float flyerDamage = 0.0f;
+    float taken = record.cannonDamageTaken;
+    int worstKind = -1;
+    for (int kind = 0; kind < roster; ++kind) {
+        taken += record.damageTakenFrom[kind];
+        if (worstKind < 0 || record.damageTakenFrom[kind] > record.damageTakenFrom[worstKind]) {
+            worstKind = kind;
+        }
+        if (!unitKind(kind).flying) continue;
+        enemyFlyers += record.enemySent[kind];
+        flyerDamage += record.damageTakenFrom[kind];
+        if (record.enemySent[kind] > 0 &&
+            (flyerKind < 0 || record.enemySent[kind] > record.enemySent[flyerKind])) {
+            flyerKind = kind;
+        }
+    }
+
+    bool carriedReachesSky = record.heroReachesSky;
+    for (int kind : record.carried) {
+        if (kind >= 0 && kind < roster && unitKind(kind).hitsAir) carriedReachesSky = true;
+    }
+
+    int kindsSent = 0;
+    int onlyKind = -1;
+    int unitsSent = 0;
+    int ranged = 0;
+    int rangedKind = -1;
+    int front = 0;
+    for (int kind = 0; kind < roster; ++kind) {
+        if (kind == hero || record.sent[kind] == 0) continue;
+        ++kindsSent;
+        onlyKind = kind;
+        unitsSent += record.sent[kind];
+        if (unitKind(kind).flying) continue;
+        if (unitKind(kind).range >= kRangedReach) {
+            ranged += record.sent[kind];
+            if (rangedKind < 0 || record.sent[kind] > record.sent[rangedKind]) {
+                rangedKind = kind;
+            }
+        } else {
+            front += record.sent[kind];
+        }
+    }
+
+    // Why, most useful first. Each is only said when the record shows it, and
+    // each is the fact followed by the fix.
+    auto add = [&report](const std::string& line) {
+        if (static_cast<int>(report.reasons.size()) < kMaxDefeatReasons) {
+            report.reasons.push_back(line);
+        }
+    };
+
+    const bool skyUnanswered =
+        enemyFlyers >= kFlyersThatNeedAnAnswer && !carriedReachesSky && flyerKind >= 0;
+    if (skyUnanswered) {
+        std::string line = "NOTHING YOU CARRIED HITS THEIR " +
+                           pluralName(unitKind(flyerKind).name, 2);
+        const std::string answers = skyAnswers();
+        if (!answers.empty()) line += " - TRY " + answers;
+        add(line);
+    }
+
+    if (kindsSent == 1 && unitsSent >= 3) {
+        add("YOU SENT ONLY " + pluralName(unitKind(onlyKind).name, 2) +
+            " - ONE KIND OF UNIT IS NOT AN ARMY");
+    }
+
+    if (record.heroSummonedAt >= 0.0f && record.heroFellAt >= 0.0f &&
+        record.heroFellAt - record.heroSummonedAt <= kHeroWastedWithin &&
+        record.heroEscort < kHeroNeedsAnEscortOf) {
+        const int lasted = static_cast<int>(
+            std::lround(record.heroFellAt - record.heroSummonedAt));
+        add("YOUR HERO WENT OUT ALONE AND FELL IN " + std::to_string(lasted) +
+            "S - SEND IT BEHIND A LINE");
+    }
+
+    if (ranged >= 3 && front < ranged && rangedKind >= 0) {
+        add("MORE " + pluralName(unitKind(rangedKind).name, 2) +
+            " THAN FRONT LINE - THEY NEED SOMEONE TO HIDE BEHIND");
+    }
+
+    const bool flyersWereTheProblem =
+        !skyUnanswered && flyerKind >= 0 && taken > 0.0f &&
+        flyerDamage >= kFlyerShareThatMatters * taken;
+    if (flyersWereTheProblem) {
+        add("THEIR " + pluralName(unitKind(flyerKind).name, 2) + " DID " +
+            percent(flyerDamage / taken) + " OF THE DAMAGE - CARRY MORE THAT HITS AIR");
+    }
+
+    // Ten minutes that never broke through: how little reached their castle.
+    if (session.swarming) {
+        const int dealt = static_cast<int>(record.castleDamageDealt);
+        const int walls = session.enemyUpgrades[static_cast<int>(Upgrade::Walls)];
+        if (dealt <= 0) {
+            add("NOTHING YOU SENT REACHED THEIR CASTLE IN TEN MINUTES");
+        } else if (walls >= 2) {
+            add("YOU HIT THEIR CASTLE FOR " + std::to_string(dealt) +
+                " WHILE THEY REBUILT IT " + std::to_string(walls) + " TIMES");
+        } else {
+            add("YOU HIT THEIR CASTLE FOR ONLY " + std::to_string(dealt) +
+                " BEFORE THE SWARM CAME");
+        }
+    }
+
+    if (hero >= 0 && record.heroSummonedAt < 0.0f && session.elapsed >= kHeroMattersAfter) {
+        add("YOU NEVER SUMMONED YOUR HERO - PRESS H ONCE THE LINES MEET");
+    }
+
+    if (session.gold >= kGoldWorthMentioning) {
+        add("YOU ENDED WITH " + std::to_string(static_cast<int>(session.gold)) +
+            " GOLD UNSPENT - GOLD IN THE BANK HOLDS NO LINE");
+    }
+
+    // And whatever hurt most, if nothing above has already named it.
+    const bool worstIsCannon =
+        record.cannonDamageTaken > (worstKind >= 0 ? record.damageTakenFrom[worstKind] : 0.0f);
+    const float worst = worstIsCannon ? record.cannonDamageTaken
+                                      : (worstKind >= 0 ? record.damageTakenFrom[worstKind] : 0.0f);
+    const bool alreadyNamed =
+        !worstIsCannon && worstKind >= 0 && unitKind(worstKind).flying &&
+        (skyUnanswered || flyersWereTheProblem);
+    if (taken > 0.0f && worst > 0.0f && !alreadyNamed) {
+        const std::string who =
+            worstIsCannon ? "CANNON" : pluralName(unitKind(worstKind).name, 2);
+        add("THEIR " + who + " DID THE MOST DAMAGE - " + percent(worst / taken) +
+            " OF WHAT YOU TOOK");
+    }
+
+    return report;
+}
+
 namespace {
 
 // --- Scenes ----------------------------------------------------------------
 
+// Splits a line at spaces so that no piece is wider than `maxWidth` at this
+// scale. The reasons on the defeat screen are built from roster names, and a
+// data file is free to name a unit something long.
+std::vector<std::string> wrapText(const std::string& text, int scale, int maxWidth) {
+    std::vector<std::string> lines;
+    std::string line;
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        std::size_t end = text.find(' ', start);
+        if (end == std::string::npos) end = text.size();
+        const std::string word = text.substr(start, end - start);
+        const std::string joined = line.empty() ? word : line + " " + word;
+        if (!line.empty() && textWidth(joined, scale) > maxWidth) {
+            lines.push_back(line);
+            line = word;
+        } else {
+            line = joined;
+        }
+        start = end + 1;
+    }
+    if (!line.empty()) lines.push_back(line);
+    return lines;
+}
+
 class GameOverScene : public Scene {
 public:
-    explicit GameOverScene(bool playerWon) : playerWon_(playerWon) {}
+    GameOverScene(bool playerWon, DefeatReport report)
+        : playerWon_(playerWon), report_(std::move(report)) {}
 
     void onEnter(World& world) override {
         owned_.push_back(createBackdrop(world));
-        owned_.push_back(createCenteredText(
-            world, playerWon_ ? "VICTORY" : "DEFEAT", 170, 6,
-            playerWon_ ? 140 : 240, playerWon_ ? 230 : 110,
-            playerWon_ ? 150 : 110, kOverlayTextLayer));
-        owned_.push_back(createCenteredText(
-            world, playerWon_ ? "R FOR THE CAMPAIGN" : "R TO TRY AGAIN", 280, 2,
-            170, 170, 195, kOverlayTextLayer));
+        if (!playerWon_) {
+            buildDefeat(world);
+            return;
+        }
+        owned_.push_back(createCenteredText(world, "VICTORY", 170, 6, 140, 230,
+                                            150, kOverlayTextLayer));
+        owned_.push_back(createCenteredText(world, "R FOR THE CAMPAIGN", 280, 2,
+                                            170, 170, 195, kOverlayTextLayer));
         owned_.push_back(createCenteredText(world, "ESC TO QUIT", 310, 2,
                                             170, 170, 195, kOverlayTextLayer));
     }
@@ -1555,14 +1892,70 @@ public:
         owned_.clear();
     }
 
-    void update(World&, InputManager& input, float, SceneStack& scenes) override {
-        if (input.wasKeyPressed(SDL_SCANCODE_R)) scenes.pop();
+    void update(World& world, InputManager& input, float, SceneStack& scenes) override {
+        if (input.wasKeyPressed(SDL_SCANCODE_R)) {
+            scenes.pop();
+            return;
+        }
+        // Back to the stage list, where A changes the army and H the hero.
+        //
+        // A loss used to offer exactly two things: the same battle again, with
+        // the same army, or closing the game. So a defeat screen that says
+        // "nothing you carried can hit their griffins" would have been advice
+        // the player had no way to take.
+        if (!playerWon_ && input.wasKeyPressed(SDL_SCANCODE_Q)) {
+            if (Session* session = findSession(world)) session->leaveAfterDefeat = true;
+            scenes.pop();
+        }
     }
 
     bool simulatesWorld() const override { return false; }
 
 private:
+    // DEFEAT, then what happened, what they sent, and why — on a panel of its
+    // own, because the HUD underneath shows through the backdrop and a line of
+    // advice laid over the upgrade buttons is a line nobody reads.
+    void buildDefeat(World& world) {
+        constexpr float kPanelWidth =
+            static_cast<float>(kWindowWidth) - 2.0f * kDefeatPanelX;
+        constexpr int kLine = 26;
+
+        const Entity panel = createRect(world, kDefeatPanelX, 64.0f, kPanelWidth, 0.0f,
+                                        14, 14, 26, kOverlayLayer);
+        Sprite* plate = world.getComponent<Sprite>(panel);
+        plate->a = 225;
+        plate->screenSpace = true;
+        owned_.push_back(panel);
+
+        int y = 84;
+        owned_.push_back(createCenteredText(world, "DEFEAT", y, 6, 240, 110, 110,
+                                            kOverlayTextLayer));
+        y += 60;
+
+        auto lines = [&](const std::string& text, unsigned char r, unsigned char g,
+                         unsigned char b) {
+            for (const std::string& line : wrapText(text, 2, kDefeatTextWidth)) {
+                owned_.push_back(createCenteredText(world, line, y, 2, r, g, b,
+                                                    kOverlayTextLayer));
+                y += kLine;
+            }
+        };
+
+        lines(report_.headline, 235, 205, 165);
+        if (!report_.enemyArmy.empty()) lines(report_.enemyArmy, 165, 165, 190);
+        y += 14;
+        for (const std::string& reason : report_.reasons) lines(reason, 240, 220, 140);
+
+        y += 22;
+        lines("R TO TRY AGAIN", 170, 170, 195);
+        lines("Q FOR THE STAGE LIST - CHANGE YOUR ARMY OR HERO", 170, 170, 195);
+        lines("ESC TO QUIT", 140, 140, 165);
+
+        plate->height = y - 64 + 10;
+    }
+
     bool playerWon_;
+    DefeatReport report_;
     std::vector<Entity> owned_;
 };
 
@@ -1621,6 +2014,7 @@ public:
 
         Session& fresh = *world.getComponent<Session>(sessionEntity_);
         applyStage(fresh, stage_);
+        beginRecord(fresh);
 
         // TREASURY is a head start rather than a rate, which is what makes it
         // worth buying early and worth less later.
@@ -1686,6 +2080,19 @@ public:
 
         buildMinimap(world);
 
+        // Under the minimap, which is where the eye already goes to ask how
+        // the battle is going. Filled in by refreshHud.
+        clockText_ = createText(world, "", 0,
+                                static_cast<int>(kMinimapY + kMinimapHeight) + 8, 2,
+                                140, 150, 170, kHudLayer);
+        hud_.push_back(clockText_);
+
+        // Empty until the swarm arrives. A HUD text rather than something with
+        // a Lifetime, because Lifetime only runs while a scene simulates the
+        // world — a banner that outlived its battle would sit on the stage list.
+        swarmBanner_ = createText(world, "", 0, 214, 4, 245, 110, 90, kHudLayer);
+        hud_.push_back(swarmBanner_);
+
         // Start looking at your own castle rather than at the origin, so the
         // first frame is not a lurch.
         snapCameraToTarget(world);
@@ -1707,12 +2114,14 @@ public:
 
         // A win ends this battle for good: the next stage is open, so the
         // player goes back to the list rather than replaying what they just
-        // beat. A loss restarts the same stage where they stand.
+        // beat. A loss restarts the same stage where they stand — unless the
+        // player asked to go back, which is how a loss the defeat screen
+        // blamed on the army gets a different army.
         //
         // The pop happens in update() rather than here, because onResume has
         // no SceneStack to ask — and popping the scene that is mid-resume
         // would be a poor idea even if it did.
-        if (session->playerWon) {
+        if (session->playerWon || session->leaveAfterDefeat) {
             returnToCampaign_ = true;
             return;
         }
@@ -1723,12 +2132,24 @@ public:
         // Re-applied after the reset, which wipes it. Forgetting this makes
         // every retry of stage eight secretly a retry of stage one.
         applyStage(*session, stage_);
+        beginRecord(*session);
 
         buildField(world);
         snapCameraToTarget(world);
         overlayShown_ = false;
         shownGold_ = -1;
         shownPopulation_ = -1;
+        shownClock_ = -1;
+    }
+
+    // What the player walked in with, written into the record before a blow
+    // is struck. The loadout and the path are both snapshots taken when the
+    // battle began, so this is what the battle was fought with.
+    void beginRecord(Session& session) const {
+        for (int slot = 0; slot < kLoadoutSlots; ++slot) {
+            session.record.carried[slot] = loadoutKind(slot);
+        }
+        session.record.heroReachesSky = heroHitsAir_;
     }
 
     void update(World& world, InputManager& input, float dt,
@@ -1743,7 +2164,9 @@ public:
 
         if (session->gameOver) {
             if (!overlayShown_) {
-                scenes.push(std::make_unique<GameOverScene>(session->playerWon));
+                scenes.push(std::make_unique<GameOverScene>(
+                    session->playerWon,
+                    session->playerWon ? DefeatReport{} : explainDefeat(*session)));
                 overlayShown_ = true;
             }
             return;
@@ -1753,6 +2176,11 @@ public:
             scenes.push(std::make_unique<PauseScene>());
             return;
         }
+
+        // The clock runs only here — past the pause and the end of the battle,
+        // both of which return above — so a paused battle loses no time.
+        session->elapsed += dt;
+        if (!session->swarming && session->elapsed >= kBattleSeconds) beginSwarm(world, *session);
 
         session->cannonCooldown = std::max(0.0f, session->cannonCooldown - dt);
 
@@ -1780,6 +2208,7 @@ public:
         earnGold(*session, dt);
         handleUpgrades(world, *session, input);
         handleSpawning(world, *session, input, dt);
+        updateSwarm(world, *session, dt);
         updateEnemyCannon(world, *session, dt);
         fight(world, *session, dt);
         removeTheDead(world, *session);
@@ -2295,6 +2724,11 @@ private:
 
         session.heroSummoned = true;
 
+        // Who was already out there to fight in front of it. Counted before it
+        // arrives, so the hero is not its own escort.
+        session.record.heroSummonedAt = session.elapsed;
+        session.record.heroEscort = countUnits(world, true);
+
         const Entity hero = spawnUnit(world, true, kind);
         world.addComponent(hero, Hero{});
 
@@ -2376,6 +2810,10 @@ private:
         // playing a different game, and a better one.
         tickCooldowns(session.enemySpawnCooldowns, dt);
 
+        // Past the clock their castle stops paying for an army: the swarm is
+        // the army. See beginSwarm for why it cannot be both.
+        if (session.swarming) return;
+
         if (session.enemyWaveRemaining <= 0) {
             if (session.enemyGold >= waveCost(session)) {
                 session.enemyWaveRemaining = session.enemyWaveSize;
@@ -2423,6 +2861,124 @@ private:
         return total;
     }
 
+    // --- The swarm ---------------------------------------------------------
+    //
+    // Ten minutes without a castle falling, and theirs stops paying for its
+    // army. See kBattleSeconds for why the swarm is theirs and not a tie-break.
+
+    // The moment the clock runs out. The record is copied first, so a defeat
+    // can be explained by the ten minutes that did not break through rather
+    // than by the swarm that followed.
+    //
+    // And their army JOINS the swarm: everything of theirs already on the
+    // field is marked, and grows with it, and from here the swarm is the only
+    // way they field anything (handleEnemySpawning stops). That was the third
+    // version's hole. A ten-minute stalemate is ten minutes of the opponent
+    // banking bounties into SUPPLY, three slots a level, and by the clock an
+    // ordinary army of twenty-odd could fill the field to the swarm's ceiling
+    // on its own — so the swarm could not get a unit out, the front of their
+    // line never grew, and one army held for five minutes more.
+    void beginSwarm(World& world, Session& session) {
+        session.swarming = true;
+        session.beforeSwarm = session.record;
+        session.swarmTimer = 0.0f;  // the first one comes out at once
+        for (auto& [entity, unit] : world.view<Unit>()) {
+            const Team* team = world.getComponent<Team>(entity);
+            if (team && !team->leftSide) unit.swarm = true;
+        }
+        if (audioDevice) audioDevice->play(Waveform::Square, 98.0f, 0.8f, 0.22f);
+    }
+
+    // One unit out of the gate whenever one is due, from the stage's own
+    // composition — so THE EYRIE's swarm flies and THE GATES' marches — free of
+    // gold, cooldowns and the population cap, and stronger the later it comes:
+    // more health AND harder blows, because only the front of a queue fights
+    // (see kSwarmStrengthenSeconds).
+    void updateSwarm(World& world, Session& session, float dt) {
+        if (!session.swarming) return;
+
+        const float into = session.elapsed - kBattleSeconds;
+        const float strength = swarmStrength(into);
+
+        // EVERY swarm unit on the field grows with the swarm — not only each
+        // one as it comes out of the gate, which was the second version and
+        // still let three stalemates stand for five minutes. Units queue, and
+        // with thirty in the column the one at the front, the only one
+        // fighting, left the gate thirty kills earlier: a generation behind the
+        // formula, falling further behind as each kill took longer. Growing
+        // them in place keeps the front of the queue as strong as the swarm.
+        // Health grows by the same factor as the blows, so a wounded one stays
+        // exactly as wounded.
+        for (auto& [entity, body] : world.view<Unit>()) {
+            if (!body.swarm || body.power >= strength) continue;
+            const float grow = strength / body.power;
+            body.health *= grow;
+            body.maxHealth *= grow;
+            body.power = strength;
+        }
+
+        session.swarmTimer -= dt;
+        if (session.swarmTimer > 0.0f) return;
+
+        // Room on the field or nothing. The timer stays due, so the next unit
+        // comes out the moment one of theirs falls.
+        if (countUnits(world, false) >= kSwarmCeiling) return;
+
+        // And room at the gate: one at a time, through a gate the last one has
+        // walked clear of. Dropped on top of a unit already standing there, two
+        // bodies share one spot and walk as one, which reads as a single unit
+        // however many there are — the swarm should LOOK like a crowd coming.
+        const int length = std::max(1, session.compositionLength);
+        const int kind = session.composition[session.swarmIndex % length];
+        if (!gateClear(world, kind)) return;
+
+        // Added to what is left over rather than assigned, like a unit's
+        // attack timer, so the rate means units per SECOND at any frame rate;
+        // and floored at zero so a frame never owes more than one — a long
+        // wait at the ceiling must not come out of the gate all at once.
+        session.swarmTimer += swarmGap(into);
+        if (session.swarmTimer < 0.0f) session.swarmTimer = 0.0f;
+        session.swarmIndex = (session.swarmIndex + 1) % length;
+
+        const Entity unit = spawnUnit(world, false, kind);
+        if (Unit* body = world.getComponent<Unit>(unit)) {
+            body->swarm = true;
+            body->health *= strength;
+            body->maxHealth *= strength;
+            body->power = strength;
+        }
+
+        // spawnUnit counted it as their ARMY. It is the swarm.
+        if (kind >= 0 && kind < kMaxUnitKinds) --session.record.enemySent[kind];
+        ++session.record.swarmSent;
+    }
+
+    // Whether a unit of `kind` coming out of their gate would stand clear of
+    // everything of theirs already in its lane — a rank's width apart, the
+    // same room a queue leaves.
+    static bool gateClear(World& world, int kind) {
+        const UnitKind& stats = kindOf(kind);
+        const float spawnCentre = kRightSpawnX + stats.width / 2.0f;
+        for (auto& [entity, unit] : world.view<Unit>()) {
+            const Team* team = world.getComponent<Team>(entity);
+            const Transform* at = world.getComponent<Transform>(entity);
+            if (!team || team->leftSide || !at) continue;
+            const UnitKind& other = kindOf(unit.kind);
+            if (other.flying != stats.flying) continue;  // the sky is its own lane
+            const float apart = std::fabs(at->x + other.width / 2.0f - spawnCentre);
+            if (apart < (stats.width + other.width) / 2.0f + kRankGap) return false;
+        }
+        return true;
+    }
+
+    // Damage done to you, credited to the kind that did it — which is how the
+    // defeat screen can say what beat you rather than only that something did.
+    static void recordHarm(Session& session, int kind, float damage) {
+        if (kind >= 0 && kind < kMaxUnitKinds) {
+            session.record.damageTakenFrom[kind] += damage;
+        }
+    }
+
     // Each unit either walks or fights, never both.
     void fight(World& world, Session& session, float dt) {
         // Gathered first, because attacking creates shards and killing blows
@@ -2468,8 +3024,17 @@ private:
                 // Nothing in reach. March, unless one of our own is in the
                 // way — in which case wait our turn rather than standing
                 // inside them.
-                const bool queued = blockedByFriendly(world, attacker,
-                                                      team->leftSide, at->x, stats);
+                //
+                // The swarm does not wait its turn. It is a mob, not a line:
+                // everything in it presses forward until something is in
+                // reach, so it arrives at your front all at once instead of
+                // one queue-length at a time. Measured, not only named: in a
+                // queue only the front unit ever fights, however many pour
+                // out of the gate, and a swarm that queued took minutes to do
+                // what a mob does in seconds.
+                const bool queued = !unit->swarm &&
+                                    blockedByFriendly(world, attacker, team->leftSide,
+                                                      at->x, stats);
                 velocity->dx = queued ? 0.0f : stats.speed * facing(team->leftSide);
                 continue;
             }
@@ -2513,7 +3078,7 @@ private:
             //
             // CHAMPION stacks on top for the hero alone, which is what makes
             // it worth buying separately from WEAPONS.
-            float damage = stats.damage;
+            float damage = stats.damage * unit->power;
             if (team->leftSide) {
                 damage *= damageScale_;
                 // And whatever this KIND has been trained to, which is why a
@@ -2529,9 +3094,15 @@ private:
 
             if (Unit* victim = world.getComponent<Unit>(target)) {
                 victim->health -= damage;
+                if (!team->leftSide) recordHarm(session, unit->kind, damage);
                 playHit();
             } else if (Castle* castle = world.getComponent<Castle>(target)) {
                 castle->health -= damage;
+                if (team->leftSide) {
+                    session.record.castleDamageDealt += damage;
+                } else {
+                    recordHarm(session, unit->kind, damage);
+                }
                 playCastleHit();
                 // Whether that ENDED the battle is not decided here. See
                 // settleBattle, called once after the loop.
@@ -2605,6 +3176,11 @@ private:
     // in the same instant. You have to be standing at the end. The alternative
     // rewards ignoring defence entirely, and this game already pays well for
     // attacking.
+    //
+    // Only a castle ends a battle — the clock included. When time runs out it
+    // sends the swarm (see updateSwarm) rather than a verdict, so a stalemate
+    // is ended by the swarm breaking a castle, and this function never has to
+    // know the clock exists.
     void settleBattle(World& world, Session& session) {
         if (session.gameOver) return;
 
@@ -2673,6 +3249,9 @@ private:
                 } else {
                     session.gold += bounty;
                 }
+                if (unit->kind >= 0 && unit->kind < kMaxUnitKinds) {
+                    ++(team->leftSide ? session.record.lost : session.record.killed)[unit->kind];
+                }
             }
 
             // A unit with artwork leaves its death row playing where it fell;
@@ -2694,7 +3273,10 @@ private:
             // The hero falling is remembered, because it is the whole rule:
             // no respawn, no second summon, not until the stage is finished
             // or started again.
-            if (world.hasComponent<Hero>(entity)) session.heroFallen = true;
+            if (world.hasComponent<Hero>(entity)) {
+                session.heroFallen = true;
+                session.record.heroFellAt = session.elapsed;
+            }
 
             playDeath();
             world.destroyLater(entity);
@@ -2881,6 +3463,7 @@ private:
         const bool firedByLeft = payload->leftSide;
         const float blastX = at->x;
         const float blastY = at->y;
+        Session* session = findSession(world);
 
         for (auto& [entity, unit] : world.view<Unit>()) {
             Team* team = world.getComponent<Team>(entity);
@@ -2895,6 +3478,7 @@ private:
                 continue;
             }
             unit.health -= kCannonDamage;
+            if (session && !firedByLeft) session->record.cannonDamageTaken += kCannonDamage;
         }
 
         spawnShards(world, blastX, blastY, 250, 210, 140);
@@ -3123,8 +3707,13 @@ private:
                                kButtonWidth, 4.0f, stats.leftR, stats.leftG,
                                stats.leftB, kHudLayer);
 
+            // The number is the KEY, which is the slot. It was the roster row,
+            // `kind + 1`, left over from before the loadout: identical for the
+            // default loadout, which carries the first four rows in order, and
+            // wrong for every other — an OGRE carried first read "6 OGRE" while
+            // 1 sent it and 6 did nothing.
             const std::string label =
-                std::to_string(kind + 1) + " " + stats.name;
+                std::to_string(slot + 1) + " " + stats.name;
             buttonName_[slot] = createText(
                 world, label, static_cast<int>(left) + 8,
                 static_cast<int>(kButtonY) + 8, 2, stats.leftR, stats.leftG,
@@ -3458,6 +4047,56 @@ private:
 
         updateHealthText(world, leftHealthText_, "YOU  ", true);
         updateHealthText(world, rightHealthText_, "ENEMY ", false);
+        refreshClock(world, session);
+    }
+
+    // Rewritten only when the second it shows changes, like the gold.
+    //
+    // Three states, and the words change with them so the rule is on the
+    // screen rather than in a manual: TIME 9:59 while there is time, SWARM IN
+    // 0:59 in red for the last minute, then SWARM +0:12 counting the swarm up.
+    void refreshClock(World& world, const Session& session) {
+        const bool swarming = session.swarming;
+        const float left = std::max(0.0f, kBattleSeconds - session.elapsed);
+        const float into = std::max(0.0f, session.elapsed - kBattleSeconds);
+
+        // The banner, for the first few seconds of it.
+        if (Text* banner = world.getComponent<Text>(swarmBanner_)) {
+            const std::string wanted =
+                swarming && into < kSwarmBannerSeconds ? "THE SWARM IS HERE" : "";
+            if (banner->value != wanted) {
+                banner->value = wanted;
+                if (Transform* at = world.getComponent<Transform>(swarmBanner_)) {
+                    at->x = (static_cast<float>(kWindowWidth) -
+                             static_cast<float>(textWidth(wanted, banner->scale))) / 2.0f;
+                }
+            }
+        }
+
+        // Negative while counting the swarm UP, so the two runs of seconds can
+        // never be mistaken for each other.
+        const int second = swarming ? -1 - static_cast<int>(std::floor(into))
+                                    : static_cast<int>(std::ceil(left));
+        if (second == shownClock_) return;
+        shownClock_ = second;
+
+        Text* text = world.getComponent<Text>(clockText_);
+        Transform* at = world.getComponent<Transform>(clockText_);
+        if (!text || !at) return;
+
+        const bool warning = swarming || left <= kClockWarningSeconds;
+        if (swarming) {
+            text->value = "SWARM +" + clockText(std::floor(into));
+        } else if (warning) {
+            text->value = "SWARM IN " + clockText(left);
+        } else {
+            text->value = "TIME " + clockText(left);
+        }
+        text->r = warning ? 240 : 140;
+        text->g = warning ? 120 : 150;
+        text->b = warning ? 100 : 170;
+        at->x = kMinimapX + kMinimapWidth / 2.0f -
+                static_cast<float>(textWidth(text->value, text->scale)) / 2.0f;
     }
 
     void updateHealthText(World& world, Entity textEntity,
@@ -3513,10 +4152,13 @@ private:
     Entity minimapRightCastle_ = kInvalidEntity;
     Entity minimapLeftFront_ = kInvalidEntity;
     Entity minimapRightFront_ = kInvalidEntity;
+    Entity clockText_ = kInvalidEntity;
+    Entity swarmBanner_ = kInvalidEntity;
     std::vector<Entity> field_;
     std::vector<Entity> hud_;
     int shownGold_ = -1;
     int shownPopulation_ = -1;
+    int shownClock_ = -1;
     bool overlayShown_ = false;
 };
 

@@ -38,6 +38,7 @@
 // ---------------------------------------------------------------------------
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -60,9 +61,14 @@ constexpr int kPikeman = 4;
 constexpr int kOgre = 5;
 constexpr int kBallista = 6;
 
-// How long a battle is given before it is called a draw. Long enough that a
-// draw means "neither side can finish this", not "the clock ran out".
-constexpr int kMaxSeconds = 400;
+// How long a battle is given before the probe gives up on it.
+//
+// This used to be the probe's own rule — 400 seconds and it was a draw — while
+// the game had no rule at all. The game has one now: at kBattleSeconds the
+// swarm comes, and it quickens and toughens until a castle falls. So the probe
+// plays well past the clock and lets the GAME decide, and a draw in this table
+// means the swarm failed to end a battle — a bug to go and find, not a result.
+constexpr int kMaxSeconds = static_cast<int>(lanebattle::kBattleSeconds) + 300;
 
 // What one run of a stage is allowed to use.
 struct Strategy {
@@ -89,6 +95,7 @@ struct Strategy {
 
 struct Outcome {
     int result = 0;      // +1 won, -1 lost, 0 neither
+    bool swarm = false;  // the clock ran out and the swarm came
     float seconds = 0.0f;
     float ownCastle = 0.0f;
     float enemyCastle = 0.0f;
@@ -352,6 +359,7 @@ Outcome play(int stage, const Strategy& strategy) {
     outcome.upgrades = session->upgrades[static_cast<int>(lanebattle::Upgrade::Income)];
     outcome.seconds = static_cast<float>(frame) / 60.0f;
     outcome.result = session->gameOver ? (session->playerWon ? 1 : -1) : 0;
+    outcome.swarm = session->swarming;
 
     for (int side = 0; side < 2; ++side) {
         const Entity castle = lanebattle::findCastle(world, side == 0);
@@ -364,9 +372,14 @@ Outcome play(int stage, const Strategy& strategy) {
     return outcome;
 }
 
+// `swarm` is a loss, and is printed apart from one because it is a different
+// failure: `loss` is a line that broke, `swarm` is a line that held for ten
+// minutes and never broke THEIRS — what this table used to call a draw — and
+// then met the swarm. A win during the swarm is still `WIN`; its seconds, past
+// the clock, say when.
 const char* verdict(const Outcome& outcome) {
     if (outcome.result == 1) return "WIN ";
-    if (outcome.result == -1) return "loss";
+    if (outcome.result == -1) return outcome.swarm ? "swarm" : "loss";
     return "draw";
 }
 
@@ -454,7 +467,8 @@ void sweep(const std::vector<Strategy>& strategies, const char* composition,
                 if (firstFailure <= 0.0f) firstFailure = income;
                 // Five in a row — half a point of income — and this strategy is
                 // taken to be finished. A bound is needed because the range
-                // runs to 4.00 and a draw costs a full 400 simulated seconds:
+                // runs to 4.00 and a stalemate costs the whole ten-minute
+                // clock and then the swarm before the game calls it:
                 // scanning every point for every strategy against every
                 // composition turned a one-minute tool into a ten-minute one,
                 // which is a tool that stops being run.
@@ -556,6 +570,13 @@ int main(int argc, char** argv) {
         // understands. A sweep is expensive — every strategy against every
         // income until it loses — so it is worth pointing at the open question
         // rather than re-confirming settled ones.
+        // Or one composition of your own: --sweep 1,3,3,1 4. For the question
+        // in front of you rather than the three below, which cost minutes each.
+        if (argc > 2) {
+            sweep(withSolo, argv[2], argc > 3 ? std::atoi(argv[3]) : 3);
+            return 0;
+        }
+
         sweep(withSolo, "1,1,0", 3);      // the ground baseline, for reference
         sweep(withSolo, "1,1,2", 3);      // an enemy that shoots back
         sweep(withSolo, "1,2,2,1", 4);    // archer-heavy: the BALLISTA's niche
@@ -622,6 +643,13 @@ int main(int argc, char** argv) {
             for (const Outcome& outcome : outcomes) {
                 std::printf(" %-6.0f", outcome.ownCastle);
             }
+            // Theirs too. A draw with their castle untouched and a draw with it
+            // on its last hundred points are different stalemates, and only
+            // one of them is a strategy that nearly works.
+            std::printf("\n         %-16s", "  their castle");
+            for (const Outcome& outcome : outcomes) {
+                std::printf(" %-6.0f", outcome.enemyCastle);
+            }
             // Shots and upgrades are printed because two columns of this table
             // were once identical to MIXED for the same reason: the strategy
             // never actually did the thing it was named after. A count of what
@@ -650,7 +678,10 @@ int main(int argc, char** argv) {
         "  and the turn should come LATER for the columns further right. A row\n"
         "  that is all wins asks the player nothing. A row that is all losses\n"
         "  cannot be beaten. A column that never loses means the part of the\n"
-        "  game it represents is never needed.\n\n");
+        "  game it represents is never needed.\n\n"
+        "  'swarm' is a loss after the clock: the line held for ten minutes,\n"
+        "  never broke theirs, and the swarm broke it. 'draw' should not\n"
+        "  appear at all - it means the swarm failed to end a battle.\n\n");
 
     return 0;
 }

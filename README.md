@@ -32,7 +32,7 @@ spawn bar wanted a mouse; scenery at a distance wanted a parallax factor,
 because `screenSpace` was a boolean with nothing between the world and the
 screen; and a roster worth rebalancing wanted a way to read a text file, which
 the engine had never had. Half its slices have needed nothing at all, and it is
-now the largest thing here by a distance — about 7,800 lines against the
+now the largest thing here by a distance — about 8,400 lines against the
 engine's 2,800.
 
 It is **not** trying to be fast, complete, or production-ready. Storage uses
@@ -71,7 +71,7 @@ measuring whole battles rather than individual rules found the game unwinnable
 twice before it was playable — and `docs/roadmap-cartoonwars.md` has what is
 left of the original plan.
 
-**1,453 assertions** across five test binaries, a sixth test that renders every
+**1,610 assertions** across five test binaries, a sixth test that renders every
 environment and weather combination (72 of them) and holds the effect limits to
 account, plus four measuring tools that pass and fail nothing: a benchmark, a
 campaign simulator, a screenshotter and an art probe.
@@ -119,7 +119,7 @@ engine_project/
 │   ├── weather_preview.cpp   A live preview of scenes and weather, and --verify
 │   ├── engine_bench.cpp      Measures the naive parts; not a pass/fail test
 │   ├── campaign_probe.cpp    Plays the whole campaign 14 ways; prints a table
-│   ├── ui_shots.cpp          Writes a PNG of all 16 screens; cannot fail
+│   ├── ui_shots.cpp          Writes a PNG of all 19 screens; cannot fail
 │   └── art_probe.cpp         Measures sprite sheets: alpha, grid, feet; cannot fail
 ├── .github/workflows/
 │   └── ci.yml          Builds and tests on Linux and macOS
@@ -260,7 +260,8 @@ prints the table it actually loaded, in its header, for exactly this reason.
 The same tables as C++ literals: `kDefaultUnitKinds`, `kDefaultUpgrades`,
 `kDefaultStages`, plus things a file *cannot* reach because they are structural
 rather than tuning — `kDefaultPerks`, `kDefaultSpells`, `kDefaultHeroPaths`,
-the population cap, kill-reward fraction, cannon numbers and layout constants.
+the population cap, kill-reward fraction, cannon numbers, the battle clock and
+the swarm that follows it (`kBattleSeconds`, `kSwarm...`) and layout constants.
 
 The file and the header hold two copies of the shipped balance and they have to
 agree, so there is a test that says so
@@ -852,7 +853,12 @@ ordering of scene-stack transitions, and every glyph in the font table.
 ships: that `units.txt`, `art.txt` and `effects.txt` agree with each other — every
 sheet a unit names is measured and exists, every blow names an effect. A name out
 of step fails silently in the game (the unit just keeps its block), so this is
-the only place it can fail loudly. **`render_tests`** checks real pixels, and
+the only place it can fail loudly. It also holds the clock and the swarm to
+their promises — the swarm ends a stalemate, grows where it stands, never
+passes its ceiling, and still lets you win if you break their castle during
+it — and checks
+every rule of the defeat screen against a record filled in by hand, plus one
+real defeat played to the end. **`render_tests`** checks real pixels, and
 **`weather_render_tests`** renders every scene and weather and checks the art in
 a real battle.
 
@@ -930,11 +936,12 @@ back, and `ui_shots` writes a PNG of every screen for a person to look at.
 ### The other three instruments
 
 ```bash
-./build/Release/campaign_probe            # every stage, 14 ways, win/loss table
-./build/Release/campaign_probe --detail   # plus seconds, castle left, shots, upgrades
+./build/Release/campaign_probe            # every stage, 14 ways: WIN, loss, or swarm
+./build/Release/campaign_probe --detail   # plus seconds, both castles, shots, upgrades
 ./build/Release/campaign_probe --sweep    # highest enemy income each player still beats
-./build/Release/ui_shots                  # 16 PNGs into ui_shots/ beside the binary
+./build/Release/ui_shots                  # 19 PNGs into ui_shots/ beside the binary
 ./build/Release/ui_shots --sheet <path> 209 209 6 2   # one row of a sheet, mirrored
+./build/Release/ui_shots --motion         # every unit walking, standing, swinging, over time
 ./build/Release/art_probe                 # every sheet: alpha, grid, feet, bleeding
 ./build/Release/art_probe --art           # the same, written as art.txt
 ./build/Release/art_probe --show <path> 6 6   # haze in magenta, the grid in green
@@ -963,6 +970,15 @@ it was named for, one whose every-frame click never released so the cannon
 never fired, and a sweep whose scratch stage was overwritten before it ran. The
 probe counts shots fired and upgrades bought now. **A column that exactly
 matches its neighbour is the tell.**
+
+`swarm` in that table is a loss after the clock — a line that held for ten
+minutes, never broke theirs, and was then broken by the swarm — and is printed
+apart from `loss`, a line that broke on its own, because they are different
+lessons. The probe used to impose its own 400-second cutoff and call the result
+a draw; it now plays five minutes past the game's clock and lets the game
+decide, so `draw` means the swarm failed to end a battle and should never
+appear. `--detail` prints their castle as well as yours, which is how the
+stalemates were found to be one-sided before the rule was chosen.
 
 ### Controls
 
@@ -1017,9 +1033,11 @@ by nothing the simulator plays except a hero.
 | `Z` / `X` / `C` | METEOR / HEAL / RAGE, cast from mana, which refills on its own |
 | Click the field | Fire the castle cannon, 12 gold a shot |
 | Drag, or Left / Right | Look around a field two and a half screens wide |
-| `P` | Pause — the weather and ambience freeze with the fight |
+| `P` | Pause — the weather, the ambience and the clock freeze with the fight |
 
-From the **stage list**, `A` opens your army and `H` opens your hero.
+From the **stage list**, `A` opens your army and `H` opens your hero. After a
+defeat, `R` fights the same battle again and `Q` goes back to the stage list,
+which is where the army and the hero are changed.
 
 The battlefield's look has its own keys. None of them touches the fight or your
 save; they reset each battle.
@@ -1100,6 +1118,26 @@ if yours falls first. The opponent plays by the same rules — same purse, same
 costs, same per-unit cooldowns — and a stage moves three dials on it: how fast
 it earns, how much castle it has, and **what it sends**.
 
+You have **ten minutes** to break their castle. The clock under the minimap
+counts down, dim at first; for the last minute it turns red and says
+`SWARM IN 0:59`. When it runs out the battle does not end — **the swarm comes**:
+their castle stops paying for its army and pours out the stage's own units, free
+of gold, cooldowns and the population cap, faster and stronger every
+half-minute, and the clock counts it up (`SWARM +0:42`). It will break a line
+that held for ten minutes. You can still win during it — break their castle
+while it is coming and the battle is yours — but the swarm does not stop until
+one castle falls. Why it leans against you rather than settling the battle on
+"whoever has more castle left" is measured, not argued: see *Balance gaps*.
+
+Losing says why. The defeat screen gives what happened (your castle fell at
+1:36, or the swarm of 64 broke it at 11:23), what they sent, and up to three
+reasons, each a fact from the battle followed by what to do about it — nothing
+you carried could reach their griffins, you sent only soldiers, your hero went
+out alone and fell in nine seconds, you ended with 979 gold unspent, their
+archers did 75% of the damage. A loss to the swarm is explained by the ten
+minutes before it, not by the swarm, which always hurts most and so teaches
+nothing. `Q` from there goes back to the stage list, where the army is changed.
+
 That third dial matters — and it was once measured as mattering far more than
 it does. Giving the enemy archers drops what a plain mixed army can beat from
 about 1.4 income to about 1.2, and opens a band around 0.7 where it loses
@@ -1124,8 +1162,13 @@ Every unit wears generated pixel art: both teams in their own colours, drawn
 facing right and mirrored for the side walking left, and the hero in the armour
 of the path its owner chose. The art is a separate animated figure that follows
 the unit and picks a row of its sheet by what the unit is doing — **walking**
-(at a pace set by how fast it really moves, so feet do not slide), **attacking**
-(timed to each blow), **flinching** when hit, **idle** while it waits its turn.
+(at a pace set by how fast it really moves, held between six and fourteen
+frames a second), **attacking** (timed to each blow), **flinching** when hit,
+**idle** while it waits its turn. The generated sheets keep the body at one
+height in every frame, so the body **bobs** a pixel or two with each step, and a
+flyer rises and sinks once per wingbeat — without that, walkers slid along the
+ground and griffins looked pulled on a wire. A unit that stops for a moment in
+a queue picks its stride up where it left it instead of starting again.
 When a unit dies the fight is over with it that same frame, exactly as before;
 what stays is its **death** row playing where it fell, a falling griffin
 dropping to the ground first, then a fade.
@@ -1187,10 +1230,19 @@ just the mix.
 
 There is a second lane in the air. A griffin cannot be touched from the ground
 except by an **archer** or a **pikeman**, or by a hero who took the FALCONER
-path — and against an enemy that is mostly airborne, soldiers are worse than
-useless, because each one is gold and a population slot spent on something that
-can reach nothing. The counter to an air wing is to stop building the units
-that normally carry you.
+path. What a griffin cannot do is hold ground: a soldier walks straight
+underneath it. So an air wing on its own takes nothing — soldiers walk under an
+army of nothing but griffins and break its castle in under a minute — and the
+real question is an air wing with soldiers in front of it, which is what every
+stage that flies gives you. Against that, soldiers alone lose (nothing they
+carry reaches the sky) and archers alone lose too (nobody holds the escort off
+them). The answer is a line *and* something that reaches the sky.
+
+This paragraph used to say that against a mostly airborne enemy soldiers are
+worse than useless. That was measured with a bug in place — a queue freeze had
+been giving air armies a frozen turret at their own gate (*The freeze, fixed,
+and the sky re-measured* in `docs/v3-plan.md`). Fixed, no result in the
+campaign changed; only that claim did.
 
 That is a whole stage now. THE EYRIE fields two griffins in four, and it was
 placed there by measurement: against one griffin in three, every strategy
@@ -1267,6 +1319,8 @@ What the art still needs, found by measuring it:
 | --- | --- | --- |
 | **Frames run into their neighbours** | rows 2–5 (attack, hurt, stunned, death) of most unit sheets: a sword tip crosses into the next cell by 100–200 border pixels | a 1–2 pixel sliver of the next pose can flicker at a frame's edge. Idle and walk rows are clean. Fix: regenerate with more padding, or re-cut the frames |
 | **Soft haze** | 9–22% of each unit sheet's pixels are faintly visible (alpha 1–39): a glow hugging each figure, plus speckle | invisible at game scale on these backgrounds; would show as a smudge on a very bright one. `art_probe --show` paints it magenta |
+| **The griffin barely flaps** | the griffin's walk (flight) row, both teams | its wings hold nearly the same raised position in all six frames — a glide, not a wingbeat. The code adds a rise and fall per beat, which helps; a regenerated row with a real downstroke would fix it |
+| **Walk cycles are subtle** | the runner especially | six frames with small leg changes; at game size the bob carries most of the sense of stepping. A stronger stride in the art would read better |
 | **The stunned row is unused** | every unit sheet | nothing in the game stuns yet |
 | **Known sheet faults** | listed in `lane-battle-gba-art/README.md`: a missing ballista attack frame, an extra bird on the Falconer, combined scenery layers | the scenery layers are not used; the rest is minor |
 | **Not hand-cleaned** | everywhere | generated pixel clusters are not on one common grid; a cleanup pass would sharpen them |
@@ -1298,11 +1352,37 @@ Run `campaign_probe` for the current numbers. As of the last retune:
 - **Stage 8 is a one-column wall.** Only the player using everything at once
   wins it; the other 13 columns lose. A capstone should be hard, but a single
   viable answer is fragile and gives the player no diagnostic.
-- **About 12% of outcomes are draws** — 400-second stalemates where neither
-  castle falls. That is the worst result for a player: not a loss you learn
-  from, just nothing happening. The probe imposes that cutoff; **the live game
-  has no stalemate rule at all**, so what the probe scores as a draw is, on a
-  real machine, two lines standing still until somebody closes the window.
+- **About 10% of outcomes are stalemates** — 11 of 112, printed as `swarm`:
+  battles where neither castle falls in ten minutes, which the swarm then
+  breaks, every one of them inside forty seconds. They used to be draws — 13 of
+  them — and the live game had no rule for them at all: on a real machine a
+  draw was two lines standing still until somebody closed the window. Two of
+  the thirteen now finish inside the ten minutes (PIKE takes THE FOOTHILLS at
+  7:14, GUNS takes THE GATES at 8:31); every other WIN in the table is the same
+  WIN at the same second.
+
+  Why the swarm leans against you rather than settling it on points: in all
+  thirteen, YOUR castle was untouched and THEIRS had taken a scratch or two —
+  while buying WALLS over and over with the surplus (THE GATES grew from 1,100
+  to 2,660). "Whoever has more castle left", counted as a share of each
+  castle's walls, would have handed the player nearly every one, and a
+  soldiers-only army would have won four stages the campaign exists to stop it
+  winning; counted in raw points, it would have handed every one to the enemy
+  for having bought walls. Neither says who was winning the fight. What is
+  still open is the stalemate itself: ten minutes of a held line is a long way
+  to learn that the line needed breaking, and once the swarm comes it decides
+  the battle quickly — in practice, past ten minutes is a loss with a spectacle.
+- **The sky was re-measured after a bug was found under it, and held.** Two
+  units on exactly the same pixel used to wait for each other forever — the
+  swarm found thirty frozen at their own gate — and the freeze had been giving
+  air armies a turret there. Fixed, all 112 of the probe's verdicts are
+  unchanged; THE EYRIE's row is the same from 0.55 income to 0.65 and moves only
+  at 0.75; and the one claim that fell was about an army of *nothing but*
+  griffins, which no stage fields. What remains open is design rather than
+  bug: a griffin cannot stop anything walking underneath it, so a pure air army
+  cannot defend its own castle. Nothing in the campaign needs one to — but if
+  flyers should ever be able to hold ground, that is a new mechanic, not a
+  number.
 - **Difficulty is not monotonic in enemy income.** Almost every strategy has a
   band of enemy incomes it loses and a *higher* band it wins — `--sweep` prints
   them as `1.20  (but loses 0.70)`. A richer opponent sends more units, more
@@ -1321,17 +1401,24 @@ Run `campaign_probe` for the current numbers. As of the last retune:
   fails the probe's own fairness rule — that every path should win a stage the
   other two lose.
 
-### No feedback when you lose
+### Feedback comes after a loss, not before a battle
 
-A player who brings the wrong loadout to THE EYRIE — an air-heavy stage that
-wants the anti-air unit — loses without being told why. Same for committing the
-wrong hero path. Every stage now asks a specific question, and the game never
-states the question, shows what the enemy fields, or explains a defeat. This is
-cheap to add and it is what turns a difficulty spike into a lesson.
+A defeat now explains itself: what they sent, what hurt you most, and whether
+the army you carried could reach what they flew, built from a record the battle
+keeps as it goes (`BattleRecord`) and judged by `explainDefeat`, a pure function
+with a test per rule. Bring soldiers alone to THE EYRIE and the screen says
+nothing you carried hits their griffins, and to try pikemen or archers.
+
+What is still missing is the same information *before* the fight. The stage
+list shows names, not what the enemy fields, so the first attempt at every
+stage is still blind — the lesson arrives one defeat late. And the reasons are
+thresholds chosen against the simulator's battles (two flyers make an air wing,
+a hero that falls within twenty seconds with fewer than two in front of it went
+out alone), which nobody has yet checked against a person losing.
 
 ### Structural, and overdue
 
-`LaneBattle.cpp` is 4,300 lines with the rules, the scenes and the UI
+`LaneBattle.cpp` is 4,800 lines with the rules, the scenes and the UI
 interleaved. The art went into its own files (`Art`, `Weather`, `Environment`)
 rather than making that worse, which is the pattern the rest wants. That is survivable now and it is exactly what would make any port
 painful. The roadmap flagged a decision about the repository's shape as due

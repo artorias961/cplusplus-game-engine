@@ -266,6 +266,28 @@ int main(int argc, char** argv) {
             }
             check(battle.getComponent<Sprite>(battle.getComponent<Unit>(theirs)->figure)->flipX,
                   "The enemy's art does not face left");
+            // They MOVE like it, too. The sheets keep the body level in every
+            // frame, so a unit whose art is only flipped through frames glides;
+            // the figure has to rise and fall with its stride, and a griffin
+            // with its wingbeat. Watched for a second of real battle time: the
+            // figure's height above its feet must take more than one value.
+            {
+                const Entity walker=spawnUnit(battle,true,1),flyer=spawnUnit(battle,true,3);
+                std::set<int> walkerHeights,flyerHeights;
+                for(int tick=0;tick<60;++tick) {
+                    driver.step();
+                    for(auto [unitEntity,seen]:{std::make_pair(walker,&walkerHeights),std::make_pair(flyer,&flyerHeights)}) {
+                        const Unit* unit=battle.getComponent<Unit>(unitEntity);
+                        if(!unit) continue;
+                        const auto* figure=battle.getComponent<Transform>(unit->figure);
+                        const auto* body=battle.getComponent<Transform>(unitEntity);
+                        if(figure&&body) seen->insert(int(body->y-figure->y));
+                    }
+                }
+                check(walkerHeights.size()>=2,"A walking unit's art does not bob: it glides");
+                check(flyerHeights.size()>=3,"A flyer's art does not rise and fall with its wings");
+            }
+
             // Asking for far more effects than the limits allow gets the limits.
             for(int i=0;i<200;++i) spawnEffect(battle,i%2?"SWORD":"CANNON",float(300+i%40),380,false);
             check(countEffects(battle)<=effectLimit(),"Combat effects exceed the overall limit");

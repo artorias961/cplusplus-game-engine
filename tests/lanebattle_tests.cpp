@@ -20,6 +20,7 @@
 #include "Harness.h"
 #include "LaneBattle.h"
 #include "Art.h"
+#include "engine/Font.h"
 #include "engine/View.h"
 
 using namespace engine;
@@ -75,6 +76,23 @@ std::string writeRoster(const char* name, const char* contents) {
     out << contents;
     out.close();
     return path;
+}
+
+// How long a played battle is given: the game's clock and then five minutes of
+// the swarm, which the game promises will end anything. This was a private
+// 400-second limit, exactly like the probe's, and like the probe's it now
+// defers to the game — a 0 from playBattle or playWithHero means the swarm
+// failed to end a battle.
+constexpr int kPlayFrames = 60 * (static_cast<int>(lanebattle::kBattleSeconds) + 300);
+
+// Everything the player can read, one Text per line.
+std::string screenText(World& world) {
+    std::string screen;
+    for (auto& entry : world.view<Text>()) {
+        screen += entry.second.value;
+        screen += "\n";
+    }
+    return screen;
 }
 
 struct Game {
@@ -971,6 +989,33 @@ void testUnitsHoldRank() {
 // The one comparison that makes ranged units support rather than a trap: a
 // friendly only blocks you if its reach is no longer than yours. Without it,
 // the first archer sent walls in every melee unit behind it.
+// Finding: two units on exactly the same spot each waited for the other,
+// forever.
+//
+// The queue rule is "wait if a stopped friend is ahead of me", and a friend on
+// your own pixel counted as ahead — for both of you. Units come out of a gate
+// at one fixed x, so all it took was a queue backed up to the gate; the swarm
+// found thirty frozen at x = 2272.00. Nothing had noticed before, because
+// nothing ever put two units on one pixel on purpose, and the frozen pile had
+// been quietly building a turret of griffins at the enemy's castle.
+void testTwoUnitsOnOneSpotDoNotWaitForEachOther() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    const Entity first = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const Entity second = lanebattle::spawnUnit(game.world, true, kSoldier);
+    for (Entity unit : {first, second}) {
+        game.world.getComponent<Transform>(unit)->x = 600.0f;
+        game.world.getComponent<Velocity>(unit)->dx = 0.0f;  // both waiting
+    }
+    game.driver.step(30);
+
+    check(game.world.getComponent<Transform>(first)->x > 600.0f &&
+              game.world.getComponent<Transform>(second)->x > 600.0f,
+          "a pile of two on one spot gets moving again, both of them");
+}
+
 void testMeleeWalksPastItsOwnArchers() {
     Game game;
     game.startPlaying();
@@ -3265,7 +3310,7 @@ int playWithHero(Game& game, int summonAtSecond) {
     int index = 0;
     SDL_Scancode holding = SDL_SCANCODE_UNKNOWN;
 
-    for (int frame = 0; frame < 60 * 400; ++frame) {
+    for (int frame = 0; frame < kPlayFrames; ++frame) {
         if (holding != SDL_SCANCODE_UNKNOWN) {
             game.driver.release(holding);
             holding = SDL_SCANCODE_UNKNOWN;
@@ -3795,6 +3840,63 @@ void testTheBarSellsWhatYouCarry() {
     lanebattle::resetLoadout();
 }
 
+// Finding: a hole in the loadout hid everything after it.
+//
+// The bar's length was the NUMBER of units carried, used as a bound on the
+// slots — so dropping the runner from the front of the default loadout left
+// the griffin in slot four with no button and no key. The trailing-hole case
+// above could never show it: when the hole is last, the count and the span
+// are the same number.
+void testAHoleInTheLoadoutHidesNothingAfterIt() {
+    lanebattle::resetBalance();
+    // An OGRE rather than a griffin in slot four, because the griffin's roster
+    // row is ALSO four — and a label printing the row instead of the key would
+    // read correctly for it by coincidence.
+    const int ogre = kindNamed("OGRE");
+    int holed[lanebattle::kLoadoutSlots] = {-1, kSoldier, -1, ogre};
+    lanebattle::setLoadout(holed, lanebattle::kLoadoutSlots);
+
+    check(lanebattle::visibleButtonCount() == 4,
+          "the bar spans to the last carried slot, holes included");
+    check(lanebattle::kindForButton(0) == -1 && lanebattle::kindForButton(2) == -1,
+          "and the holes sell nothing");
+    const float slotFour = lanebattle::buttonLeft(3) + lanebattle::kButtonWidth / 2.0f;
+    const float slotOne = lanebattle::buttonLeft(0) + lanebattle::kButtonWidth / 2.0f;
+    const float barY = lanebattle::kButtonY + lanebattle::kButtonHeight / 2.0f;
+    check(lanebattle::buttonAt(slotFour, barY) == ogre,
+          "the unit after a hole can still be clicked");
+    check(lanebattle::buttonAt(slotOne, barY) == -1, "and clicking a hole sends nothing");
+
+    World world;
+    SceneStack scenes;
+    harness::Harness driver(world, scenes);
+    lanebattle::Campaign& campaign = lanebattle::campaignOf(world);
+    for (int slot = 0; slot < lanebattle::kLoadoutSlots; ++slot) campaign.loadout[slot] = holed[slot];
+    scenes.push(lanebattle::makePlayScene());
+    driver.step(2);
+
+    Session* session = lanebattle::findSession(world);
+    check(session != nullptr, "a battle started");
+    if (!session) return;
+    session->gold = 5000.0f;
+    for (int k = 0; k < lanebattle::kMaxUnitKinds; ++k) session->enemySpawnCooldowns[k] = 1.0e9f;
+
+    const std::string bar = screenText(world);
+    check(bar.find("4 OGRE") != std::string::npos,
+          "its button is labelled with the key that sends it");
+    check(bar.find("6 OGRE") == std::string::npos,
+          "not with its row in the roster");
+
+    driver.hold(SDL_SCANCODE_4);
+    driver.step(2);
+    driver.release(SDL_SCANCODE_4);
+    driver.step();
+    check(lanebattle::countUnitsOfKind(world, true, ogre) == 1,
+          "and key four sends it");
+
+    lanebattle::resetLoadout();
+}
+
 void testCarryingAndDroppingOnTheArmyScreen() {
     Army army;
 
@@ -3965,7 +4067,7 @@ int playBattle(Game& game, const int* cycle, int cycleLength) {
     int index = 0;
     SDL_Scancode holding = SDL_SCANCODE_UNKNOWN;
 
-    for (int frame = 0; frame < 60 * 400; ++frame) {
+    for (int frame = 0; frame < kPlayFrames; ++frame) {
         if (holding != SDL_SCANCODE_UNKNOWN) {
             game.driver.release(holding);
             holding = SDL_SCANCODE_UNKNOWN;
@@ -4552,53 +4654,58 @@ void testAStageCanFieldFlyers() {
 
 // The payoff, and the reason the slice exists: an army of soldiers cannot
 // answer the sky, however large it is.
-void testAWallOfSoldiersCannotAnswerTheSky() {
+// The sky, measured without the freeze.
+//
+// This test used to fight a stage of NOTHING but griffins and claim three
+// things: soldiers lose to it, archers beat it, and a soldier-heavy line loses
+// too because "the soldiers are dead weight". Much of that was the queue
+// freeze. A griffin attacking soldiers at its own castle stood in the gate; the
+// next griffin out landed on the same pixel; both froze when the soldiers died
+// — a turret killing every soldier who reached the castle, from where no
+// soldier could touch it. With the freeze fixed, a flyer does not hold ground:
+// soldiers walk UNDER an all-griffin army and take its castle in under a
+// minute, faster than archers do.
+//
+// So the lesson the sky teaches is the true one, and it is what every stage
+// that fields griffins already does: an air wing needs soldiers in front of
+// it. Against THAT, nothing that cannot reach the sky wins, and nothing that
+// cannot hold a line wins either — which is the loadout question the air stage
+// exists to ask.
+void testTheSkyNeedsAnAnswer() {
     lanebattle::resetBalance();
     const int griffin = kindNamed("GRIFFIN");
+    const std::string wing = std::to_string(griffin);
 
-    // A stage of nothing but griffins.
-    const std::string path = writeRoster("lb_allair.txt",
-        ("[stage]\nname = THE FLOCK\nenemy_income = 0.9\n"
-         "enemy_castle_health = 700\nwave_size = 3\ncomposition = " +
-         std::to_string(griffin) + "\n").c_str());
+    auto stage = [](const char* name, const std::string& composition) {
+        return writeRoster(name,
+            ("[stage]\nname = THE WING\nenemy_income = 0.9\n"
+             "enemy_castle_health = 700\nwave_size = 3\ncomposition = " +
+             composition + "\n").c_str());
+    };
+    // THE EYRIE's shape: griffins, with soldiers in front of them.
+    const std::string escorted = stage("lb_escorted.txt", "1," + wing + "," + wing + ",1");
+    // And the same wing with nobody on the ground at all.
+    const std::string bare = stage("lb_allair.txt", wing);
 
     static const int onlySoldiers[] = {kSoldier};
     static const int onlyArchers[] = {kArcher};
-    static const int mostlySoldiers[] = {kSoldier, kArcher, kArcher};
+    static const int lineAndArchers[] = {kSoldier, kArcher, kArcher};
 
-    {
+    auto fight = [](const std::string& path, const int* cycle, int length) {
         Game game;
         lanebattle::loadBalance(path);
         game.startStage(0);
-        check(playBattle(game, onlySoldiers, 1) == -1,
-              "an army of nothing but soldiers loses to a sky it cannot reach");
-    }
-    {
-        Game game;
-        lanebattle::loadBalance(path);
-        game.startStage(0);
-        check(playBattle(game, onlyArchers, 1) == 1,
-              "and an army of nothing but archers beats it comfortably");
-    }
-    {
-        // The part worth measuring, and the opposite of what was assumed.
-        //
-        // The obvious guess was that adding archers to a line of soldiers
-        // would answer the sky. It does not: against an enemy that is
-        // entirely airborne, every soldier is gold and a population slot
-        // spent on something that cannot reach anything. Ground melee is not
-        // merely useless there — it actively costs you the battle.
-        //
-        // Which makes the sky a genuine rock-paper-scissors answer rather
-        // than a tax: the counter to all-air is to STOP building the units
-        // that normally carry you.
-        Game game;
-        lanebattle::loadBalance(path);
-        game.startStage(0);
-        check(playBattle(game, mostlySoldiers, 3) == -1,
-              "while a line of soldiers with archers behind it still loses, "
-              "because the soldiers are dead weight");
-    }
+        return playBattle(game, cycle, length);
+    };
+
+    check(fight(escorted, onlySoldiers, 1) == -1,
+          "soldiers alone lose to an air wing: nothing they carry reaches the sky");
+    check(fight(escorted, lineAndArchers, 3) == 1,
+          "a line to hold the escort, and archers behind it for the sky, beat it");
+    check(fight(escorted, onlyArchers, 1) == -1,
+          "while archers alone lose too, with nobody holding the escort off them");
+    check(fight(bare, onlySoldiers, 1) == 1,
+          "and a wing with nobody on the ground holds nothing: soldiers walk under it");
 
     lanebattle::resetBalance();
 }
@@ -5006,6 +5113,39 @@ void testAUnitShowsTheRightPose() {
           "and a sprinting one does not strobe");
     check(lanebattle::walkFrameSeconds(0.0f, 50.0f, 6) > 0.0f,
           "and a unit that cannot move gets a sane interval, not a division by zero");
+
+    // No unit in the shipped roster may strobe. The first tempo rule played
+    // the runner's six-frame cycle at twenty-six frames a second — a full
+    // stride every quarter of a second, which reads as vibrating. Fourteen a
+    // second is the ceiling now; six the floor.
+    for (int kind = 0; kind < lanebattle::unitKindCount(); ++kind) {
+        const lanebattle::UnitKind& unit = lanebattle::unitKind(kind);
+        const float height = unit.artHeight > 0.0f ? unit.artHeight : unit.height * 1.4f;
+        const float seconds = lanebattle::walkFrameSeconds(unit.speed, height * 1.5f, 6);
+        check(seconds >= 1.0f / 14.5f && seconds <= 1.0f / 5.5f,
+              "every unit walks between six and fourteen frames a second");
+    }
+
+    // The bob. The generated sheets keep the body level in every frame, so
+    // legs cycled under a body that glided at one height — sliding, on the
+    // ground; a cut-out on a wire, in the air. A walker lifts twice a cycle
+    // and comes down between steps; a flyer rises once per wingbeat.
+    const float h = 50.0f;
+    check(lanebattle::strideLift(0.0f, h, false) < 0.01f &&
+              lanebattle::strideLift(0.5f, h, false) < 0.01f,
+          "a walker's feet are down between its two steps");
+    check(lanebattle::strideLift(0.25f, h, false) > 1.0f &&
+              lanebattle::strideLift(0.75f, h, false) > 1.0f,
+          "and its body lifts on each step");
+    check(lanebattle::strideLift(0.25f, h, false) <= h * 0.05f,
+          "by a pixel or two, not a hop");
+    check(lanebattle::strideLift(0.25f, h, true) >
+              lanebattle::strideLift(0.75f, h, true) + 2.0f,
+          "a flyer rises once per wingbeat and sinks between");
+    for (float p = 0.0f; p < 1.0f; p += 0.05f) {
+        const float lift = lanebattle::strideLift(p, h, true);
+        check(lift >= 0.0f && lift <= h * 0.08f, "and never leaves its height by much");
+    }
 }
 
 // With no texture cache — every test, both simulators — effects are nothing.
@@ -5360,6 +5500,827 @@ void testTheRealSaveHasToBeAskedForByName() {
     lanebattle::setSavePath(configured);  // the rest of the suite wants it back
 }
 
+// --- The clock, and explaining a defeat ------------------------------------
+//
+// A battle nobody can finish now ends on the clock, as a loss, and every loss
+// says why. See kBattleSeconds for why the clock scores a loss rather than
+// points, and BattleRecord for what the explanation is built from.
+
+bool mentions(const std::vector<std::string>& lines, const char* words) {
+    for (const std::string& line : lines) {
+        if (line.find(words) != std::string::npos) return true;
+    }
+    return false;
+}
+
+// A battle already lost, with an empty record, for the rules below to be
+// checked against one fact at a time. The purse is emptied because a full one
+// is itself a reason, and would be said about every case.
+Session lostBattle(float seconds) {
+    Session session;
+    session.gameOver = true;
+    session.elapsed = seconds;
+    session.gold = 0.0f;
+    return session;
+}
+
+// The clock does not end the battle. It sends the swarm.
+void testTheClockSendsTheSwarm() {
+    Game game;
+    game.startStage(2);
+    game.suppressEnemySpawns();
+    // The opponent cannot pay for any of what follows, and its own production
+    // is stopped — so everything that comes out of the gate is the swarm.
+    game.session().enemyGold = 0.0f;
+
+    // Something of the ten minutes for the snapshot to keep: one archer of
+    // yours, held at your own gate where the swarm will not reach it in time.
+    const Entity archer = lanebattle::spawnUnit(game.world, true, kArcher);
+    game.world.getComponent<Transform>(archer)->x = 40.0f;
+    game.world.getComponent<Unit>(archer)->health = 1.0e6f;
+
+    game.session().elapsed = lanebattle::kBattleSeconds - 0.5f;
+    game.driver.step(24);  // 0.4 seconds
+    check(!game.session().swarming, "nothing happens before the clock runs out");
+    check(lanebattle::countUnits(game.world, false) == 0,
+          "and nothing comes out of their gate");
+
+    game.driver.step(12);
+    check(game.session().swarming, "at the limit the swarm begins");
+    check(!game.session().gameOver,
+          "and the battle goes on: the clock does not end it by itself");
+
+    game.driver.step(600);  // ten seconds of swarm, nobody in its way
+    const int theirs = lanebattle::countUnits(game.world, false);
+    check(theirs > lanebattle::kPopulationCap,
+          "the swarm is not held to the population cap, or to their purse");
+
+    const lanebattle::BattleRecord& record = game.session().record;
+    int army = 0;
+    for (int kind = 0; kind < lanebattle::kMaxUnitKinds; ++kind) army += record.enemySent[kind];
+    check(record.swarmSent == theirs && army == 0,
+          "and it is counted as the swarm, not as their army");
+    const lanebattle::BattleRecord& before = game.session().beforeSwarm;
+    check(before.swarmSent == 0 && before.sent[kArcher] == 1,
+          "while the record of the ten minutes before it is kept as it was");
+}
+
+// It has to END a stalemate, so it cannot stay the size it started.
+void testTheSwarmQuickensAndStrengthens() {
+    const float half = lanebattle::kSwarmStrengthenSeconds;
+    check(lanebattle::swarmStrength(0.0f) == 1.0f, "the first of the swarm is an ordinary unit");
+    check(std::fabs(lanebattle::swarmStrength(half) - 2.0f) < 0.001f,
+          "one step in, each one is worth two");
+    check(lanebattle::swarmGap(60.0f) < lanebattle::swarmGap(0.0f),
+          "and they come faster the longer it lasts");
+    check(lanebattle::swarmGap(1.0e6f) >= 1.0f / lanebattle::kSwarmMaxRate - 0.0001f,
+          "up to a limit, so a frame is never asked for a crowd");
+
+    // And in a battle: one released that far in has twice the health AND
+    // twice the blow. Health alone was tried; a queue of tougher units that
+    // hit no harder held nothing up for five minutes.
+    Game game;
+    game.startStage(2);
+    game.suppressEnemySpawns();
+    game.session().elapsed = lanebattle::kBattleSeconds + half;
+    game.driver.step();
+
+    const Unit* newest = nullptr;
+    for (Entity entity : game.world.entities()) {
+        const Unit* unit = game.world.getComponent<Unit>(entity);
+        const lanebattle::Team* team = game.world.getComponent<lanebattle::Team>(entity);
+        if (unit && team && !team->leftSide) newest = unit;
+    }
+    check(newest != nullptr, "the swarm sent a unit");
+    if (newest) {
+        const float roster = stats(newest->kind).health;
+        check(std::fabs(newest->maxHealth - roster * 2.0f) < roster * 0.01f,
+              "with twice the health its roster row gives it");
+        check(newest->health == newest->maxHealth,
+              "all of it, not a raised ceiling over an ordinary unit");
+        check(std::fabs(newest->power - 2.0f) < 0.01f, "and twice the blow");
+    }
+
+    // The blow is real, not a number on a component: a swarm unit's hit
+    // takes twice what the roster says off whatever it strikes.
+    const Entity victim = lanebattle::spawnUnit(game.world, true, kSoldier);
+    Entity striker = kInvalidEntity;
+    for (Entity entity : game.world.entities()) {
+        const lanebattle::Team* team = game.world.getComponent<lanebattle::Team>(entity);
+        if (game.world.hasComponent<Unit>(entity) && team && !team->leftSide) striker = entity;
+    }
+    if (striker != kInvalidEntity) {
+        Unit* hitter = game.world.getComponent<Unit>(striker);
+        // Ten thousand, not a million: at a million a float steps in
+        // sixteenths, and a blow of 28.015 reads back as 28.0 — which failed
+        // this check for a reason that had nothing to do with the swarm.
+        constexpr float kLotsOfHealth = 1.0e4f;
+        game.world.getComponent<Unit>(victim)->health = kLotsOfHealth;
+        game.world.getComponent<Transform>(victim)->x =
+            game.world.getComponent<Transform>(striker)->x - stats(hitter->kind).range + 4.0f;
+        hitter->timeUntilAttack = 0.0f;
+        game.session().swarmTimer = 1.0e9f;  // nobody else comes out to muddy it
+        game.driver.step();
+        const float taken = kLotsOfHealth - game.world.getComponent<Unit>(victim)->health;
+        check(std::fabs(taken - stats(hitter->kind).damage * hitter->power) < 0.01f,
+              "and it lands: a swarm blow does its multiple of the roster's damage");
+    }
+}
+
+// Finding: strengthened only as it left the gate, the front of the swarm was
+// a generation behind it. Units queue, the one at the front is the only one
+// fighting, and with thirty in the column it had come out thirty kills before —
+// so a pikemen-and-ballista army held two stages for five minutes. A swarm
+// unit grows where it stands.
+void testTheSwarmGrowsWhereItStands() {
+    Game game;
+    game.startStage(2);
+    game.suppressEnemySpawns();
+    game.session().elapsed = lanebattle::kBattleSeconds;
+    game.driver.step();
+
+    Entity first = kInvalidEntity;
+    for (Entity entity : game.world.entities()) {
+        const lanebattle::Team* team = game.world.getComponent<lanebattle::Team>(entity);
+        if (game.world.hasComponent<Unit>(entity) && team && !team->leftSide) first = entity;
+    }
+    check(first != kInvalidEntity, "the swarm's first unit is out");
+    if (first == kInvalidEntity) return;
+    const float roster = stats(game.world.getComponent<Unit>(first)->kind).health;
+
+    // Nothing else comes out, so the one being watched is the only one, and
+    // nothing of yours is there to wound it.
+    game.session().swarmTimer = 1.0e9f;
+    game.driver.step(60 * static_cast<int>(lanebattle::kSwarmStrengthenSeconds));
+
+    const Unit* grown = game.world.getComponent<Unit>(first);
+    check(grown != nullptr, "and still standing");
+    if (!grown) return;
+    check(std::fabs(grown->power - 2.0f) < 0.05f,
+          "a swarm unit already on the field hits harder as the swarm goes on");
+    check(std::fabs(grown->maxHealth - roster * 2.0f) < roster * 0.03f &&
+              grown->health == grown->maxHealth,
+          "and has the health to match, grown in proportion");
+}
+
+// Finding: ten minutes of stalemate is ten minutes of the opponent banking
+// bounties into SUPPLY, and an ordinary army of twenty-odd could fill the field
+// to the swarm's ceiling by itself — no swarm unit could get out, the front of
+// their line never grew, and a pikemen-and-ballista army held OLD ROAD for five
+// minutes more. At the clock their army joins the swarm and their castle stops
+// paying for another.
+void testTheirArmyJoinsTheSwarm() {
+    Game game;
+    game.startStage(2);
+    game.suppressEnemySpawns();
+    const Entity myCastle = lanebattle::findCastle(game.world, true);
+    game.world.getComponent<Castle>(myCastle)->health = 1.0e9f;  // nothing ends this
+
+    const Entity veteran = lanebattle::spawnUnit(game.world, false, kSoldier);
+    // And an opponent that could buy a whole army, if it were still buying.
+    game.allowEnemyProduction();
+    game.session().enemyGold = 1.0e6f;
+    game.session().elapsed = lanebattle::kBattleSeconds;
+    game.driver.step();
+
+    const Unit* old = game.world.getComponent<Unit>(veteran);
+    check(old && old->swarm, "what they already had on the field joins the swarm");
+
+    game.driver.step(60 * static_cast<int>(lanebattle::kSwarmStrengthenSeconds));
+    old = game.world.getComponent<Unit>(veteran);
+    check(old && std::fabs(old->power - 2.0f) < 0.05f, "and grows with it");
+
+    int army = 0;
+    for (int kind = 0; kind < lanebattle::kMaxUnitKinds; ++kind) {
+        army += game.session().record.enemySent[kind];
+    }
+    check(army == 1 && game.session().record.swarmSent > 0,
+          "and their castle pays for nothing more: from the clock on, only the swarm comes out");
+}
+
+// The swarm is a mob and does not queue: a pile of it — including their old
+// army, which joins it at the clock — presses forward together. A queue meant
+// only its front unit ever fought, however many poured out of the gate.
+void testTheSwarmDoesNotQueue() {
+    Game game;
+    game.startStage(2);
+    game.suppressEnemySpawns();
+    const Entity myCastle = lanebattle::findCastle(game.world, true);
+    game.world.getComponent<Castle>(myCastle)->health = 1.0e9f;
+
+    // Their old army, piled on one spot and stopped — exactly the frozen pile.
+    const Entity first = lanebattle::spawnUnit(game.world, false, kSoldier);
+    const Entity second = lanebattle::spawnUnit(game.world, false, kSoldier);
+    for (Entity unit : {first, second}) {
+        game.world.getComponent<Transform>(unit)->x = 1500.0f;
+        game.world.getComponent<Velocity>(unit)->dx = 0.0f;
+    }
+    game.session().elapsed = lanebattle::kBattleSeconds;
+    game.session().swarmTimer = 1.0e9f;  // only the pile, nothing new
+    game.driver.step(30);
+
+    check(game.world.getComponent<Transform>(first)->x < 1500.0f &&
+              game.world.getComponent<Transform>(second)->x < 1500.0f,
+          "once it joins the swarm, a pile on one spot marches, all of it");
+}
+
+// One at a time through the gate: nothing comes out on top of a unit already
+// standing in it, or two bodies share one spot and read as one.
+void testTheSwarmWaitsForAClearGate() {
+    Game game;
+    game.startStage(2);
+    game.suppressEnemySpawns();
+
+    // One of theirs held in the gate by a fight it cannot finish, with one of
+    // yours it cannot kill.
+    const Entity keeper = lanebattle::spawnUnit(game.world, false, kSoldier);
+    const Entity wall = lanebattle::spawnUnit(game.world, true, kSoldier);
+    game.world.getComponent<Transform>(wall)->x =
+        game.world.getComponent<Transform>(keeper)->x - stats(kSoldier).range + 4.0f;
+    game.world.getComponent<Unit>(wall)->health = 1.0e7f;
+    game.world.getComponent<Unit>(keeper)->health = 1.0e7f;
+
+    game.session().elapsed = lanebattle::kBattleSeconds;
+    game.driver.step(120);
+    check(game.session().swarming && game.session().record.swarmSent == 0,
+          "nothing comes out while the gate is taken");
+
+    game.world.destroyLater(keeper);
+    game.driver.step(2);
+    check(game.session().record.swarmSent >= 1, "and the swarm comes out the moment it is clear");
+}
+
+// Every swarm unit is an entity, a figure and eventually a corpse, so however
+// long a line holds there is a limit to how many can be on the field.
+void testTheSwarmHasACeiling() {
+    Game game;
+    game.startStage(2);
+    game.suppressEnemySpawns();
+    // A castle that cannot fall, so the swarm piles up against it forever.
+    const Entity myCastle = lanebattle::findCastle(game.world, true);
+    game.world.getComponent<Castle>(myCastle)->health = 1.0e9f;
+    game.session().elapsed = lanebattle::kBattleSeconds;
+
+    int most = 0;
+    for (int frame = 0; frame < 60 * 90; ++frame) {
+        game.driver.step();
+        most = std::max(most, lanebattle::countUnits(game.world, false));
+    }
+    check(most <= lanebattle::kSwarmCeiling, "the swarm never passes its ceiling");
+    check(most == lanebattle::kSwarmCeiling, "and does reach it");
+}
+
+// The point of it: a battle nobody could finish is finished.
+void testTheSwarmEndsAStalemate() {
+    Game game;
+    game.startStage(2);
+    game.suppressEnemySpawns();
+    const lanebattle::Campaign before = lanebattle::campaignOf(game.world);
+    game.session().elapsed = lanebattle::kBattleSeconds;
+
+    for (int frame = 0; frame < 60 * 240 && !game.session().gameOver; ++frame) {
+        game.driver.step();
+    }
+    check(game.session().gameOver, "the swarm ends a battle that neither castle was ending");
+    check(!game.session().playerWon, "by breaking the castle nobody defended");
+    check(game.session().swarming, "and the battle knows it was the swarm");
+
+    const lanebattle::Campaign& after = lanebattle::campaignOf(game.world);
+    check(after.bank == before.bank, "a loss to the swarm pays nothing");
+    check(after.stagesUnlocked == before.stagesUnlocked, "and opens nothing");
+}
+
+// The swarm is a threat, not a verdict. Break their castle while it is coming
+// and the battle is yours.
+void testYouCanStillWinDuringTheSwarm() {
+    Game game;
+    game.startStage(2);
+    game.suppressEnemySpawns();
+    game.session().elapsed = lanebattle::kBattleSeconds + 30.0f;
+    game.driver.step();
+    check(game.session().swarming, "the swarm is underway");
+
+    const Entity enemyCastle = lanebattle::findCastle(game.world, false);
+    const float castleX = game.world.getComponent<Transform>(enemyCastle)->x;
+    for (int index = 0; index < 3; ++index) {
+        const Entity mine = lanebattle::spawnUnit(game.world, true, kSoldier);
+        game.world.getComponent<Transform>(mine)->x =
+            castleX - stats(kSoldier).range + 4.0f;
+    }
+    game.world.getComponent<Castle>(enemyCastle)->health = 1.0f;
+    for (int frame = 0; frame < 30 && !game.session().gameOver; ++frame) game.driver.step();
+
+    check(game.session().gameOver && game.session().playerWon,
+          "a castle broken during the swarm is a win");
+}
+
+void testTheClockCountsOnlyBattleTime() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    const float start = game.session().elapsed;
+
+    game.driver.step(600);
+    check(std::fabs(game.session().elapsed - start - 10.0f) < 0.05f,
+          "the clock counts seconds of battle");
+
+    game.driver.tap(SDL_SCANCODE_P);
+    game.driver.step(2);
+    const float paused = game.session().elapsed;
+    game.driver.step(600);
+    check(game.session().elapsed == paused,
+          "and stands still while the game is paused, or a pause would cost time");
+    game.driver.tap(SDL_SCANCODE_P);
+    game.driver.step(2);
+}
+
+void testARetryStartsTheClockAgain() {
+    Game game;
+    game.startStage(2);
+    game.suppressEnemySpawns();
+    game.session().elapsed = lanebattle::kBattleSeconds;
+    game.driver.step(120);
+    check(game.session().swarming && lanebattle::countUnits(game.world, false) > 0,
+          "the swarm is out");
+
+    const Entity myCastle = lanebattle::findCastle(game.world, true);
+    game.world.getComponent<Castle>(myCastle)->health = 0.0f;
+    game.driver.step(3);
+    check(game.session().gameOver && !game.session().playerWon, "and the battle is lost");
+
+    game.driver.tap(SDL_SCANCODE_R);
+    game.driver.step(3);
+    check(!game.session().gameOver, "R starts the stage again");
+    check(game.session().elapsed < 1.0f, "with the whole clock back");
+    check(!game.session().swarming && game.session().record.swarmSent == 0,
+          "and no swarm");
+    check(lanebattle::countUnits(game.world, false) == 0,
+          "and none of it left on the field");
+}
+
+// A rule you only learn about when it ends your battle is a trap.
+void testTheClockIsOnScreen() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    game.driver.step(2);
+
+    auto clock = [&game]() -> const Text* {
+        for (auto& entry : game.world.view<Text>()) {
+            const std::string& value = entry.second.value;
+            if (value.rfind("TIME ", 0) == 0 || value.rfind("SWARM ", 0) == 0) {
+                return &entry.second;
+            }
+        }
+        return nullptr;
+    };
+
+    const Text* opening = clock();
+    check(opening && opening->value == "TIME 10:00",
+          "a battle opens with the whole clock on screen");
+    check(opening && opening->r < opening->g, "quietly, while there is time");
+
+    game.session().elapsed = lanebattle::kBattleSeconds - 30.0f;
+    game.driver.step();
+    const Text* late = clock();
+    check(late && late->value == "SWARM IN 0:30",
+          "and for the last minute says what is coming");
+    check(late && late->r > late->g, "in red");
+
+    game.session().elapsed = lanebattle::kBattleSeconds - 0.01f;
+    game.driver.step();
+    const Text* arrived = clock();
+    check(arrived && arrived->value == "SWARM +0:00", "then counts the swarm up");
+    check(screenText(game.world).find("THE SWARM IS HERE") != std::string::npos,
+          "and says it has arrived");
+
+    game.driver.step(60 * 4);
+    const Text* later = clock();
+    check(later && later->value == "SWARM +0:04", "second by second");
+    check(screenText(game.world).find("THE SWARM IS HERE") == std::string::npos,
+          "and the banner goes, leaving the field to watch");
+}
+
+void testClockTextReadsLikeAClock() {
+    check(lanebattle::clockText(420.0f) == "7:00", "seven minutes reads 7:00");
+    check(lanebattle::clockText(61.0f) == "1:01", "a minute and a second reads 1:01");
+    check(lanebattle::clockText(59.2f) == "1:00",
+          "part of a second rounds UP, like any countdown");
+    check(lanebattle::clockText(0.4f) == "0:01",
+          "so it never says 0:00 while there is time on it");
+    check(lanebattle::clockText(0.0f) == "0:00", "and says it when there is none");
+    check(lanebattle::clockText(-5.0f) == "0:00", "and is never negative");
+    check(lanebattle::clockText(600.0f) == "10:00", "and has room for ten minutes");
+}
+
+void testUnitNamesArePluralised() {
+    check(lanebattle::pluralName("SOLDIER", 3) == "SOLDIERS", "SOLDIERS");
+    check(lanebattle::pluralName("SOLDIER", 1) == "SOLDIER", "one SOLDIER");
+    check(lanebattle::pluralName("PIKEMAN", 2) == "PIKEMEN", "PIKEMEN, not PIKEMANS");
+    check(lanebattle::pluralName("BOSS", 2) == "BOSSES", "and a data file's BOSSES");
+}
+
+void testADefeatSaysWhatHappened() {
+    const Session fell = lostBattle(134.6f);
+    check(lanebattle::explainDefeat(fell).headline == "YOUR CASTLE FELL AT 2:14",
+          "a defeat says when your castle fell");
+
+    Session swarm = lostBattle(683.4f);
+    swarm.swarming = true;
+    swarm.record.swarmSent = 64;
+    check(lanebattle::explainDefeat(swarm).headline == "THE SWARM OF 64 BROKE YOUR CASTLE AT 11:23",
+          "and a loss to the swarm says so, and how big it got");
+}
+
+void testADefeatSaysWhatTheySent() {
+    const int griffin = kindNamed("GRIFFIN");
+    Session session = lostBattle(100.0f);
+    session.record.enemySent[kSoldier] = 9;
+    session.record.enemySent[griffin] = 4;
+    session.record.enemySent[kRunner] = 1;
+    check(lanebattle::explainDefeat(session).enemyArmy ==
+              "THEY SENT 9 SOLDIERS, 4 GRIFFINS AND 1 RUNNER",
+          "a defeat says what the enemy fielded, most first");
+}
+
+void testADefeatNamesAnUnansweredSky() {
+    const int griffin = kindNamed("GRIFFIN");
+    Session session = lostBattle(100.0f);
+    session.record.enemySent[griffin] = 6;
+    session.record.damageTakenFrom[griffin] = 600.0f;
+    session.record.carried[0] = kSoldier;
+    session.record.carried[1] = kRunner;  // neither reaches the sky
+
+    lanebattle::DefeatReport report = lanebattle::explainDefeat(session);
+    check(!report.reasons.empty() &&
+              report.reasons[0].rfind("NOTHING YOU CARRIED HITS THEIR GRIFFINS", 0) == 0,
+          "an air wing met by an army that cannot reach it is the first thing said");
+    check(mentions(report.reasons, "PIKEMEN OR ARCHERS"),
+          "with the cheapest answers, read from the roster");
+
+    session.record.carried[2] = kArcher;
+    report = lanebattle::explainDefeat(session);
+    check(!mentions(report.reasons, "NOTHING YOU CARRIED"),
+          "an archer is an answer, so that is not said to a player carrying one");
+    check(mentions(report.reasons, "THEIR GRIFFINS DID 100% OF THE DAMAGE"),
+          "but a sky that still did the damage is");
+
+    session.record.carried[2] = -1;
+    session.record.heroReachesSky = true;
+    check(!mentions(lanebattle::explainDefeat(session).reasons, "NOTHING YOU CARRIED"),
+          "nor to a FALCONER, whose hero reaches the sky");
+
+    Session single = lostBattle(100.0f);
+    single.record.enemySent[griffin] = 1;
+    single.record.carried[0] = kSoldier;
+    check(!mentions(lanebattle::explainDefeat(single).reasons, "NOTHING YOU CARRIED"),
+          "and one griffin is not an air wing");
+}
+
+void testADefeatNamesAHeroThrownAway() {
+    Session session = lostBattle(100.0f);
+    session.record.heroSummonedAt = 5.0f;
+    session.record.heroFellAt = 14.0f;
+    session.record.heroEscort = 0;
+    check(mentions(lanebattle::explainDefeat(session).reasons,
+                   "YOUR HERO WENT OUT ALONE AND FELL IN 9S"),
+          "a hero summoned onto an empty field and lost at once is named");
+
+    session.record.heroEscort = 5;
+    check(!mentions(lanebattle::explainDefeat(session).reasons, "WENT OUT ALONE"),
+          "one with a line in front of it was spent, not thrown away");
+
+    session.record.heroEscort = 0;
+    session.record.heroFellAt = 80.0f;
+    check(!mentions(lanebattle::explainDefeat(session).reasons, "WENT OUT ALONE"),
+          "and nor was one that lasted over a minute");
+}
+
+void testADefeatNamesAHeroNeverSummoned() {
+    Session session = lostBattle(200.0f);
+    check(mentions(lanebattle::explainDefeat(session).reasons, "YOU NEVER SUMMONED YOUR HERO"),
+          "a hero never summoned is named");
+
+    session.record.heroSummonedAt = 50.0f;
+    check(!mentions(lanebattle::explainDefeat(session).reasons, "NEVER SUMMONED"),
+          "not to a player who summoned it");
+
+    const Session quick = lostBattle(20.0f);
+    check(!mentions(lanebattle::explainDefeat(quick).reasons, "NEVER SUMMONED"),
+          "nor after a battle too short for the hero to have mattered");
+}
+
+void testADefeatNamesAnArmyOfOneKind() {
+    Session session = lostBattle(100.0f);
+    session.record.sent[kSoldier] = 8;
+    check(mentions(lanebattle::explainDefeat(session).reasons, "YOU SENT ONLY SOLDIERS"),
+          "an army of one kind is named");
+
+    session.record.sent[lanebattle::heroKindIndex()] = 1;
+    check(mentions(lanebattle::explainDefeat(session).reasons, "YOU SENT ONLY SOLDIERS"),
+          "and the hero does not count as a second kind of army");
+
+    session.record.sent[kArcher] = 3;
+    check(!mentions(lanebattle::explainDefeat(session).reasons, "YOU SENT ONLY"),
+          "but an archer does");
+}
+
+void testADefeatNamesRangeWithNobodyInFront() {
+    Session session = lostBattle(100.0f);
+    session.record.sent[kArcher] = 6;
+    session.record.sent[kSoldier] = 2;
+    check(mentions(lanebattle::explainDefeat(session).reasons, "MORE ARCHERS THAN FRONT LINE"),
+          "archers who outnumbered the line in front of them are named");
+
+    session.record.sent[kSoldier] = 8;
+    check(!mentions(lanebattle::explainDefeat(session).reasons, "THAN FRONT LINE"),
+          "not when the line outnumbers them");
+}
+
+void testADefeatNamesGoldLeftUnspent() {
+    Session session = lostBattle(100.0f);
+    session.gold = 240.0f;
+    check(mentions(lanebattle::explainDefeat(session).reasons, "YOU ENDED WITH 240 GOLD UNSPENT"),
+          "a purse still full at the end is named");
+
+    session.gold = 40.0f;
+    check(!mentions(lanebattle::explainDefeat(session).reasons, "GOLD UNSPENT"),
+          "small change is not");
+}
+
+// A battle lost to the swarm is explained by the ten minutes BEFORE it, so
+// every number below is put into `beforeSwarm` — and the live record is filled
+// with what the swarm did, to prove none of that is what gets said.
+void testASwarmDefeatSaysTheLinesHeld() {
+    Session session = lostBattle(lanebattle::kBattleSeconds + 40.0f);
+    session.swarming = true;
+    session.beforeSwarm.castleDamageDealt = 50.0f;
+    session.record.castleDamageDealt = 5000.0f;
+    session.enemyUpgrades[static_cast<int>(lanebattle::Upgrade::Walls)] = 9;
+    check(mentions(lanebattle::explainDefeat(session).reasons,
+                   "YOU HIT THEIR CASTLE FOR 50 WHILE THEY REBUILT IT 9 TIMES"),
+          "a stalemate says how little reached their castle in ten minutes, and what they did");
+
+    session.beforeSwarm.castleDamageDealt = 0.0f;
+    check(mentions(lanebattle::explainDefeat(session).reasons,
+                   "NOTHING YOU SENT REACHED THEIR CASTLE IN TEN MINUTES"),
+          "and says so plainly when nothing did, rather than 'only 0'");
+
+    // What hurt most is judged before the swarm too. Afterwards the swarm
+    // always did, which would be true of every such defeat and useful in none.
+    session.beforeSwarm.damageTakenFrom[kArcher] = 300.0f;
+    session.beforeSwarm.damageTakenFrom[kSoldier] = 100.0f;
+    session.record.damageTakenFrom[kSoldier] = 90000.0f;
+    check(mentions(lanebattle::explainDefeat(session).reasons, "THEIR ARCHERS DID THE MOST DAMAGE"),
+          "what hurt most is what hurt most in the ten minutes, not the swarm");
+
+    Session fell = lostBattle(100.0f);
+    fell.record.castleDamageDealt = 50.0f;
+    check(!mentions(lanebattle::explainDefeat(fell).reasons, "YOU HIT THEIR CASTLE"),
+          "a battle lost at your own gate was not a stalemate");
+}
+
+void testADefeatNamesWhatHurtMost() {
+    Session session = lostBattle(20.0f);  // too short to mention the hero
+    session.record.damageTakenFrom[kArcher] = 300.0f;
+    session.record.damageTakenFrom[kSoldier] = 100.0f;
+    check(mentions(lanebattle::explainDefeat(session).reasons,
+                   "THEIR ARCHERS DID THE MOST DAMAGE - 75% OF WHAT YOU TOOK"),
+          "whatever did the most damage is named, with its share");
+
+    session.record.cannonDamageTaken = 500.0f;
+    check(mentions(lanebattle::explainDefeat(session).reasons,
+                   "THEIR CANNON DID THE MOST DAMAGE - 56% OF WHAT YOU TOOK"),
+          "and their cannon counts");
+}
+
+// Three things, most useful first. A wall of eight reasons is a list nobody
+// reads, and the order is the claim about which one mattered.
+void testADefeatSaysThreeThingsAtMostAndTheBestFirst() {
+    const int griffin = kindNamed("GRIFFIN");
+    Session session = lostBattle(200.0f);
+    session.gold = 500.0f;
+    session.record.enemySent[griffin] = 6;
+    session.record.damageTakenFrom[griffin] = 900.0f;
+    session.record.carried[0] = kSoldier;
+    session.record.sent[kSoldier] = 12;
+    session.record.heroSummonedAt = 2.0f;
+    session.record.heroFellAt = 9.0f;
+
+    const lanebattle::DefeatReport report = lanebattle::explainDefeat(session);
+    check(static_cast<int>(report.reasons.size()) == lanebattle::kMaxDefeatReasons,
+          "a defeat with every fault says three things, not all of them");
+    check(report.reasons.size() == 3 &&
+              report.reasons[0].rfind("NOTHING YOU CARRIED", 0) == 0 &&
+              report.reasons[1].rfind("YOU SENT ONLY", 0) == 0 &&
+              report.reasons[2].rfind("YOUR HERO WENT OUT ALONE", 0) == 0,
+          "the sky first, then the army, then the hero");
+}
+
+// Built from roster names, so it is checked the way every other string the
+// game draws should be: it fits, and the font has every letter of it.
+void testEveryDefeatLineFitsTheScreenAndTheFont() {
+    const int griffin = kindNamed("GRIFFIN");
+    const int ballista = kindNamed("BALLISTA");
+    std::vector<Session> cases;
+
+    Session sky = lostBattle(399.0f);
+    sky.gold = 9999.0f;
+    sky.record.enemySent[kSoldier] = 88;
+    sky.record.enemySent[griffin] = 88;
+    sky.record.enemySent[kArcher] = 88;
+    sky.record.enemySent[ballista] = 88;
+    sky.record.enemySent[kRunner] = 88;
+    sky.record.damageTakenFrom[griffin] = 900.0f;
+    sky.record.carried[0] = kSoldier;
+    sky.record.sent[ballista] = 40;
+    sky.record.heroSummonedAt = 2.0f;
+    sky.record.heroFellAt = 19.0f;
+    cases.push_back(sky);
+
+    Session partial = sky;
+    partial.record.carried[1] = kArcher;
+    partial.record.sent[kArcher] = 10;
+    cases.push_back(partial);
+
+    Session swarm = lostBattle(lanebattle::kBattleSeconds * 10.0f);
+    swarm.swarming = true;
+    swarm.gold = 9999.0f;
+    swarm.record.swarmSent = 9999;
+    swarm.beforeSwarm.castleDamageDealt = 9999.0f;
+    swarm.enemyUpgrades[static_cast<int>(lanebattle::Upgrade::Walls)] = 99;
+    swarm.beforeSwarm.damageTakenFrom[ballista] = 100.0f;
+    cases.push_back(swarm);
+
+    Session untouched = swarm;
+    untouched.beforeSwarm.castleDamageDealt = 0.0f;
+    untouched.enemyUpgrades[static_cast<int>(lanebattle::Upgrade::Walls)] = 0;
+    cases.push_back(untouched);
+
+    Session cannon = lostBattle(20.0f);
+    cannon.record.cannonDamageTaken = 100.0f;
+    cases.push_back(cannon);
+
+    bool fits = true;
+    bool drawable = true;
+    for (const Session& session : cases) {
+        const lanebattle::DefeatReport report = lanebattle::explainDefeat(session);
+        std::vector<std::string> lines = report.reasons;
+        lines.push_back(report.headline);
+        lines.push_back(report.enemyArmy);
+        for (const std::string& line : lines) {
+            if (textWidth(line, 2) > lanebattle::kDefeatTextWidth) {
+                fits = false;
+                std::printf("  too wide: %s\n", line.c_str());
+            }
+            for (char c : line) {
+                if (glyphFor(c) == kMissingGlyph) drawable = false;
+            }
+        }
+    }
+    check(fits, "every line of a defeat fits the panel without wrapping, at the longest");
+    check(drawable, "and has no character the font would draw as a box");
+}
+
+// The whole thing, played: soldiers alone against THE EYRIE's air wing.
+void testLosingTheEyrieToGriffinsSaysWhy() {
+    int eyrie = -1;
+    for (int stage = 0; stage < lanebattle::stageCount(); ++stage) {
+        if (std::string(lanebattle::stageKind(stage).name) == "THE EYRIE") eyrie = stage;
+    }
+    check(eyrie >= 0, "the campaign has an air stage to lose");
+    if (eyrie < 0) return;
+
+    Game game;
+    game.scenes.push(lanebattle::makeTitleScene());
+    game.driver.step();
+    lanebattle::Campaign& campaign = lanebattle::campaignOf(game.world);
+    campaign.stagesUnlocked = eyrie + 1;
+    // Soldiers only, in slot 2 — which is the key playBattle presses for one.
+    for (int slot = 0; slot < lanebattle::kLoadoutSlots; ++slot) campaign.loadout[slot] = -1;
+    campaign.loadout[kSoldier] = kSoldier;
+    game.driver.tap(SDL_SCANCODE_SPACE);
+    game.driver.step(2);
+    game.driver.tap(SDL_SCANCODE_RETURN);
+    game.driver.step(2);
+
+    static const int onlySoldiers[] = {kSoldier};
+    check(playBattle(game, onlySoldiers, 1) == -1, "soldiers alone lose THE EYRIE");
+    game.driver.step(2);  // the defeat screen goes up
+
+    const std::string screen = screenText(game.world);
+    check(screen.find("DEFEAT") != std::string::npos, "the defeat screen is up");
+    check(screen.find("YOUR CASTLE FELL AT") != std::string::npos, "it says what happened");
+    check(screen.find("THEY SENT") != std::string::npos &&
+              screen.find("GRIFFINS") != std::string::npos,
+          "and what they sent");
+    check(screen.find("NOTHING YOU CARRIED HITS THEIR GRIFFINS") != std::string::npos,
+          "and why: nothing carried could reach the sky");
+    // Which also proves the soldiers went out at all. This loadout has a hole
+    // in slot one, and a hole used to hide everything after it: the first run
+    // of this screen said nothing about soldiers and showed 979 gold unspent.
+    check(screen.find("YOU SENT ONLY SOLDIERS") != std::string::npos,
+          "and that one kind of unit is not an army");
+
+    // And the advice can be taken: back to the stage list, where A is the army.
+    const int unlocked = lanebattle::campaignOf(game.world).stagesUnlocked;
+    game.driver.tap(SDL_SCANCODE_Q);
+    game.driver.step(3);
+    check(lanebattle::findSession(game.world) == nullptr,
+          "Q after a loss leaves the battle instead of retrying it");
+    check(screenText(game.world).find("CHOOSE A BATTLE") != std::string::npos,
+          "for the stage list, where the army can be changed");
+    check(lanebattle::campaignOf(game.world).stagesUnlocked == unlocked,
+          "and leaving opens nothing it did not open before");
+}
+
+// The record is what the explanation is built from, so it is checked against
+// a fight whose every number is known.
+void testTheRecordKeepsCountOfTheFight() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+    const lanebattle::BattleRecord& record = game.session().record;
+
+    const Entity mine = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const Entity theirs = lanebattle::spawnUnit(game.world, false, kRunner);
+    check(record.sent[kSoldier] == 1, "your units are counted as they are sent");
+    check(record.enemySent[kRunner] == 1, "and so are theirs");
+
+    game.world.getComponent<Transform>(theirs)->x =
+        game.world.getComponent<Transform>(mine)->x + stats(kSoldier).range - 4.0f;
+    for (int frame = 0; frame < 600 && lanebattle::countUnits(game.world, false) > 0; ++frame) {
+        game.driver.step();
+    }
+    check(record.killed[kRunner] == 1, "a kill is credited to the kind that died");
+    check(record.damageTakenFrom[kRunner] > 0.0f,
+          "and the blows it landed first are credited to it too");
+
+    // A clear field for the second half, or the soldier that won the first
+    // stands between the archer and the blow meant for it. The record is on the
+    // session, so clearing the units leaves it alone.
+    game.suppressEnemySpawns();
+    const Entity doomed = lanebattle::spawnUnit(game.world, true, kArcher);
+    game.world.getComponent<Unit>(doomed)->health = 1.0f;
+    const Entity killer = lanebattle::spawnUnit(game.world, false, kSoldier);
+    game.world.getComponent<Transform>(killer)->x =
+        game.world.getComponent<Transform>(doomed)->x + stats(kSoldier).range - 4.0f;
+    for (int frame = 0; frame < 120 && lanebattle::countUnitsOfKind(game.world, true, kArcher) > 0; ++frame) {
+        game.driver.step();
+    }
+    check(record.lost[kArcher] == 1, "your losses are counted by kind");
+
+    // Their castle, and their cannon: a soldier of yours at their gate, too
+    // tough to die, with their gun loaded and paid for.
+    game.suppressEnemySpawns();
+    const Entity sieger = lanebattle::spawnUnit(game.world, true, kSoldier);
+    const Entity gate = lanebattle::findCastle(game.world, false);
+    game.world.getComponent<Transform>(sieger)->x =
+        game.world.getComponent<Transform>(gate)->x - stats(kSoldier).range + 4.0f;
+    game.world.getComponent<Unit>(sieger)->health = 1.0e6f;
+    game.session().enemyCannonCooldown = 0.0f;
+    game.session().enemyGold = 1.0e6f;
+    game.driver.step(240);
+    check(record.castleDamageDealt > 0.0f, "what you do to their castle is recorded");
+    check(record.cannonDamageTaken > 0.0f, "and so is what their cannon does to you");
+}
+
+void testTheRecordRemembersTheHerosOuting() {
+    Game game;
+    game.startPlaying();
+    game.suppressEnemySpawns();
+
+    // Two soldiers out ahead, so the escort count is a number that could be
+    // wrong — zero is what a count that never ran would say too.
+    lanebattle::spawnUnit(game.world, true, kSoldier);
+    lanebattle::spawnUnit(game.world, true, kSoldier);
+    game.driver.step(120);  // two seconds in; they have walked on ahead
+
+    game.driver.tap(SDL_SCANCODE_H);
+    game.driver.step();
+    const lanebattle::BattleRecord& record = game.session().record;
+    check(record.heroSummonedAt > 1.9f && record.heroSummonedAt < 2.2f,
+          "the record says when the hero came out");
+    check(record.heroEscort == 2, "and how many of yours were out there with it");
+
+    Entity hero = kInvalidEntity;
+    for (Entity entity : game.world.entities()) {
+        if (game.world.hasComponent<lanebattle::Hero>(entity)) hero = entity;
+    }
+    check(hero != kInvalidEntity, "the hero is on the field");
+    if (hero == kInvalidEntity) return;
+
+    game.world.getComponent<Unit>(hero)->health = 1.0f;
+    const Entity killer = lanebattle::spawnUnit(game.world, false, kSoldier);
+    game.world.getComponent<Transform>(killer)->x =
+        game.world.getComponent<Transform>(hero)->x + stats(kSoldier).range - 4.0f;
+    for (int frame = 0; frame < 120 && !game.session().heroFallen; ++frame) {
+        game.driver.step();
+    }
+    check(record.heroFellAt >= record.heroSummonedAt,
+          "and when it fell, which is what makes 'went out alone' a fact");
+}
+
 // front line ever moves.
 //
 // Banking the gold and sending a wave breaks it immediately — the extra
@@ -5475,6 +6436,7 @@ int main() {
     testKindsCostWhatTheTableSays();
     testThePopulationCapHolds();
     testUnitsHoldRank();
+    testTwoUnitsOnOneSpotDoNotWaitForEachOther();
     testMeleeWalksPastItsOwnArchers();
     testArchersOutrangeSoldiers();
     testTargetTiesGoToTheLowerEntityId();
@@ -5578,6 +6540,7 @@ int main() {
 
     testTheRosterIsLongerThanTheLoadout();
     testTheBarSellsWhatYouCarry();
+    testAHoleInTheLoadoutHidesNothingAfterIt();
     testCarryingAndDroppingOnTheArmyScreen();
     testAFullLoadoutRefusesMore();
     testTrainingCostsBankAndIsCapped();
@@ -5611,7 +6574,7 @@ int main() {
     testAFlyerAttacksTheGroundAndTheCastle();
     testTheSkyIsItsOwnQueue();
     testAStageCanFieldFlyers();
-    testAWallOfSoldiersCannotAnswerTheSky();
+    testTheSkyNeedsAnAnswer();
 
     testSizeClassesFollowTheMix();
     testAUnitShowsTheRightPose();
@@ -5626,6 +6589,36 @@ int main() {
     testAttacksLandAtTheSameRateAtAnyFrameRate();
     testDroppingAUnitLeavesItsHoleAcrossASave();
     testTheRealSaveHasToBeAskedForByName();
+
+    testTheClockSendsTheSwarm();
+    testTheSwarmQuickensAndStrengthens();
+    testTheSwarmGrowsWhereItStands();
+    testTheirArmyJoinsTheSwarm();
+    testTheSwarmDoesNotQueue();
+    testTheSwarmWaitsForAClearGate();
+    testTheSwarmHasACeiling();
+    testTheSwarmEndsAStalemate();
+    testYouCanStillWinDuringTheSwarm();
+    testTheClockCountsOnlyBattleTime();
+    testARetryStartsTheClockAgain();
+    testTheClockIsOnScreen();
+    testClockTextReadsLikeAClock();
+    testUnitNamesArePluralised();
+    testADefeatSaysWhatHappened();
+    testADefeatSaysWhatTheySent();
+    testADefeatNamesAnUnansweredSky();
+    testADefeatNamesAHeroThrownAway();
+    testADefeatNamesAHeroNeverSummoned();
+    testADefeatNamesAnArmyOfOneKind();
+    testADefeatNamesRangeWithNobodyInFront();
+    testADefeatNamesGoldLeftUnspent();
+    testASwarmDefeatSaysTheLinesHeld();
+    testADefeatNamesWhatHurtMost();
+    testADefeatSaysThreeThingsAtMostAndTheBestFirst();
+    testEveryDefeatLineFitsTheScreenAndTheFont();
+    testLosingTheEyrieToGriffinsSaysWhy();
+    testTheRecordKeepsCountOfTheFight();
+    testTheRecordRemembersTheHerosOuting();
 
     testABattleCanBeWon();
     testOneUnitTypeIsNotEnough();

@@ -32,6 +32,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>  // std::strcmp. See below: this line is why CI was red.
+#include <map>
 #include <string>
 #include <vector>
 
@@ -118,7 +119,40 @@ struct Battle {
         }
         session().enemyCannonCooldown = 1.0e9f;
     }
+
+    // Sends whatever in `cycle` is affordable and off cooldown, the way the
+    // probe's players do, for up to `frames` frames or until the battle ends.
+    // For the screens that have to be PLAYED to be honest: a defeat screen
+    // explains what the battle did, so a staged battle gives it nothing to say.
+    void play(const std::vector<std::pair<int, SDL_Scancode>>& cycle, int frames) {
+        SDL_Scancode holding = SDL_SCANCODE_UNKNOWN;
+        std::size_t next = 0;
+        for (int frame = 0; frame < frames && !session().gameOver; ++frame) {
+            if (holding != SDL_SCANCODE_UNKNOWN) {
+                driver.release(holding);
+                holding = SDL_SCANCODE_UNKNOWN;
+            }
+            for (std::size_t step = 0; step < cycle.size(); ++step) {
+                const auto& [kind, key] = cycle[(next + step) % cycle.size()];
+                if (session().spawnCooldowns[kind] > 0.0f) continue;
+                if (session().gold < lanebattle::unitKind(kind).cost) continue;
+                holding = key;
+                driver.hold(key);
+                next = (next + step + 1) % cycle.size();
+                break;
+            }
+            driver.step();
+        }
+        if (holding != SDL_SCANCODE_UNKNOWN) driver.release(holding);
+    }
 };
+
+int stageNamed(const char* name) {
+    for (int stage = 0; stage < lanebattle::stageCount(); ++stage) {
+        if (std::strcmp(lanebattle::stageKind(stage).name, name) == 0) return stage;
+    }
+    return 0;
+}
 
 }  // namespace
 
@@ -200,6 +234,158 @@ int previewSheet(Engine& engine, const char* path, int frameWidth,
     return 0;
 }
 
+// --- Motion study -------------------------------------------------------------
+//
+// A screenshot shows a moment; an animation is a sequence, and a sequence that
+// is wrong — frames skipped, a cycle strobing, a figure jittering on the spot —
+// looks fine in any single frame of it. This lays the sequence out.
+//
+// Every unit kind walks IN PLACE (its position is put back after each step, so
+// the camera never has to chase it), then stands, then swings. It is sampled
+// twenty times a second; the result is one PNG, a row per unit and a column per
+// moment, and a log of which pose and frame each unit showed at each moment.
+//
+//     ui_shots --motion
+int motionStudy(Engine& engine) {
+    using lanebattle::ArtFigure;
+    using lanebattle::Figure;
+    World world;
+    world.addComponent(world.createEntity(), Camera{});
+
+    const int kinds = std::min(lanebattle::unitKindCount(), 8);
+    std::vector<Entity> units;
+    std::vector<float> homes;
+    for (int kind = 0; kind < kinds; ++kind) {
+        const Entity unit = lanebattle::spawnUnit(world, true, kind);
+        const float x = 60.0f + static_cast<float>(kind) * 115.0f;
+        world.getComponent<Transform>(unit)->x = x;
+        units.push_back(unit);
+        homes.push_back(x);
+    }
+
+    constexpr int kBoxW = 110, kBoxH = 90;
+    constexpr int kSamples = 30, kStepsPerSample = 3;  // 20 samples a second
+    constexpr int kWalkUntil = 14, kStandUntil = 20;   // then they swing
+    const float dt = 1.0f / 60.0f;
+
+    SDL_Surface* sheet = SDL_CreateRGBSurfaceWithFormat(
+        0, kSamples * kBoxW, kinds * kBoxH, 32, SDL_PIXELFORMAT_ARGB8888);
+    if (!sheet) return 1;
+    std::vector<std::string> log(static_cast<std::size_t>(kinds));
+
+    for (int sample = 0; sample < kSamples; ++sample) {
+        for (int step = 0; step < kStepsPerSample; ++step) {
+            for (int i = 0; i < kinds; ++i) {
+                Unit* unit = world.getComponent<Unit>(units[i]);
+                Velocity* velocity = world.getComponent<Velocity>(units[i]);
+                const lanebattle::UnitKind& stats = lanebattle::unitKind(unit->kind);
+                velocity->dx = sample < kWalkUntil ? stats.speed : 0.0f;
+                // A blow, as fight() would land one, at the start of the swing
+                // phase and again every attack delay after it.
+                if (sample >= kStandUntil && step == 0 &&
+                    (sample - kStandUntil) %
+                            std::max(1, static_cast<int>(stats.attackDelay * 20.0f)) == 0) {
+                    unit->swing = 1.0f;
+                }
+            }
+            engine::RunBuiltinSystems(world, dt);
+            lanebattle::animateUnits(world, dt);
+            // The treadmill: back where it started, so only the animation moves.
+            for (int i = 0; i < kinds; ++i) {
+                world.getComponent<Transform>(units[i])->x = homes[static_cast<std::size_t>(i)];
+            }
+            lanebattle::animateUnits(world, 0.0f);  // re-place the art on the reset feet
+        }
+
+        engine.drawWorld(world);
+        int width = 0, height = 0;
+        const std::vector<Uint32> pixels = engine.captureFrame(width, height);
+        for (int i = 0; i < kinds; ++i) {
+            const Unit* unit = world.getComponent<Unit>(units[i]);
+            const Transform* body = world.getComponent<Transform>(units[i]);
+            const lanebattle::UnitKind& stats = lanebattle::unitKind(unit->kind);
+            const int feetX = static_cast<int>(body->x + stats.width / 2.0f);
+            const int feetY = static_cast<int>(body->y + stats.height);
+            // The box a unit is photographed in: centred on its feet, mostly above.
+            for (int y = 0; y < kBoxH; ++y) {
+                const int sy = feetY - kBoxH + 8 + y;
+                Uint32* row = reinterpret_cast<Uint32*>(
+                    static_cast<Uint8*>(sheet->pixels) + (i * kBoxH + y) * sheet->pitch);
+                for (int x = 0; x < kBoxW; ++x) {
+                    const int sx = feetX - kBoxW / 2 + x;
+                    const bool inside = sx >= 0 && sx < width && sy >= 0 && sy < height;
+                    // A line where the feet should be, so a bob or a float shows.
+                    const bool groundLine = y == kBoxH - 8;
+                    row[sample * kBoxW + x] =
+                        groundLine ? 0xff305030u : (inside ? pixels[sy * width + sx] : 0xff000000u);
+                }
+            }
+            char entry[32];
+            const Animation* animation = world.getComponent<Animation>(unit->figure);
+            const ArtFigure* art = world.getComponent<ArtFigure>(unit->figure);
+            std::snprintf(entry, sizeof entry, "%c%d ",
+                          art ? "IMAHSD?"[std::clamp(art->pose, 0, 6)] : '-',
+                          animation ? animation->frame : -1);
+            log[static_cast<std::size_t>(i)] += entry;
+        }
+    }
+
+    const std::string path = gOutputDirectory + "/motion-study.png";
+    IMG_SavePNG(sheet, path.c_str());
+    SDL_FreeSurface(sheet);
+    std::printf("\nMotion study: a row per unit, a column every 1/20 s. Walking, then\n"
+                "standing, then swinging. Pose letters: I idle, M move, A attack,\n"
+                "H hurt, D death; the number is the frame shown.\n\n");
+    for (int i = 0; i < kinds; ++i) {
+        const Unit* unit = world.getComponent<Unit>(units[i]);
+        std::printf("  %-9s %s\n", lanebattle::unitKind(unit->kind).name,
+                    log[static_cast<std::size_t>(i)].c_str());
+    }
+    std::printf("\n  %s\n", path.c_str());
+
+    // The treadmill shows the cycles; a real battle shows what the cycles
+    // survive. Units queue behind a front line, stop and start as it moves,
+    // take hits, swing — and every change of pose restarts a row from its first
+    // frame. Twenty seconds of a real stage, counting how often each unit's
+    // pose changes and how often a walk is cut off before it ever finishes.
+    {
+        Battle battle;
+        battle.start(2);
+        int changes = 0, cutWalks = 0, samples = 0;
+        std::map<Entity, int> lastPose;
+        std::map<Entity, int> walkFrames;  // frames shown since the walk began
+        for (int step = 0; step < 60 * 20; ++step) {
+            // Keep both sides sending, so there is a queue to live in.
+            if (step % 45 == 0) lanebattle::spawnUnit(battle.world, true, step % 90 ? 1 : 2);
+            battle.driver.step();
+            for (auto& [entity, art] : battle.world.view<ArtFigure>()) {
+                const Animation* animation = battle.world.getComponent<Animation>(entity);
+                auto previous = lastPose.find(entity);
+                if (previous != lastPose.end() && previous->second != art.pose) {
+                    ++changes;
+                    if (previous->second == static_cast<int>(lanebattle::Pose::Move) &&
+                        walkFrames[entity] < 6) {
+                        ++cutWalks;  // left the walk before one full cycle
+                    }
+                    walkFrames[entity] = 0;
+                }
+                if (art.pose == static_cast<int>(lanebattle::Pose::Move) && animation) {
+                    walkFrames[entity] = std::max(walkFrames[entity], animation->frame + 1);
+                }
+                lastPose[entity] = art.pose;
+                ++samples;
+            }
+        }
+        const float figureSeconds = static_cast<float>(samples) / 60.0f;
+        std::printf("\n  A real battle, 20 s: %d pose changes over %.0f unit-seconds"
+                    " (%.2f a second per unit),\n  %d walks cut off before one full"
+                    " cycle.\n",
+                    changes, figureSeconds,
+                    figureSeconds > 0 ? changes / figureSeconds : 0.0f, cutWalks);
+    }
+    return 0;
+}
+
 int main(int argc, char** argv) {
     // No window, no GPU. Set before the Engine touches SDL_Init.
     SDL_setenv("SDL_VIDEODRIVER", "dummy", 1);
@@ -214,8 +400,9 @@ int main(int argc, char** argv) {
     // `--sheet` is a different job from the screen tour, so it does not take
     // the output directory as argv[1]; it always writes beside the binary.
     const bool sheetMode = argc > 1 && std::strcmp(argv[1], "--sheet") == 0;
+    const bool motionMode = argc > 1 && std::strcmp(argv[1], "--motion") == 0;
 
-    if (argc > 1 && !sheetMode) {
+    if (argc > 1 && !sheetMode && !motionMode) {
         gOutputDirectory = argv[1];
     } else if (char* base = SDL_GetBasePath()) {
         gOutputDirectory = std::string(base) + "ui_shots";
@@ -265,6 +452,7 @@ int main(int argc, char** argv) {
     lanebattle::loadPresentation();
     lanebattle::setTextureCache(&engine.textures());
     lanebattle::seedPresentation(12345);
+    if (motionMode) return motionStudy(engine);
 
     std::printf("\nWriting screens to %s\n\n", gOutputDirectory.c_str());
 
@@ -481,18 +669,49 @@ int main(int argc, char** argv) {
         battle.driver.step(6);
         shoot(engine, battle.world, "11-victory");
     }
+    // A defeat PLAYED rather than staged, because the screen now explains what
+    // the battle did: soldiers alone against THE EYRIE's air wing, which is the
+    // loss the defeat screen was written to explain.
     {
         Battle battle;
-        battle.start(0);
-        battle.quietEnemy();
-        const Entity theirs = lanebattle::spawnUnit(battle.world, false, kSoldier);
-        const Entity myCastle = lanebattle::findCastle(battle.world, true);
-        battle.world.getComponent<Transform>(theirs)->x =
-            battle.world.getComponent<Transform>(myCastle)->x +
-            lanebattle::kCastleWidth + 4.0f;
-        battle.world.getComponent<Castle>(myCastle)->health = 1.0f;
-        battle.driver.step(6);
+        battle.scenes.push(lanebattle::makeTitleScene());
+        battle.driver.step();
+        lanebattle::Campaign& campaign = lanebattle::campaignOf(battle.world);
+        const int eyrie = stageNamed("THE EYRIE");
+        campaign.stagesUnlocked = eyrie + 1;
+        for (int slot = 0; slot < lanebattle::kLoadoutSlots; ++slot) campaign.loadout[slot] = -1;
+        campaign.loadout[1] = kSoldier;
+        battle.driver.tap(SDL_SCANCODE_SPACE);
+        battle.driver.step(2);
+        battle.driver.tap(SDL_SCANCODE_RETURN);
+        battle.driver.step(2);
+        battle.play({{kSoldier, SDL_SCANCODE_2}},
+                    static_cast<int>(lanebattle::kBattleSeconds * 60.0f));
+        battle.driver.step(3);
         shoot(engine, battle.world, "12-defeat");
+    }
+
+    // And the clock: the mixed army that holds THE GATES and never breaks them,
+    // a minute and a half in and then fast-forwarded — the red warning in the
+    // last half-minute, the swarm arriving, and the battle it then decides,
+    // played to the end.
+    {
+        Battle battle;
+        battle.start(stageNamed("THE GATES"));
+        const std::vector<std::pair<int, SDL_Scancode>> mixed = {
+            {kSoldier, SDL_SCANCODE_2}, {kSoldier, SDL_SCANCODE_2}, {kArcher, SDL_SCANCODE_3}};
+        battle.play(mixed, 90 * 60);
+        battle.session().elapsed = lanebattle::kBattleSeconds - 25.0f;
+        battle.play(mixed, 30);
+        shoot(engine, battle.world, "13-battle-swarm-coming");
+
+        battle.session().elapsed = lanebattle::kBattleSeconds - 0.05f;
+        battle.play(mixed, 60 * 2);
+        shoot(engine, battle.world, "14-the-swarm");
+
+        battle.play(mixed, 60 * 300);
+        battle.driver.step(3);
+        shoot(engine, battle.world, "15-defeat-to-the-swarm");
     }
 
     std::printf("\n%d screens written. Now go and look at them.\n\n", gShotCount);
