@@ -1,5 +1,7 @@
 # Animated environments
 
+For the current independently animated objects, sprite-frame details and additional per-effect controls, see [independent-animation.md](independent-animation.md).
+
 The environment preview and Lane Battle share `EnvironmentSystem` and `WeatherSystem`. The original ruined valley remains scene 0; six generated landscapes add storm ruins, a frozen citadel, a blood-moon wasteland, an ashen battlefield, a haunted marsh and a desert necropolis.
 
 ## Running

@@ -32,13 +32,13 @@ spawn bar wanted a mouse; scenery at a distance wanted a parallax factor,
 because `screenSpace` was a boolean with nothing between the world and the
 screen; and a roster worth rebalancing wanted a way to read a text file, which
 the engine had never had. Half its slices have needed nothing at all, and it is
-now the largest thing here by a distance — about 5,400 lines against the
-engine's 2,500.
+now the largest thing here by a distance — about 7,800 lines against the
+engine's 2,800.
 
 It is **not** trying to be fast, complete, or production-ready. Storage uses
 `std::unordered_map` instead of packed arrays, there's no sprite batching, no
 scene graph, collision compares every pair, and the asset handling is one cache
-that loads PNGs. Those are deliberate: every one of them is a place where the
+that loads images (PNG, and SVG through SDL_image). Those are deliberate: every one of them is a place where the
 simple version is easier to read and nothing here is slow enough to care. (Text
 *is* batched — a whole string becomes one `SDL_RenderFillRects` — because a
 HUD at 3,200 draw calls a frame was the one place where it did.)
@@ -54,21 +54,27 @@ an optimisation is worth doing.
 
 **The live tree is now growing a fourth game**, Lane Battle, and the engine
 grows only where that game demands it — the same rule that produced everything
-in v1.0. Twelve slices in, it has demanded four things: `View.h`, mouse input,
-a parallax factor, and `DataFile.h` (which now writes as well as reads). Half
-those slices needed no engine code at all, and the roadmap's engine list is
-finished.
+in v1.0. Across its twelve slices it demanded `View.h`, mouse input, a parallax
+factor and `DataFile.h` (which now writes as well as reads); the art brought
+`Animation` and `Sprite.flipX`; and a review found two things the engine had
+wrong about input — a press and release in one frame vanished, and Escape
+closed windows from screens that wanted it — which became per-frame input edges
+and `Scene::escapeQuits`. Half the slices needed no engine code at all.
 
 Since then the game has gone well past the roadmap, which never had these:
 a hero with a three-path upgrade tree, a loadout (you own seven unit types and
-carry four), per-unit training, and a campaign retuned three times against a
-simulator. `docs/v3-plan.md` has the running notes — including how measuring
-whole battles rather than individual rules found the game unwinnable twice
-before it was playable — and `docs/roadmap-cartoonwars.md` has what is left of
-the original plan.
+carry four), per-unit training, a campaign retuned against a simulator, and now
+**artwork** — every unit, both teams, the hero by path, combat effects, seven
+painted environments and weather, most of it generated with ChatGPT and all of
+it measured before use. `docs/v3-plan.md` has the running notes — including how
+measuring whole battles rather than individual rules found the game unwinnable
+twice before it was playable — and `docs/roadmap-cartoonwars.md` has what is
+left of the original plan.
 
-**1,104 assertions** across five test binaries, plus three measuring tools that
-pass and fail nothing: a benchmark, a campaign simulator, and a screenshotter.
+**1,453 assertions** across five test binaries, a sixth test that renders every
+environment and weather combination (72 of them) and holds the effect limits to
+account, plus four measuring tools that pass and fail nothing: a benchmark, a
+campaign simulator, a screenshotter and an art probe.
 
 The exercises at the bottom are **exercises, not debt** — each is a next thing
 to learn about the engine, not something missing from it. What the *game* is
@@ -81,8 +87,8 @@ engine_project/
 ├── CMakeLists.txt
 ├── include/engine/
 │   ├── ECS.h           Entity type + component storage + World
-│   ├── Components.h    Transform, Velocity, Sprite, Polygon, Camera, ...
-│   ├── Systems.h       Movement and Lifetime (and includes Collision.h)
+│   ├── Components.h    Transform, Velocity, Sprite, Polygon, Camera, Animation, ...
+│   ├── Systems.h       Movement, Lifetime and Animation (and includes Collision.h)
 │   ├── Collision.h     Overlap tests + contact normals, boxes and circles
 │   ├── Timing.h        TickTimer (variable frames -> fixed-length ticks)
 │   ├── DataFile.h      Reading and writing text data files (balance, saves)
@@ -96,29 +102,42 @@ engine_project/
 ├── src/engine/
 │   └── Engine.cpp      SDL setup, the loop, and the built-in render system
 ├── src/game/
-│   ├── asteroids/      Asteroids.h/.cpp + a 3-line main.cpp
-│   ├── breakout/       Breakout.h/.cpp + a 3-line main.cpp
-│   └── lanebattle/     LaneBattle.h/.cpp + a 3-line main.cpp
+│   ├── asteroids/      Asteroids.h/.cpp + a small main.cpp
+│   ├── breakout/       Breakout.h/.cpp + a small main.cpp
+│   └── lanebattle/     LaneBattle.h/.cpp  the rules, the scenes and the HUD
+│                       Art.h/.cpp         unit art, poses, corpses, combat effects
+│                       Weather.h/.cpp     rain, snow, fog... spawned at random
+│                       Environment.h/.cpp seven painted scenes and their ambience
+│                       main.cpp
 ├── tests/
 │   ├── Harness.h             Drives scenes headlessly, no window needed
 │   ├── engine_tests.cpp      Asserts about the engine's pure logic
 │   ├── asteroids_tests.cpp   Asserts about Asteroids' rules
 │   ├── breakout_tests.cpp    Asserts about Breakout's rules
-│   ├── lanebattle_tests.cpp  Asserts about Lane Battle's rules
+│   ├── lanebattle_tests.cpp  Asserts about Lane Battle's rules and its data files
 │   ├── render_tests.cpp      Draws frames headlessly and checks the pixels
+│   ├── weather_preview.cpp   A live preview of scenes and weather, and --verify
 │   ├── engine_bench.cpp      Measures the naive parts; not a pass/fail test
 │   ├── campaign_probe.cpp    Plays the whole campaign 14 ways; prints a table
-│   └── ui_shots.cpp          Writes a PNG of all 16 screens; cannot fail
+│   ├── ui_shots.cpp          Writes a PNG of all 16 screens; cannot fail
+│   └── art_probe.cpp         Measures sprite sheets: alpha, grid, feet; cannot fail
 ├── .github/workflows/
 │   └── ci.yml          Builds and tests on Linux and macOS
-├── docs/               Screenshots, v3-plan.md, roadmap-cartoonwars.md
+├── docs/               v3-plan.md (the running notes), roadmap-cartoonwars.md,
+│                       repository-review.md, the weather and environment notes
 ├── CHANGELOG.md        What v1.0 contains
 ├── run.bat             Double-click on Windows: build and play
 ├── run.sh              The same, for Linux and macOS
-├── manual_testing/     verify (do the checks pass) + mutate (would they notice?)
+├── manual_testing/     verify + mutate, the Linux CI check, and screenshot sets
 ├── assets/
 │   ├── asteroids.png   Ship icon + rock, for the HUD and title screen
-│   └── lanebattle/units.txt   Roster, upgrades and the campaign; edit, no rebuild
+│   └── lanebattle/
+│       ├── units.txt       Roster, upgrades, campaign, and which art each unit wears
+│       ├── art.txt         Facts about every sheet, measured by art_probe
+│       ├── effects.txt     How many of each effect, how often, how big
+│       ├── lane-battle-gba-art/   The generated unit, effect and scenery sheets
+│       ├── environments/   The seven painted battlefields
+│       └── vector/         SVG weather shapes and animated ambience
 └── archive/
     ├── version_1/      Snake: the first engine, frozen
     └── version2/       This release (v1.0), frozen
@@ -134,9 +153,10 @@ The build produces these targets, and the split is the point:
 | `engine_tests` | Asserts about the engine. Links `engine`. |
 | `asteroids_tests` / `breakout_tests` / `lanebattle_tests` | Asserts about each game's rules. |
 | `render_tests` | Draws real frames through SDL's `dummy` video driver and asserts on the pixels read back. No window, no GPU. |
+| `weather_preview` → `weather_render_tests` | Run plainly it is a live preview of every scene and weather. With `--verify` it is a ctest: all 72 scene × weather combinations rendered and checked, the effect limits held to account, the weather proved random and repeatable by seed, and the art worn in a real battle. |
 | `asteroids_starts` / `breakout_starts` / `lanebattle_starts` | Runs each shipped game for half a second headlessly and requires it to exit cleanly. The only tests that execute `main.cpp` and the real game loop. |
 
-And three **instruments**, which are built but deliberately not registered with
+And four **instruments**, which are built but deliberately not registered with
 `ctest`. They cannot pass or fail; they produce a number, a table or a picture,
 and a person reads it. Each exists because a class of problem kept getting past
 the assertions:
@@ -145,9 +165,10 @@ the assertions:
 | --- | --- | --- |
 | `engine_bench` | Is it slow? | "Optimise when it's slow" is useless advice until someone measures. It has said no to a spatial grid three times. |
 | `campaign_probe` | Is it fair? | Plays every stage 14 different ways and prints who beat what. `--sweep` finds the highest enemy income each player can still beat, which is how the stage table gets placed rather than guessed. |
-| `ui_shots` | Is it readable? | Writes a PNG of every screen with no window needed. Its first run found five bugs, four of which had shipped for months. |
+| `ui_shots` | Is it readable? | Writes a PNG of every screen with no window needed — as the player sees it, art and all. Its first run found five bugs, four of which had shipped for months. |
+| `art_probe` | Is this art usable? | Reads each sprite sheet's pixels: is the background really transparent, where each frame sits, where the feet are. `--art` writes `art.txt` from those measurements. The generator was asked for 288-pixel sheets and delivered 1254-pixel ones, so nothing about an image can be taken from its request. |
 
-Every game is shaped the same way — rules in a library, behind a three-line
+Every game is shaped the same way — rules in a library, behind a small
 `main.cpp`. That split exists for one reason: a game whose logic lives inside
 `main.cpp` cannot be tested, because reaching any of it means opening a window.
 With the rules in a library, the test binaries link the same code the player
@@ -183,8 +204,17 @@ ever sees as scenes it updates and components it draws.
 
 ## Where the numbers live
 
-Every number that balances Lane Battle is in one of three places, and it is
-worth knowing which before changing anything.
+Every number that balances Lane Battle is in one of three places, and every
+number about how it LOOKS is in two more. Worth knowing which before changing
+anything.
+
+| File | What it holds | Changes a battle? |
+| --- | --- | --- |
+| `assets/lanebattle/units.txt` | The roster, upgrades, the campaign — and which art each unit wears | yes (the numbers); no (the art keys) |
+| `src/game/lanebattle/LaneBattle.h` | The compiled-in defaults, and what a file cannot reach | yes |
+| the save file | Your campaign: stages, bank, perks, hero, loadout, training | yes |
+| `assets/lanebattle/art.txt` | Facts about each image, measured by `art_probe` | never |
+| `assets/lanebattle/effects.txt` | How many of each effect, how often, how big | never |
 
 ### `assets/lanebattle/units.txt` — edit this, no rebuild
 
@@ -195,9 +225,16 @@ build directory.
 
 | Section | Repeats | What it sets |
 | --- | --- | --- |
-| `[unit]` | once per unit type | `cost` `health` `damage` `range` `attack_delay` `speed` `cooldown` `flying` `hits_air` `width` `height`, six colour channels, and — when there is art — `sheet` `frame_width` `frame_height` `frame_count` `frame_seconds` |
-| `[upgrade]` | once per in-battle upgrade | `base_cost` `cost_growth` `effect` for INCOME / WALLS / SUPPLY |
+| `[unit]` | once per unit type | `cost` `health` `damage` `range` `attack_delay` `speed` `cooldown` `flying` `hits_air` `width` `height`, six colour channels — and its art: `sheet` `enemy_sheet` `art_height` `blow`, plus `sheet_warden` `sheet_falconer` `sheet_chaplain` on the hero |
+| `[upgrade]` | once per in-battle upgrade | `cost` `growth` `effect` for INCOME / WALLS / SUPPLY — the only three; CHAMPION is a perk, and perks live in the header |
 | `[stage]` | once per campaign stage | `enemy_income` `enemy_castle_health` `wave_size` `composition` |
+
+The art keys change nothing a battle computes. A unit's footprint for combat is
+its `width` × `height`; `art_height` is only how tall its picture stands, which
+is how the art can be drawn at a readable size without moving one number the
+campaign was tuned against — the simulator's table is identical with and without
+it. (`frame_width` `frame_height` `frame_count` `frame_seconds` still work, for a
+sheet that `art.txt` does not describe: slice 5b's original path.)
 
 Two different merge rules, and the difference matters:
 
@@ -261,25 +298,72 @@ real file with `trunc` destroys the old save as its first act, which makes every
 later failure — a full disk, a lost drive, a killed process — leave a corrupt
 file where a working one was.
 
+### `assets/lanebattle/art.txt` — measured, not typed
+
+One `[sheet]` per image: its cell size, frames per row, rows, where the **feet**
+are in a cell (or an effect's centre), and how tall the standing figure is.
+The game reads every sheet's geometry from here, and **a sheet this file does
+not describe is not used** — the unit keeps its coloured block, exactly as with
+no art at all.
+
+Do not edit it by hand. It is written by measuring the pixels:
+
+```bash
+build/Release/art_probe --art > assets/lanebattle/art.txt
+```
+
+— because nothing about a generated image can be taken from what was asked
+for. The unit sheets were requested as 288-pixel grids of 48-pixel cells and
+arrived as 1254-pixel grids of 209; the effects were asked for as strips of six
+square frames and came back three times as wide as they are tall. The feet
+matter most: a unit anchored by the middle of its picture floats whenever it
+raises a sword, and one anchored by the probe's measured feet stands on the
+ground in every pose.
+
+### `assets/lanebattle/effects.txt` — how much, how often, how big
+
+The knobs on everything that appears in numbers. Nothing here changes a battle:
+effects, weather and ambience spawn from their own dice, never from anything a
+fight reads.
+
+| Section | What it controls |
+| --- | --- |
+| `[sizes]` | how much smaller a SMALL one is than a medium, and how much bigger a LARGE one |
+| `[effects]` | `limit` — every combat effect together, on the whole screen |
+| `[effect]` | one per combat effect: `sheet`, `size` (a medium one, in pixels), the `small`/`medium`/`large` mix, `chance` (percent of blows that show it), `limit`, `seconds`, and `flies`/`speed` for projectiles |
+| `[weather]` | one per preset (RAIN, SNOW, ...): `limit` on screen at once, `spawn` per second, a medium particle's `width`/`height`, and the size mix |
+| `[ambient]` | CLOUDS, FOG and DUST: `limit`, `spawn`, a medium one's `size`, and the mix |
+
+Two rules make it behave. **Limits are hard**: however hard it rains or however
+big the melee, there are never more than `limit` of a thing, and spawning simply
+waits — a busy fight shows a few sword arcs, not thirty. And **size is depth**:
+a small raindrop or cloud is far away, so it is fainter and slower and stays
+behind the fight; a large one is near, falls or drifts faster, and a few pass in
+front of the units at low opacity. Three sizes that all moved alike would look
+like three stamps. Merges by name like the roster, and every number is clamped
+on the way in.
+
 ## How it fits together
 
 **The game loop** (`Engine::run`, in `Engine.cpp`) is the heartbeat. Every
-iteration does five things, in this order, forever, until the window closes:
+iteration does six things, in this order, forever, until the window closes:
 
 1. **Time** — measure how many seconds elapsed since the last frame
    (`dt`, "delta time"). Every later step multiplies by `dt` so the game
    runs at the same *speed* whether it's rendering at 30fps or 300fps.
-2. **Input** — drain SDL's event queue and update `InputManager`'s "which
-   keys are held" state.
-3. **Update** — run the built-in systems (`MovementSystem`, then
-   `LifetimeSystem`), then call your game's own logic: either an `onUpdate`
-   callback or the top scene.
+2. **Input** — drain SDL's event queue into `InputManager`: which keys are
+   held, and which went down or up during this frame. Escape stops the loop
+   here unless the top scene claims it (`Scene::escapeQuits`).
+3. **Update** — run the built-in systems (`MovementSystem`, `LifetimeSystem`,
+   then `AnimationSystem`), then call your game's own logic: either an
+   `onUpdate` callback or the top scene.
 4. **Deletions** — destroy every entity queued with `destroyLater()` during
    the update. This happens here, and only here, because it's the one point
    in the frame where nothing is iterating a component pool.
 5. **Render** — sprites, polygons and text, in one list sorted by layer.
 6. **Frame limiting** — if the frame finished early, sleep the rest so the
-   loop doesn't spin at 100% CPU.
+   loop doesn't spin at 100% CPU. Skipped when vsync is already pacing the
+   frames, because the two fighting each other halved a 144Hz display.
 
 **The ECS** (`ECS.h`, `Components.h`) is how the world's state is
 represented. An `Entity` is just a number — it has no fields and no methods.
@@ -464,12 +548,16 @@ went up) into two questions game code can ask every frame.
 `wasKeyPressed(SDL_SCANCODE_P)` is for one-shot actions like pausing, and it
 matters more than it sounds: a key stays physically down for six or more
 frames, so a menu built on `isKeyDown` would fire six times and toggle itself
-back. `Engine::processEvents` is the only place that reads `SDL_Event`s.
+back. The edge is recorded as the event arrives rather than inferred from the
+held state afterwards — a key pressed and released inside one frame leaves the
+held state exactly as it found it, and the inferring version dropped that
+press. `Engine::processEvents` is the only place that reads `SDL_Event`s.
 
-**The game** (`main.cpp`) is Asteroids, and it's where every game-shaped
-decision lives: how hard the ship accelerates, how long a bullet survives,
-what a rock breaks into, and the meaning of the three components it invents
-for itself (`Ship`, `Bullet`, `Rock`). `World` stores components keyed by C++
+**The games** live in `src/game/`, each behind a small `main.cpp`. Take
+Asteroids (`src/game/asteroids/`): it is where every game-shaped decision lives
+— how hard the ship accelerates, how long a bullet survives, what a rock breaks
+into, and the meaning of the three components it invents for itself (`Ship`,
+`Bullet`, `Rock`, in `Asteroids.h`). `World` stores components keyed by C++
 type, so game code defines its own without the engine knowing they exist.
 
 Thrust is an *acceleration*: holding Up adds to the ship's velocity rather
@@ -500,8 +588,11 @@ pass straight through. Every engine meets this; sub-frame steps are the
 standard first answer, and they make the behaviour frame-rate independent
 besides.
 
-Notice what game code still never does: touch SDL, or write a render loop. It
-only describes *what exists* and *what should happen when*.
+Notice what game code still never does: write a render loop. It only describes
+*what exists* and *what should happen when*. It very nearly never touches SDL
+either — the exception is Lane Battle's `Environment.cpp`, which asks SDL for a
+texture's size and for nearest-neighbour sampling on its paintings, two things
+the engine's texture cache does not yet offer.
 
 ## How this grew
 
@@ -610,7 +701,7 @@ Terminal", though some need that enabled in their preferences first.
 | A C++17 compiler | `if constexpr`-era language features, structured bindings, `inline` variables | MSVC 19.4x (Visual Studio 2022, v17.13) |
 | CMake 3.15 or newer | generates the build files | 4.4.3 |
 | SDL2 2.0.10+ | window, renderer, input, timing | 2.32.10 |
-| SDL2_image 2.0+ | loads `assets/asteroids.png` | 2.8.12 |
+| SDL2_image 2.0+, with SVG | loads every image: `asteroids.png`, Lane Battle's sheets and paintings, and its SVG weather shapes | 2.8.12 |
 | Git | only on Windows, to fetch vcpkg | any |
 
 On Windows you also need **Visual Studio 2022** with the *Desktop development
@@ -618,7 +709,13 @@ with C++* workload (that's what provides the MSVC compiler and MSBuild; the
 free Community edition is fine). CMake ships with that workload, so a separate
 CMake install is optional.
 
-No audio library is needed — the game is silent.
+No audio library is needed — the games' sounds are synthesised in code (see
+*Audio* below), so there is nothing to decode.
+
+SVG support comes built into SDL_image 2.6 and later, and the packages above
+have it. An SDL_image without it still runs every game: Lane Battle's weather
+shapes fail to load and its scenery falls back to procedural hills, which
+`weather_render_tests` reports as a failure rather than approving.
 
 ### Graphics drivers
 
@@ -732,22 +829,32 @@ the whole `Release` folder.
 
 ### Running the tests
 
-The same build produces two test binaries. Neither needs a window or a GPU,
-and both finish in milliseconds:
+The same build produces five test binaries, a sixth test that renders, and
+three that start the real games — nine ctest entries. None needs a display or
+a GPU; the whole run takes under a minute, most of it Lane Battle's whole-battle
+tests and the 72 rendered weather combinations:
 
 ```powershell
 ctest --test-dir build -C Release
 ```
 
-Either can also be run directly, which prints how many checks passed.
+Any of them can also be run directly, which prints how many checks passed.
 
 **`engine_tests`** covers the engine's arithmetic: the overlap tests
 (including the strict edge-touching rule a grid game depends on, and the
 circle-past-a-corner case a naive "grow the box by the radius" test gets
 wrong), contact normals and depths for all three shape pairs, reflection,
 `TickTimer`'s accumulation and zero-interval guard, deferred destruction, the
-movement and lifetime systems, the exact ordering of scene-stack transitions,
-and every glyph in the font table.
+movement, lifetime and animation systems, input edges, data files, the exact
+ordering of scene-stack transitions, and every glyph in the font table.
+
+**`lanebattle_tests`** covers Lane Battle's rules the same way, and the data it
+ships: that `units.txt`, `art.txt` and `effects.txt` agree with each other — every
+sheet a unit names is measured and exists, every blow names an effect. A name out
+of step fails silently in the game (the unit just keeps its block), so this is
+the only place it can fail loudly. **`render_tests`** checks real pixels, and
+**`weather_render_tests`** renders every scene and weather and checks the art in
+a real battle.
 
 **`asteroids_tests`** and **`breakout_tests`** cover the games' *rules*, using
 `tests/Harness.h` to run scenes with no window: starting a round, firing,
@@ -784,10 +891,19 @@ beside it costs a thousand times more.
 
 The `scan` column is the same quadratic shape without the overlap maths — for
 each entity, walk them all and keep the nearest one ahead — which is what a
-lane battler runs *instead* of collision. **Lane Battle peaks around 140
-entities**, so it lives in the third row, and this is why the spatial grid on
-the roadmap has been declined three times. It is the row you read before
-believing anything here needs optimising.
+lane battler runs *instead* of collision. What matters for it is how many
+**units** there are — targeting walks the units and the two castles, never the
+scenery — and a battle holds at most twenty. That is the first row, and it is
+why the spatial grid on the roadmap has been declined three times.
+
+The *total* is another matter now. A real battle with art holds about **360
+entities** — `weather_render_tests` prints the number — because the weather owns
+a pool of 160 particles, the environment another hundred or so pieces of drifting
+ambience, and every unit a separate animated figure. Those are drawn, not
+scanned, so the pair loop never sees them; but they are sorted and drawn every
+frame, and draw cost is the one thing `engine_bench` does not measure. It is the
+row you read before believing anything here needs optimising — and the row it
+does not have is the next one worth adding.
 
 Asteroids runs about 26 colliding entities; Breakout has 65 but sidesteps the
 system entirely (only the ball moves, so it tests the ball against each
@@ -811,23 +927,30 @@ is missing from it — and rendering is no longer checked by eye: `render_tests`
 draws real frames through SDL's `dummy` driver and asserts on the pixels read
 back, and `ui_shots` writes a PNG of every screen for a person to look at.
 
-### The other two instruments
+### The other three instruments
 
 ```bash
 ./build/Release/campaign_probe            # every stage, 14 ways, win/loss table
 ./build/Release/campaign_probe --detail   # plus seconds, castle left, shots, upgrades
 ./build/Release/campaign_probe --sweep    # highest enemy income each player still beats
 ./build/Release/ui_shots                  # 16 PNGs into ui_shots/ beside the binary
+./build/Release/ui_shots --sheet <path> 209 209 6 2   # one row of a sheet, mirrored
+./build/Release/art_probe                 # every sheet: alpha, grid, feet, bleeding
+./build/Release/art_probe --art           # the same, written as art.txt
+./build/Release/art_probe --show <path> 6 6   # haze in magenta, the grid in green
 ```
 
-Neither is registered with `ctest`, for the same reason `engine_bench` is not:
+None is registered with `ctest`, for the same reason `engine_bench` is not:
 they answer questions assertions cannot. `campaign_probe` is how the stage
 table gets *placed* rather than guessed — `--sweep` finds each strategy's
 threshold, and a stage goes between two of them so that it asks for the thing
 that separates them. `ui_shots` is how anything about the screen gets noticed
-at all.
+at all, and it photographs the game as a player sees it — with the art, and with
+fixed dice so the random weather repeats. `art_probe` is how a new image gets
+checked before it is wired in. Paths for both are relative to the binary and
+start `assets/`.
 
-A warning that has cost several hours: **rebuild before believing either of
+A warning that has cost several hours: **rebuild before believing any of
 them.** Assets are copied next to the binary at build time, so editing
 `units.txt` and re-running measures the previous version and prints a
 completely believable result. `campaign_probe` prints the stage table and hero
@@ -883,7 +1006,9 @@ ball. Missing the ball costs one of three lives.
 An eight-stage campaign that remembers where you got to. Pick a battle from
 the list; winning one opens the next. Each stage gives the opponent a different
 economy, a different castle and — the part that actually changes the fight — a
-different army. Three stages now ask a question that only one unit answers.
+different army. Several stages ask a particular question: THE EYRIE (stage 5)
+is an air wing that a ground army cannot touch, and BLACK FIELD (stage 6) is won
+by nothing the simulator plays except a hero.
 
 | Key | Action |
 | --- | --- |
@@ -892,9 +1017,27 @@ different army. Three stages now ask a question that only one unit answers.
 | `Z` / `X` / `C` | METEOR / HEAL / RAGE, cast from mana, which refills on its own |
 | Click the field | Fire the castle cannon, 12 gold a shot |
 | Drag, or Left / Right | Look around a field two and a half screens wide |
-| `P` | Pause |
+| `P` | Pause — the weather and ambience freeze with the fight |
 
 From the **stage list**, `A` opens your army and `H` opens your hero.
+
+The battlefield's look has its own keys. None of them touches the fight or your
+save; they reset each battle.
+
+| Key | Scene and weather | Key | Ambience |
+| --- | --- | --- | --- |
+| `F2` | next of seven painted scenes | `F4` | pick a group: clouds, fog, dust, smoke, flames, water, vegetation, lighting |
+| `F3` | calm / strong, with the scene's own weather | `F5` | that group on or off |
+| `F6` | next weather that suits the scene, including OFF | `[` / `]` | that group fainter / stronger |
+| `F7` | weather density (scales its limit) | `,` / `.` | that group slower / faster; zero freezes it |
+| `F8` | weather speed; zero freezes it | `\` | reverse the clouds |
+| `F9` | wind, left through still to right | | |
+| `F10` | weather opacity | | |
+| `F11` | lightning reduced / normal / off | | |
+| `F12` | splashes and settling on / off | | |
+
+`weather_preview` is the same scenes and weather with no battle in the way, and
+takes the same keys.
 
 Winning pays gold into a bank, double the first time you clear a stage. Three
 screens spend it, and everything they buy is permanent:
@@ -911,8 +1054,10 @@ screens spend it, and everything they buy is permanent:
 - **Your hero** (`H`) — one of three paths, **chosen once and kept**. WARDEN is
   a wall that walks; FALCONER is the only one that reaches the sky and pays for
   it in health; CHAPLAIN mends the line around it. Three upgrades each, capped
-  at three levels. All three finish the campaign, at noticeably different
-  speeds.
+  at three levels. Each looks the part — the hero wears its path's own sheet.
+  In the simulator all three carry the same simple army through stages 1–7;
+  stage 8 has only ever been won by the FALCONER with everything else thrown in
+  too, so whether WARDEN or CHAPLAIN can finish the campaign is unmeasured.
 
 All of it saves the moment it is earned, to a plain text file in your user
 folder you can read and correct by hand.
@@ -932,11 +1077,12 @@ to be the same bug as a hero who beats everything:
 | **ARCHER** | 95 | 3.0s | Outranges the ground and shoots at the sky. Cannot survive being reached. |
 | **GRIFFIN** | 115 | 3.6s | Flies. Only things that reach air can touch it. |
 | **PIKEMAN** | 55 | 1.8s | The budget answer to the sky: reaches air at melee range, with a soldier's build. |
-| **OGRE** | 160 | 4.5s | A wall. Four soldiers of health, slow, and ground-only — a griffin walks over it. |
+| **OGRE** | 160 | 4.5s | A wall. Two and a half soldiers of health, slow, and ground-only — a griffin flies over it. |
 | **BALLISTA** | 100 | 3.2s | The longest reach in the game and the softest body behind it. **Ground only**, which is what stops it being a better archer. |
 
-Three things reach the sky: the ARCHER, the PIKEMAN and a hero on the FALCONER
-path. Nothing else can touch a griffin, however close it stands.
+Four things reach the sky: the ARCHER, the PIKEMAN, a hero on the FALCONER
+path — and another GRIFFIN, which fights flyers as readily as the ground.
+Nothing else can touch a griffin, however close it stands.
 
 A few other inputs worth knowing:
 
@@ -954,11 +1100,14 @@ if yours falls first. The opponent plays by the same rules — same purse, same
 costs, same per-unit cooldowns — and a stage moves three dials on it: how fast
 it earns, how much castle it has, and **what it sends**.
 
-That third dial turned out to matter more than the other two put together.
-Giving the enemy archers drops what a ground army can survive from about 1.4
-income to about 0.6 — a bigger swing than the whole campaign's income range —
-which is why the later stages hold income roughly still and escalate on
-composition instead. None of that was designed; it came out of `--sweep`.
+That third dial matters — and it was once measured as mattering far more than
+it does. Giving the enemy archers drops what a plain mixed army can beat from
+about 1.4 income to about 1.2, and opens a band around 0.7 where it loses
+outright. An earlier reading of "1.4 down to 0.6" came from a `--sweep` that
+scaled castles on the wrong slope and stopped scanning at the first draw; both
+were fixed, and the corrected numbers are these. Composition still moves the
+difficulty in ways income alone cannot — it just is not a bigger dial than the
+whole income range, as once claimed.
 
 Kill rewards are the mechanic everything else rests on, and they cut both ways:
 an early advantage compounds, and a lost front line does not come back. That is
@@ -971,15 +1120,35 @@ front line and drifts home to your castle when you have nothing out. The strip
 at the top is the whole field in miniature, with a marker for each castle and
 each side's front line — the fighting is often somewhere you aren't looking.
 
-Units are drawn as a coloured block with a stick figure over it: legs that
-swing while walking, an arm that sweeps when a blow lands. There is no artwork
-anywhere in this game — the figures are `Polygon` line strips rebuilt from
-scratch every frame, which is why a runner's legs cycle faster than a
-soldier's without anything having to say so.
+Every unit wears generated pixel art: both teams in their own colours, drawn
+facing right and mirrored for the side walking left, and the hero in the armour
+of the path its owner chose. The art is a separate animated figure that follows
+the unit and picks a row of its sheet by what the unit is doing — **walking**
+(at a pace set by how fast it really moves, so feet do not slide), **attacking**
+(timed to each blow), **flinching** when hit, **idle** while it waits its turn.
+When a unit dies the fight is over with it that same frame, exactly as before;
+what stays is its **death** row playing where it fell, a falling griffin
+dropping to the ground first, then a fade.
 
-Behind them are three bands of hills sliding past at 0.18, 0.45 and 0.72 of the
-camera's movement, and in front of them grass at 1.30 — faster than the ground,
-which is what sells depth in the other direction.
+Blows show too, sparingly: a sword arc, a dagger slash, a spear spark, a club
+impact or a griffin's claw where a blow lands; an arrow or a ballista bolt in
+flight; a burst where the cannon's shell lands; a meteor strike, a glow on
+whoever a heal reaches, an aura when rage is cast. Every one has a chance, a
+limit and a size class in `effects.txt`, so a big melee shows a handful rather
+than burying the fight under thirty.
+
+Behind all of it is one of seven painted battlefields, with clouds, low fog and
+dust drifting across it — **spawned at random, up to a limit, each small, medium
+or large** — and whatever weather suits the scene. None of it can change a
+battle: the art only draws, its dice are its own, and the campaign simulator's
+table is identical with the art and without.
+
+Without a texture cache — every test, both simulators — units fall back to a
+coloured block with a stick figure over it, legs that swing and an arm that
+sweeps, rebuilt from `Polygon` line strips every frame; and the scenery falls
+back to three bands of hills at 0.18, 0.45 and 0.72 of the camera's movement
+with grass in front at 1.30. That fallback is also what a unit gets whose sheet
+`art.txt` does not describe.
 
 The roster lives in `assets/lanebattle/units.txt`. Edit it and run the game —
 no compiler involved. It can change any stat of any unit, add whole new unit
@@ -1043,7 +1212,9 @@ of somebody else. All of that is measured rather than asserted — see
 | CMake: `Could not find a package configuration file provided by "SDL2"` | The toolchain file wasn't passed, or the packages aren't installed. Re-run the configure line with `-DCMAKE_TOOLCHAIN_FILE=...`, after `vcpkg install sdl2:x64-windows sdl2-image:x64-windows`. |
 | Linker: `module machine type 'x64' conflicts with target machine type 'x86'` | The `-A x64` was left off, so a 32-bit build is trying to link 64-bit libraries. Delete `build/` and configure again with `-A x64`. |
 | `SDL2.dll was not found` on launch | The `.exe` was moved away from its DLLs. Run it from `build\Release\`, or move that whole folder. |
-| The game runs, but everything is flat colored squares | `assets/asteroids.png` is not next to the executable. The console says so. Rebuilding re-copies it. |
+| The game runs, but everything is flat colored squares | The `assets/` folder is not next to the executable. The console names the file it could not open. Rebuilding re-copies it. |
+| One Lane Battle unit is a coloured block while the rest have art | Its sheet is named in `units.txt` but not described in `art.txt`, or the path is wrong. Paths start `assets/lanebattle/...`. Run `art_probe --art > assets/lanebattle/art.txt`, rebuild, and `lanebattle_tests` will say which name is out of step. |
+| A new sprite sheet looks wrong: frames cut off, units floating, a box round them | Measure it first: `art_probe <path> 6 6` reports transparency, where each row's feet are and which frames run into their neighbours; `art_probe --show <path> 6 6` paints the problems in; `ui_shots --sheet <path> 209 209 6 <row>` shows one pose, mirrored. |
 | `Accelerated renderer unavailable ...` on startup | No 3D driver available; it fell back to software rendering. Harmless — see *Graphics drivers* above. |
 | Linux: `No package 'sdl2' found` | The development headers are missing (the runtime library alone isn't enough): `sudo apt-get install libsdl2-dev libsdl2-image-dev`. |
 | Nothing opens, no error, over SSH or in CI | There's no display. Either run it locally, or set `SDL_VIDEODRIVER=dummy` to run headless. |
@@ -1069,40 +1240,44 @@ entire stage-select screen was still being drawn over the battlefield — 600
 assertions had been green through every run of that bug. `run.bat lanebattle`
 is still the highest-value thing anyone can do to this project.
 
-### No art at all
+### The art is in, and it is generated
 
-Lane Battle loads **zero images**. Every unit is a coloured rectangle with a
-stick figure drawn over it out of line segments, and every panel is a flat
-rect with bitmap text. That was a deliberate choice — it cost nothing and
-needed no engine work — and it is now the thing standing between this and
-looking like a game.
-
-**The pipeline for it is built** — slice 5b, done. A roster row can name a
-sheet and become animated art with no code change:
+Every unit, both teams, the hero on each path, the combat effects and seven
+battlefields are drawn — generated with ChatGPT, and used only after being
+*measured*, because the generator's output does not match its own requests.
+Adding a unit's art is data, not code:
 
 ```
+# units.txt — which sheet, and how tall it stands
 [unit]
-name          = SOLDIER
-sheet         = lanebattle/soldier.png
-frame_width   = 32
-frame_height  = 48
-frame_count   = 6
-frame_seconds = 0.09
+name        = SOLDIER
+sheet       = assets/lanebattle/lane-battle-gba-art/units/friendly/soldier.png
+enemy_sheet = assets/lanebattle/lane-battle-gba-art/units/enemy/soldier.png
+art_height  = 50
+blow        = SWORD
 ```
 
-`Sprite.flipX` means you draw a unit walking **one** direction and the
-opponent's copy is mirrored for free — do not draw both. And
-`ui_shots --sheet <path> <w> <h> <count>` renders any sheet as a filmstrip with
-its mirror underneath, so you can check slicing and facing before wiring
-anything up.
+then `art_probe --art > assets/lanebattle/art.txt` to measure the new sheet, and
+rebuild. A sheet is six rows — idle, walk, attack, hurt, stunned, death — of six
+frames, drawn facing right; `Sprite.flipX` mirrors it for the other team.
 
-What is still missing:
+What the art still needs, found by measuring it:
+
+| Problem | Where | Effect in game |
+| --- | --- | --- |
+| **Frames run into their neighbours** | rows 2–5 (attack, hurt, stunned, death) of most unit sheets: a sword tip crosses into the next cell by 100–200 border pixels | a 1–2 pixel sliver of the next pose can flicker at a frame's edge. Idle and walk rows are clean. Fix: regenerate with more padding, or re-cut the frames |
+| **Soft haze** | 9–22% of each unit sheet's pixels are faintly visible (alpha 1–39): a glow hugging each figure, plus speckle | invisible at game scale on these backgrounds; would show as a smudge on a very bright one. `art_probe --show` paints it magenta |
+| **The stunned row is unused** | every unit sheet | nothing in the game stuns yet |
+| **Known sheet faults** | listed in `lane-battle-gba-art/README.md`: a missing ballista attack frame, an extra bird on the Falconer, combined scenery layers | the scenery layers are not used; the rest is minor |
+| **Not hand-cleaned** | everywhere | generated pixel clusters are not on one common grid; a cleanup pass would sharpen them |
+
+And beyond the art itself:
 
 | Missing | Size | Notes |
 | --- | --- | --- |
-| Audio from files | small | `Audio.h` synthesises square waves in code. No music, no sound effects, no SDL_mixer. |
+| Audio from files | small | `Audio.h` synthesises square waves in code. No music, no sound-effect files, no SDL_mixer. |
 | Atlas packing | medium | One sheet per unit works today. Nothing *packs* many images into one texture, which starts to matter at hundreds of units rather than seven. |
-| The art itself | — | Nobody has drawn anything. Every unit is still a coloured block. |
+| Draw cost measured | small | ~360 entities are drawn in a battle now; `engine_bench` measures collision and iteration, not drawing. |
 
 ### No UI system
 
@@ -1135,11 +1310,16 @@ Run `campaign_probe` for the current numbers. As of the last retune:
   stalemate against a poor enemy becomes a win against a rich one. Turning a
   stage's income up can make it easier. Nothing in the design intends this, and
   every stage placed before the sweep could see it was placed half-blind.
-- **Carrying two specialists loses to carrying one.** The `COMBO` column
-  measures worse than either `PIKE` or `BALL`. The binding constraint is gold
-  rather than cooldowns, so more unit types splits the same purse and thins the
-  line. The loadout rewards re-equipping per stage, not a balanced kit — which
-  is a defensible design, but it was discovered rather than chosen.
+- **Carrying two specialists does not beat carrying the right one.** `COMBO`
+  (pikemen and a ballista together) wins 4 stages; `BALL` alone wins 5, `PIKE`
+  alone 3. The binding constraint is gold rather than cooldowns, so more unit
+  types splits the same purse and thins the line. The loadout rewards
+  re-equipping per stage, not a balanced kit — which is a defensible design,
+  but it was discovered rather than chosen.
+- **The three hero paths are not yet different where it counts.** Each carries
+  the simulator's simple army through exactly the same seven stages, which
+  fails the probe's own fairness rule — that every path should win a stage the
+  other two lose.
 
 ### No feedback when you lose
 
@@ -1151,8 +1331,9 @@ cheap to add and it is what turns a difficulty spike into a lesson.
 
 ### Structural, and overdue
 
-`LaneBattle.cpp` is 3,900 lines with the rules, the scenes and the UI
-interleaved. That is survivable now and it is exactly what would make any port
+`LaneBattle.cpp` is 4,300 lines with the rules, the scenes and the UI
+interleaved. The art went into its own files (`Art`, `Weather`, `Environment`)
+rather than making that worse, which is the pattern the rest wants. That is survivable now and it is exactly what would make any port
 painful. The roadmap flagged a decision about the repository's shape as due
 "around slice 9"; it is slice 12 and the decision has been made by drift.
 
@@ -1164,12 +1345,14 @@ complete without any of them.
 
 Worth knowing first: most of what's left is *more of a kind already here* —
 another collider shape, another render path. Those fill in a pattern rather
-than teaching a new one. The genuinely unexplored categories are four: a world
-larger than the screen (culling, camera follow, tilemaps), serialization
-(nothing in this project has ever been saved or loaded), asynchrony (the audio
-callback is the only thread), and self-observation (the engine can't report its
-own frame time or entity count). A platformer would force the first; a
-persistent high score is a thirty-line way into the second.
+than teaching a new one. Lane Battle has since explored two categories this
+list once called untouched — a world larger than the screen (a camera that
+follows, a field two and a half screens wide) and serialization (the campaign
+saves and loads). What is still genuinely unexplored: culling and tilemaps (the
+wide field draws everything, visible or not), asynchrony (the audio callback is
+the only thread), and self-observation (the engine can't report its own frame
+time or entity count — the verifier counts a battle's entities for it). A
+platformer would force tilemaps and culling.
 
 - **A collision broad phase**: `CollisionSystem` still compares every
   collidable pair. Breakout sidesteps it — only the ball moves, so it tests
@@ -1187,8 +1370,9 @@ persistent high score is a thirty-line way into the second.
   (a dense array of components plus an index lookup) — same public API, much
   faster iteration, because components end up contiguous in memory. Worth
   knowing before you start: `engine_bench` puts the iteration it would speed
-  up at 0.11ms per frame with *1600* entities, so this is a lesson in data
-  layout rather than a fix for anything.
+  up at well under a tenth of a millisecond per frame with *1600* entities (the
+  table above), so this is a lesson in data layout rather than a fix for
+  anything.
 - **Generational entity IDs**: IDs currently count up and are never reused,
   so they leak ID space, and a stale copy of a destroyed entity's ID silently
   refers to whatever later takes its place. The fix is a free list plus a
@@ -1197,13 +1381,11 @@ persistent high score is a thirty-line way into the second.
   number" for safety.
 - **A scene/level format**: load entity layouts from a JSON or text file
   instead of hardcoding them in `main.cpp`.
-- **A third live game**: two is enough to catch an engine that fits one game
-  only, but every new *shape* of game finds something. A platformer would be
-  the next real stretch — it needs gravity, one-way platforms, a tilemap, and
-  above all a **camera**, which is the largest thing this engine still lacks.
-  Nothing built so far has revealed it, because Snake, Asteroids and Breakout
-  all fit on a single screen, so world coordinates and screen coordinates have
-  never had to differ.
+- **A fourth live game**: every new *shape* of game finds something. Lane
+  Battle found the camera, parallax, data files and animation. A platformer
+  would be the next real stretch — gravity, one-way platforms, a tilemap, and
+  vertical camera movement, which nothing here has needed: every game so far
+  scrolls sideways or not at all.
 
 None of these require rewriting what's here — they slot into the same
 World/Component/System pattern. And if a bigger one ever tempts you, the honest

@@ -92,6 +92,14 @@ inline constexpr Glyph kGlyphs[] = {
     // the font does not have.
     {'+', "....." "..#.." "..#.." "#####" "..#.." "..#.." "....."},
     {'%', "##..#" "##.#." "...#." "..#.." ".#..." ".#.##" "#..##"},
+
+    // '[' and ']' — the same story again, one slice later. The battle HUD grew
+    // a line of ambience controls, "[ ] ALPHA", and it drew as two hollow boxes
+    // for the same reason '+' once did: the test that reads every string the
+    // game draws only reads the scenes it drives, and that line is drawn by the
+    // environment system, which a test without a texture cache never builds.
+    {'[', ".##.." ".#..." ".#..." ".#..." ".#..." ".#..." ".##.."},
+    {']', "..##." "...#." "...#." "...#." "...#." "...#." "..##."},
 };
 
 // Anything with no glyph draws as a hollow box, so a missing character is

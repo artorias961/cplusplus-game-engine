@@ -33,7 +33,15 @@ rem     CAUGHT    - good. The tests would notice this bug.
 rem     SURVIVED  - bad. Either the change is harmless, or you have found a
 rem                 test that does not test what it claims to.
 rem
-rem The file is always restored.
+rem The file is always restored - IF THIS SCRIPT IS ALLOWED TO FINISH. A batch
+rem file cannot catch being killed, and one easy way to kill it is to pipe it
+rem into something that stops reading early. PowerShell's `Select-Object -First
+rem N` does exactly that: once it has N lines it STOPS THE PROCESS FEEDING IT.
+rem A mutation that printed seventeen failures into `-First 6` was killed after
+rem the sixth, before the restore, and the mutated line sat in the tree looking
+rem like real code until the next test run failed for no visible reason. Filter
+rem with `Select-Object -Last N` (which waits for the end), or not at all. If it
+rem ever does get killed, the original is in %TEMP%\mutate_backup_*.bak.
 rem
 rem A NOTE ON LINE ENDINGS, because this file was broken by them and the
 rem symptom pointed nowhere near the cause.

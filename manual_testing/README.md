@@ -210,18 +210,64 @@ changed: the player's save has to be asked for by name
 that forgets writes `campaign-scratch.txt` beside itself. **A diagnostic tool
 that can damage the thing it is diagnosing is worse than no tool.**
 
+It photographs the game **as the player sees it**: it hands the game a texture
+cache, so battles draw the environment paintings, the unit art and the effects,
+and it seeds the presentation's dice so the random weather lands in the same
+places every run. Until that line existed every battle screenshot showed the
+no-art fallback — coloured blocks on procedural hills — which was a game nobody
+played any more, photographed faithfully.
+
 It also previews sprite sheets, which is the closest thing this engine has to
 an animation editor:
 
 ```bash
-./build/Release/ui_shots --sheet lanebattle/soldier.png 32 48 6
+./build/Release/ui_shots --sheet assets/lanebattle/lane-battle-gba-art/units/friendly/soldier.png 209 209 6 2
 ```
 
-Every frame side by side, with the mirrored row underneath, into
-`ui_shots/sheet-preview.png`. It answers the two questions a delivered sheet
-raises — are the frames sliced where you think, and does mirroring look right —
-before any of it is wired into a unit. The path resolves against the binary,
-like every other asset.
+One row of frames side by side — the last argument is which row: 0 idle, 1
+walk, 2 attack, 3 hurt, 4 stunned, 5 death — with the mirrored row underneath,
+into `ui_shots/sheet-preview.png`. It answers the two questions a delivered
+sheet raises — are the frames sliced where you think, and does mirroring look
+right — before any of it is wired into a unit. The path resolves against the
+binary, like every other asset, which is why it starts `assets/`. It scales
+DOWN to fit; it used to crop, silently, which cut the last frames off every
+1254-pixel generated sheet.
+
+## art_probe — is this art usable?
+
+```bash
+./build/Release/art_probe                                    # every sheet
+./build/Release/art_probe <path> 6 6                         # one sheet
+./build/Release/art_probe --art > assets/lanebattle/art.txt  # measure into art.txt
+./build/Release/art_probe --show <path> 6 6                  # see the problems
+```
+
+The art is generated, and the generator does not do what it was asked: the unit
+sheets were requested as 288-pixel grids and arrived as 1254-pixel ones, the
+effects came back three times as wide as tall instead of six, and on the
+environment paintings it twice drew a *picture* of transparency — a painted
+checkerboard — instead of the real thing. So every image is measured before it
+is used. For each sheet the probe prints:
+
+- whether the background is **really transparent**, and how much faint **haze**
+  there is — pixels nearly but not quite clear, invisible on the dark
+  backgrounds every viewer uses and a grey smudge on a bright one;
+- per row, where the content sits, where the **feet** are (the centre of the
+  bottom of the figure, not of the whole picture — a raised sword moves the
+  second and not the first), and how many pixels **bleed** onto the cell's
+  border, which is a pose sliced in two;
+- the numbers `art.txt` wants.
+
+`--art` writes those numbers as `art.txt`, which is where the game reads every
+sheet's grid and feet from. **Rerun it whenever an image changes**, and rebuild
+— a sheet `art.txt` does not describe is not used, and `lanebattle_tests` fails
+if `units.txt` or `effects.txt` names one that is missing. `--show` writes
+`<name>-probe.png` beside the binary with haze in magenta and the grid in green,
+which is how the halo round every generated unit was found.
+
+It cannot fail, like the others. Its first run found that every unit sheet is
+genuinely transparent and cleanly gridded in its idle and walk rows — and that
+the attack rows run sword tips into the next frame's cell.
 
 ## campaign_probe — is the campaign asking anything?
 

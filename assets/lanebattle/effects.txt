@@ -1,0 +1,324 @@
+# ---------------------------------------------------------------------------
+# effects.txt - how MUCH of every effect there is, how OFTEN it appears, and
+# how BIG it is. Edit and run the game; no compiler involved.
+#
+# Nothing here changes a battle. Effects, weather and ambience are pictures:
+# they spawn from their own dice, never from anything a fight reads, and a
+# missing or broken file just leaves the compiled-in defaults (Art.cpp).
+#
+# THREE SIZES. Everything that appears in numbers - a raindrop, a cloud, a
+# sword arc - is spawned SMALL, MEDIUM or LARGE, so a crowd of them reads as
+# depth and variety rather than a grid of stamps. Each entry says how big its
+# MEDIUM one is and what mix of the three it spawns; [sizes] says how much
+# smaller a small one is and how much bigger a large one.
+#
+#   small / medium / large   of every hundred spawned, how many of each.
+#                            They need not add up to a hundred; they are
+#                            weights. "0 0 100" spawns only large ones.
+#
+# LIMITS are hard. However hard it rains or however big the melee, there are
+# never more than `limit` of a thing on screen at once - spawning simply
+# waits. `spawn` is how fast new ones arrive while there is room, so a low
+# spawn with a high limit makes weather that builds up, and a high spawn with
+# a low limit makes it arrive at once and then hold steady.
+# ---------------------------------------------------------------------------
+
+[sizes]
+small  = 0.6        # a SMALL one is 0.6 times a medium one
+medium = 1.0
+large  = 1.5        # a LARGE one is half again as big
+
+# ---------------------------------------------------------------------------
+# Combat. A picture when something happens in a fight.
+#
+#   size     a MEDIUM one's larger side on screen, in pixels. A unit stands
+#            about 50 tall, which is what these are sized against
+#   chance   percent of the times it COULD appear that it does. Not every
+#            blow needs a flash; a melee where every one flashes is noise
+#   limit    never more than this many of THIS effect at once
+#   seconds  how long it plays
+#   flies    1 for a projectile that travels to its target (then `speed`,
+#            in pixels per second). Cosmetic: the blow has already landed
+#
+# A unit's blow is named on its row in units.txt (`blow = SWORD`).
+# ---------------------------------------------------------------------------
+
+[effects]
+limit = 24          # every combat effect together, on the whole screen
+
+[effect]
+name    = DAGGER            # the runner
+sheet   = assets/lanebattle/lane-battle-gba-art/effects/dagger-slash.png
+size    = 22
+small   = 50
+medium  = 40
+large   = 10
+chance  = 55
+limit   = 5
+seconds = 0.24
+
+[effect]
+name    = SWORD             # the soldier and the hero
+sheet   = assets/lanebattle/lane-battle-gba-art/effects/sword-arc.png
+size    = 30
+small   = 40
+medium  = 45
+large   = 15
+chance  = 60
+limit   = 6
+seconds = 0.28
+
+[effect]
+name    = SPEAR             # the pikeman
+sheet   = assets/lanebattle/lane-battle-gba-art/effects/spear-spark.png
+size    = 24
+small   = 45
+medium  = 45
+large   = 10
+chance  = 55
+limit   = 5
+seconds = 0.26
+
+[effect]
+name    = CLUB              # the ogre: rarer blows, so every one shows
+sheet   = assets/lanebattle/lane-battle-gba-art/effects/club-impact.png
+size    = 38
+small   = 20
+medium  = 50
+large   = 30
+chance  = 80
+limit   = 4
+seconds = 0.32
+
+[effect]
+name    = CLAW              # the griffin
+sheet   = assets/lanebattle/lane-battle-gba-art/effects/griffin-claw.png
+size    = 32
+small   = 35
+medium  = 45
+large   = 20
+chance  = 65
+limit   = 4
+seconds = 0.28
+
+[effect]
+name    = ARROW             # the archer
+sheet   = assets/lanebattle/lane-battle-gba-art/effects/arrow.png
+size    = 22
+small   = 30
+medium  = 60
+large   = 10
+chance  = 100
+limit   = 8
+seconds = 0.40
+flies   = 1
+speed   = 620
+
+[effect]
+name    = BOLT              # the ballista
+sheet   = assets/lanebattle/lane-battle-gba-art/effects/ballista-bolt.png
+size    = 32
+small   = 20
+medium  = 60
+large   = 20
+chance  = 100
+limit   = 4
+seconds = 0.40
+flies   = 1
+speed   = 700
+
+[effect]
+name    = SHIELD            # a blow taken by a WARDEN hero
+sheet   = assets/lanebattle/lane-battle-gba-art/effects/shield-block.png
+size    = 30
+chance  = 45
+limit   = 3
+seconds = 0.30
+
+[effect]
+name    = CANNON            # the castle cannon's shell bursting
+sheet   = assets/lanebattle/lane-battle-gba-art/effects/cannon-explosion.png
+size    = 88
+small   = 20
+medium  = 50
+large   = 30
+chance  = 100
+limit   = 3
+seconds = 0.50
+
+[effect]
+name    = METEOR
+sheet   = assets/lanebattle/lane-battle-gba-art/effects/meteor-impact.png
+size    = 110
+small   = 0
+medium  = 70
+large   = 30
+chance  = 100
+limit   = 2
+seconds = 0.60
+
+[effect]
+name    = HEAL              # one per unit reached, up to the limit
+sheet   = assets/lanebattle/lane-battle-gba-art/effects/healing.png
+size    = 40
+chance  = 100
+limit   = 8
+seconds = 0.60
+
+[effect]
+name    = RAGE              # one per unit you own, up to the limit
+sheet   = assets/lanebattle/lane-battle-gba-art/effects/rage-aura.png
+size    = 44
+chance  = 100
+limit   = 10
+seconds = 0.60
+
+# ---------------------------------------------------------------------------
+# Weather. Chosen with F6 in a battle; F7 sets density, which scales both
+# `limit` and `spawn` from zero to what is written here.
+#
+#   limit    most particles on screen at once, at full density
+#   spawn    new particles per second while there is room
+#   width    a MEDIUM particle, in pixels
+#   height
+#
+# Small particles are FAR: slower, fainter, behind the fight. Large ones are
+# NEAR: faster, and a few drift in front of the units at low opacity. That is
+# what makes three sizes read as depth rather than as noise.
+# ---------------------------------------------------------------------------
+
+[weather]
+name   = RAIN
+limit  = 90
+spawn  = 80
+width  = 2
+height = 14
+small  = 45
+medium = 40
+large  = 15
+
+[weather]
+name   = SNOW
+limit  = 70
+spawn  = 10
+width  = 7
+height = 7
+small  = 40
+medium = 40
+large  = 20
+
+[weather]
+name   = HAIL
+limit  = 60
+spawn  = 75
+width  = 4
+height = 4
+small  = 50
+medium = 35
+large  = 15
+
+[weather]
+name   = BLOOD RAIN
+limit  = 80
+spawn  = 50
+width  = 3
+height = 14
+small  = 45
+medium = 40
+large  = 15
+
+[weather]
+name   = THUNDERSTORM
+limit  = 120
+spawn  = 140
+width  = 2
+height = 18
+small  = 40
+medium = 40
+large  = 20
+
+[weather]
+name   = FOG
+limit  = 8
+spawn  = 0.3
+width  = 260
+height = 54
+small  = 30
+medium = 45
+large  = 25
+
+[weather]
+name   = ASH
+limit  = 50
+spawn  = 4
+width  = 4
+height = 4
+small  = 50
+medium = 35
+large  = 15
+
+[weather]
+name   = EMBERS
+limit  = 45
+spawn  = 7
+width  = 3
+height = 5
+small  = 50
+medium = 35
+large  = 15
+
+[weather]
+name   = DARK STORM
+limit  = 60
+spawn  = 15
+width  = 6
+height = 9
+small  = 45
+medium = 40
+large  = 15
+
+[weather]
+name   = SANDSTORM
+limit  = 110
+spawn  = 6
+width  = 5
+height = 2
+small  = 40
+medium = 40
+large  = 20
+
+# ---------------------------------------------------------------------------
+# Ambience: what drifts across every scene whatever the weather.
+#
+#   limit    most at once
+#   spawn    new ones per second while there is room (0.12 is one every eight
+#            seconds or so, on average - they arrive at random, not on a beat)
+#   size     a MEDIUM one's width, in pixels
+# ---------------------------------------------------------------------------
+
+[ambient]
+name   = CLOUDS
+limit  = 5
+spawn  = 0.12
+size   = 220
+small  = 30
+medium = 45
+large  = 25
+
+[ambient]
+name   = FOG                # low banks rolling along behind the units
+limit  = 6
+spawn  = 0.15
+size   = 280
+small  = 30
+medium = 40
+large  = 30
+
+[ambient]
+name   = DUST               # specks, sparks or ghost lights, by scene
+limit  = 28
+spawn  = 3
+size   = 3
+small  = 50
+medium = 35
+large  = 15

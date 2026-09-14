@@ -29,6 +29,7 @@
 #include <SDL.h>
 #include <SDL_image.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>  // std::strcmp. See below: this line is why CI was red.
 #include <string>
@@ -43,6 +44,7 @@
 
 #include "Harness.h"
 #include "LaneBattle.h"
+#include "Art.h"
 #include "engine/Engine.h"
 
 using namespace engine;
@@ -132,11 +134,11 @@ struct Battle {
 // both are invisible until drawn, and both are the sort of thing that
 // otherwise gets found after an artist has drawn thirty of them.
 //
-//     ui_shots --sheet lanebattle/soldier.png 32 48 6
+//     ui_shots --sheet assets/lanebattle/lane-battle-gba-art/units/friendly/soldier.png 209 209 6 [row]
 //
 // The path resolves against the binary, like every other asset.
 int previewSheet(Engine& engine, const char* path, int frameWidth,
-                 int frameHeight, int frameCount) {
+                 int frameHeight, int frameCount, int row) {
     SDL_Texture* texture = engine.textures().load(path);
     if (!texture) {
         std::printf("  could not load %s (it resolves against the binary,\n"
@@ -144,17 +146,26 @@ int previewSheet(Engine& engine, const char* path, int frameWidth,
                     path, gOutputDirectory.c_str());
         return 1;
     }
+    if (frameWidth <= 0 || frameHeight <= 0 || frameCount <= 0) {
+        std::printf("  frame size and count must be positive\n");
+        return 1;
+    }
 
     // Big enough to read, small enough to fit the window. A sheet wider than
-    // the preview is scaled down rather than cropped, because a cropped
+    // the preview is scaled DOWN rather than cropped, because a cropped
     // filmstrip silently hides the frames that did not fit.
-    const int margin = 20;
-    int scale = 4;
-    while (scale > 1 &&
-           (frameCount * frameWidth * scale + margin * 2 > lanebattle::kWindowWidth ||
-            frameHeight * scale * 2 + margin * 3 > lanebattle::kWindowHeight)) {
-        --scale;
-    }
+    //
+    // Fractional, which it was not. A whole-number scale bottoms out at 1, and
+    // six 209-pixel frames at 1x are 1254 pixels wide in a 960-pixel window —
+    // so the generated sheets had their last frames quietly cut off, in the
+    // one tool whose comment promised that could not happen.
+    const float margin = 20.0f;
+    const float roomX = static_cast<float>(lanebattle::kWindowWidth) - margin * 2;
+    const float roomY = static_cast<float>(lanebattle::kWindowHeight) - margin * 3;
+    const float scale = std::min({4.0f, roomX / static_cast<float>(frameCount * frameWidth),
+                                  roomY / static_cast<float>(frameHeight * 2)});
+    const int shownW = std::max(1, static_cast<int>(frameWidth * scale));
+    const int shownH = std::max(1, static_cast<int>(frameHeight * scale));
 
     World world;
     for (int frame = 0; frame < frameCount; ++frame) {
@@ -164,17 +175,16 @@ int previewSheet(Engine& engine, const char* path, int frameWidth,
             Entity entity = world.createEntity();
             world.addComponent(
                 entity,
-                Transform{static_cast<float>(margin + frame * frameWidth * scale),
-                          static_cast<float>(margin +
-                                             flipped * (frameHeight * scale + margin)),
+                Transform{margin + static_cast<float>(frame * shownW),
+                          margin + static_cast<float>(flipped) * (shownH + margin),
                           0.0f});
 
             Sprite sprite;
             sprite.texture = texture;
-            sprite.width = frameWidth * scale;
-            sprite.height = frameHeight * scale;
+            sprite.width = shownW;
+            sprite.height = shownH;
             sprite.srcX = frame * frameWidth;
-            sprite.srcY = 0;
+            sprite.srcY = row * frameHeight;
             sprite.srcW = frameWidth;
             sprite.srcH = frameHeight;
             sprite.flipX = flipped != 0;
@@ -183,9 +193,9 @@ int previewSheet(Engine& engine, const char* path, int frameWidth,
         }
     }
 
-    std::printf("\n%s: %d frames of %dx%d, shown at %dx\n"
+    std::printf("\n%s: row %d, %d frames of %dx%d, shown at %.2fx\n"
                 "  top row as drawn, bottom row mirrored by Sprite.flipX\n\n",
-                path, frameCount, frameWidth, frameHeight, scale);
+                path, row, frameCount, frameWidth, frameHeight, scale);
     shoot(engine, world, "sheet-preview");
     return 0;
 }
@@ -234,14 +244,27 @@ int main(int argc, char** argv) {
     if (sheetMode) {
         if (argc < 6) {
             std::printf("\nusage: ui_shots --sheet <path> <frameW> <frameH> "
-                        "<frameCount>\n"
-                        "  e.g. ui_shots --sheet lanebattle/soldier.png 32 48 6\n"
+                        "<frameCount> [row]\n"
+                        "  e.g. ui_shots --sheet assets/lanebattle/lane-battle-gba-art/"
+                        "units/friendly/soldier.png 209 209 6 2\n"
+                        "  row is which pose, from 0: idle, walk, attack, hurt,\n"
+                        "  stunned, death. art_probe prints the frame size.\n"
                         "  the path resolves against this binary, like any asset\n\n");
             return 1;
         }
-        return previewSheet(engine, argv[2], SDL_atoi(argv[3]),
-                            SDL_atoi(argv[4]), SDL_atoi(argv[5]));
+        return previewSheet(engine, argv[2], SDL_atoi(argv[3]), SDL_atoi(argv[4]),
+                            SDL_atoi(argv[5]), argc > 6 ? SDL_atoi(argv[6]) : 0);
     }
+
+    // The screens as the PLAYER sees them: with the texture cache, so battles
+    // draw the environment art, the unit sheets and the effects. Without this
+    // every battle screenshot showed the no-art fallback — coloured blocks on
+    // procedural hills — which is a game nobody plays any more, photographed
+    // faithfully. Fixed dice, so the random weather and effects land in the
+    // same places every run and two runs can be compared by eye.
+    lanebattle::loadPresentation();
+    lanebattle::setTextureCache(&engine.textures());
+    lanebattle::seedPresentation(12345);
 
     std::printf("\nWriting screens to %s\n\n", gOutputDirectory.c_str());
 

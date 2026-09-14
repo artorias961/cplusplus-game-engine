@@ -7,6 +7,7 @@
 // ---------------------------------------------------------------------------
 
 #include "LaneBattle.h"
+#include "Art.h"
 
 #include "engine/ECS.h"
 #include "engine/Engine.h"
@@ -31,6 +32,12 @@ int main(int, char**) {
         std::cout << "No " << lanebattle::kBalancePath
                   << "; using the built-in roster.\n";
     }
+
+    // The art: what each image is (art.txt, measured by art_probe) and how much
+    // of every effect there may be (effects.txt). Both optional — a unit whose
+    // sheet is not described keeps its coloured block, and the effects fall
+    // back to compiled-in limits.
+    lanebattle::loadPresentation();
 
     lanebattle::setAudioDevice(&gameEngine.audio());
 

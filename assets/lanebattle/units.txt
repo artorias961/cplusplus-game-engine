@@ -238,11 +238,12 @@ right_r      = 255
 right_g      = 120
 right_b      = 90
 
-[upgrade]
-name   = CHAMPION
-cost   = 240
-growth = 1.60
-effect = 0.25
+# CHAMPION is not here, and deliberately: it is a PERK (bought between battles
+# from the armoury), and perks live in LaneBattle.h, not in this file. There
+# used to be an [upgrade] block for it at this spot, which the loader skipped
+# without a word - so editing it changed nothing, silently. Only INCOME, WALLS
+# and SUPPLY are upgrades a file can tune.
+
 # ---------------------------------------------------------------------------
 # The campaign. Unlike units, these REPLACE the built-in list rather than
 # merging into it: a campaign is an ordered sequence, so a file describing
@@ -319,3 +320,80 @@ enemy_income        = 2.10
 enemy_castle_health = 1300
 wave_size           = 4
 composition         = 1,3,1,2
+
+# ---------------------------------------------------------------------------
+# Artwork. Every row above keeps its numbers; these blocks only say what each
+# unit LOOKS like. Units merge by name, so this is the same unit, dressed.
+#
+#   sheet         the player's version, drawn facing right
+#   enemy_sheet   the opponent's, in their colours - mirrored to face left
+#   art_height    how tall it STANDS on the battlefield, in pixels. The picture
+#                 only: the footprint the fight uses is width x height above,
+#                 so art can be drawn at a readable size without moving a
+#                 single number the campaign was tuned against
+#   blow          the effect a blow shows, from effects.txt
+#
+# Each sheet's grid and where its feet are come from art.txt, which art_probe
+# measures. A sheet art.txt does not describe is not used - the unit keeps its
+# coloured block and stick figure, exactly as with no art at all.
+# ---------------------------------------------------------------------------
+
+[unit]
+name        = RUNNER
+sheet       = assets/lanebattle/lane-battle-gba-art/units/friendly/runner.png
+enemy_sheet = assets/lanebattle/lane-battle-gba-art/units/enemy/runner.png
+art_height  = 38
+blow        = DAGGER
+
+[unit]
+name        = SOLDIER
+sheet       = assets/lanebattle/lane-battle-gba-art/units/friendly/soldier.png
+enemy_sheet = assets/lanebattle/lane-battle-gba-art/units/enemy/soldier.png
+art_height  = 50
+blow        = SWORD
+
+[unit]
+name        = ARCHER
+sheet       = assets/lanebattle/lane-battle-gba-art/units/friendly/archer.png
+enemy_sheet = assets/lanebattle/lane-battle-gba-art/units/enemy/archer.png
+art_height  = 48
+blow        = ARROW
+
+[unit]
+name        = GRIFFIN
+sheet       = assets/lanebattle/lane-battle-gba-art/units/friendly/griffin.png
+enemy_sheet = assets/lanebattle/lane-battle-gba-art/units/enemy/griffin.png
+art_height  = 52
+blow        = CLAW
+
+[unit]
+name        = PIKEMAN
+sheet       = assets/lanebattle/lane-battle-gba-art/units/friendly/pikeman.png
+enemy_sheet = assets/lanebattle/lane-battle-gba-art/units/enemy/pikeman.png
+art_height  = 54
+blow        = SPEAR
+
+[unit]
+name        = OGRE
+sheet       = assets/lanebattle/lane-battle-gba-art/units/friendly/ogre.png
+enemy_sheet = assets/lanebattle/lane-battle-gba-art/units/enemy/ogre.png
+art_height  = 70
+blow        = CLUB
+
+[unit]
+name        = BALLISTA
+sheet       = assets/lanebattle/lane-battle-gba-art/units/friendly/ballista.png
+enemy_sheet = assets/lanebattle/lane-battle-gba-art/units/enemy/ballista.png
+art_height  = 48
+blow        = BOLT
+
+# The hero changes its look with the path its owner chose: one sheet per path,
+# named sheet_<path>. Without a path it wears `sheet`.
+[unit]
+name           = HERO
+sheet          = assets/lanebattle/lane-battle-gba-art/units/friendly/hero.png
+sheet_warden   = assets/lanebattle/lane-battle-gba-art/units/friendly/hero-warden.png
+sheet_falconer = assets/lanebattle/lane-battle-gba-art/units/friendly/hero-falconer.png
+sheet_chaplain = assets/lanebattle/lane-battle-gba-art/units/friendly/hero-chaplain.png
+art_height     = 64
+blow           = SWORD

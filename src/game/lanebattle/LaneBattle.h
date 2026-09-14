@@ -137,6 +137,30 @@ struct UnitKind {
     int frameHeight;
     int frameCount;
     float frameSeconds;
+
+    // --- The generated art, which arrived ----------------------------------
+    //
+    // Defaulted, so the compiled-in rows above — the no-assets fallback — do
+    // not have to mention any of it and still mean exactly what they meant.
+    // All of it comes from units.txt; the facts about each IMAGE (its grid,
+    // where the feet are) come from art.txt, measured by art_probe. See Art.h.
+
+    // The opponent's colours. The two teams' sheets are drawn separately,
+    // both facing right; an empty one falls back to `sheet`, mirrored.
+    const char* enemySheet = nullptr;
+
+    // How tall the standing figure is on the battlefield, in pixels. The
+    // PICTURE only: the unit's footprint for combat is `width` x `height`,
+    // untouched, which is why art can be drawn at a readable size without
+    // moving a single number the campaign was tuned against.
+    float artHeight = 0.0f;
+
+    // Which effect a blow shows: a name from effects.txt (SWORD, ARROW, ...).
+    const char* blow = nullptr;
+
+    // The hero's look for each path, indexed by HeroPath. Empty means the
+    // hero's own `sheet`. Only the hero's row uses these.
+    const char* pathSheet[4] = {nullptr, nullptr, nullptr, nullptr};
 };
 
 // How high the sky is. Flyers sit here instead of standing on kGroundY.
@@ -743,6 +767,8 @@ float stageReward(int stage, bool firstClear);
 // is the whole reason the probe was built.
 enum class HeroPath { None, Warden, Falconer, Chaplain, Count };
 constexpr int kHeroPathCount = static_cast<int>(HeroPath::Count);
+static_assert(kHeroPathCount == 4,
+              "UnitKind::pathSheet holds one sheet per hero path");
 
 // How many upgrades a path offers. Every path has exactly this many, so the
 // screen and the save format do not have to special-case one of them.
@@ -1398,6 +1424,10 @@ void setAudioDevice(engine::AudioDevice* audio);
 // test and both simulators do — a unit with a sheet simply falls back to its
 // coloured block, so nothing needs a GPU to be tested.
 void setTextureCache(engine::TextureCache* textures);
+
+// Whatever setTextureCache was last handed, or null. For Art.cpp, which draws
+// the same way the rest of this file does and must go quiet in the same cases.
+engine::TextureCache* currentTextureCache();
 
 // --- Scenes ----------------------------------------------------------------
 

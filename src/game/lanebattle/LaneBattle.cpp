@@ -20,10 +20,12 @@
 #include "LaneBattle.h"
 #include "Weather.h"
 #include "Environment.h"
+#include "Art.h"
 
 #include <SDL.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <functional>
 #include <string>
@@ -934,6 +936,30 @@ bool loadBalance(const std::string& path) {
         kind.frameHeight = section->integer("frame_height", kind.frameHeight);
         kind.frameCount = section->integer("frame_count", kind.frameCount);
         kind.frameSeconds = section->number("frame_seconds", kind.frameSeconds);
+
+        // The generated art. Strings are kept alive the same way `sheet` is:
+        // the roster row holds a plain pointer, so something must own the text.
+        auto keep = [&](const char* key, const char* current) -> const char* {
+            if (!section->has(key)) return current;
+            gLoadedNames.push_back(
+                std::make_unique<std::string>(section->text(key, "")));
+            const std::string& owned = *gLoadedNames.back();
+            return owned.empty() ? nullptr : owned.c_str();
+        };
+        kind.enemySheet = keep("enemy_sheet", kind.enemySheet);
+        kind.blow = keep("blow", kind.blow);
+        kind.artHeight =
+            std::clamp(section->number("art_height", kind.artHeight), 0.0f, 400.0f);
+        // One key per hero path, named after the path: sheet_warden and so on.
+        // Derived from the path table rather than listed, so a renamed path
+        // cannot quietly stop being read.
+        for (int heroPathIndex = 1; heroPathIndex < kHeroPathCount; ++heroPathIndex) {
+            std::string key = "sheet_";
+            for (const char* c = heroPath(heroPathIndex).name; *c; ++c) {
+                key += static_cast<char>(std::tolower(static_cast<unsigned char>(*c)));
+            }
+            kind.pathSheet[heroPathIndex] = keep(key.c_str(), kind.pathSheet[heroPathIndex]);
+        }
     }
 
     // Stages, unlike units, are REPLACED rather than merged. A campaign is an
@@ -1060,6 +1086,13 @@ void animateUnits(World& world, float dt) {
         // nothing ever slides along with its feet still.
         unit->phase += std::fabs(velocity->dx) * dt * kWalkCycleRate;
         unit->swing = std::max(0.0f, unit->swing - dt * kSwingDecayRate);
+
+        // A figure with artwork chooses a row of its sheet instead of bending
+        // line segments. Same owner, same orphan rule, same frame.
+        if (world.hasComponent<ArtFigure>(entity)) {
+            poseArtFigure(world, entity, dt);
+            continue;
+        }
 
         Transform* at = world.getComponent<Transform>(entity);
         Polygon* lines = world.getComponent<Polygon>(entity);
@@ -1399,12 +1432,22 @@ Entity spawnUnit(World& world, bool leftSide, int kind) {
 
     // Artwork, if this row has any and anything has handed us a texture cache.
     //
-    // Both conditions matter. No sheet is every unit today. No cache is every
-    // test and both simulators, which run with no window at all — and a unit
-    // that silently fell back to a block there is exactly right, because what
-    // those measure is the fight, not the picture.
+    // Both conditions matter. No cache is every test and both simulators, which
+    // run with no window at all — and a unit that silently falls back to a block
+    // there is exactly right, because what those measure is the fight, not the
+    // picture.
+    //
+    // There are two paths, and the first is the real one now. A sheet that
+    // art.txt describes becomes a separate ART FIGURE that follows the unit
+    // (see Art.h): drawn at a readable size, anchored by its feet, choosing a
+    // row of the sheet by what the unit is doing. The unit's own Sprite stays
+    // as its footprint and goes invisible. The second path is slice 5b's
+    // original — texture the unit's own sprite and loop one row — kept for a
+    // sheet named with frame_width/frame_height but not measured into art.txt.
+    const bool measured = textureCache && stats.sheet && stats.sheet[0] != '\0' &&
+                          sheetInfo(stats.sheet) != nullptr;
     bool animated = false;
-    if (textureCache && stats.sheet && stats.sheet[0] != '\0' &&
+    if (!measured && textureCache && stats.sheet && stats.sheet[0] != '\0' &&
         stats.frameWidth > 0 && stats.frameHeight > 0) {
         if (SDL_Texture* texture = textureCache->load(stats.sheet)) {
             sprite.texture = texture;
@@ -1458,6 +1501,16 @@ Entity spawnUnit(World& world, bool leftSide, int kind) {
     // `figure` stays kInvalidEntity in that case, which every path already
     // copes with: a death checks it before destroying it, and animateUnits
     // walks the figures that exist rather than assuming one per unit.
+    if (measured) {
+        const Entity art = createArtFigure(world, unit, kind, leftSide);
+        if (art != kInvalidEntity) {
+            world.getComponent<Unit>(unit)->figure = art;
+            // The footprint stays — targeting, queueing and the camera all read
+            // it — but it is no longer what anyone should see.
+            world.getComponent<Sprite>(unit)->a = 0;
+            animated = true;
+        }
+    }
     if (!animated) {
         world.getComponent<Unit>(unit)->figure = createFigure(world, unit, sprite);
     }
@@ -1474,6 +1527,7 @@ Entity spawnUnit(World& world, bool leftSide, int kind) {
 void setAudioDevice(AudioDevice* audio) { audioDevice = audio; }
 
 void setTextureCache(TextureCache* textures) { textureCache = textures; }
+TextureCache* currentTextureCache() { return textureCache; }
 
 namespace {
 
@@ -1593,6 +1647,8 @@ public:
         weatherText_ = createText(world, "F6 WEATHER - F11 FLASH", 16, 164, 1,
                                   140, 160, 180, kHudLayer);
         hud_.push_back(weatherText_);
+        ambientText_ = createText(world, "", 16, 180, 1, 140, 160, 180, kHudLayer);
+        hud_.push_back(ambientText_);
 
         goldText_ = createText(world, "GOLD 150", 16, 14, 3, 235, 220, 150,
                                kHudLayer);
@@ -1712,7 +1768,9 @@ public:
         const auto oldWeather=weather_.settings.preset;
         weather_.controls(input);
         if(input.wasKeyPressed(SDL_SCANCODE_F6)) weather_.settings.preset=nextCompatibleWeather(environment_.current(),oldWeather);
+        environment_.controls(input);
         environment_.update(world,dt);
+        if(auto* text=world.getComponent<Text>(ambientText_)) text->value=environment_.description();
         weather_.update(world, dt);
         if (auto* text = world.getComponent<Text>(weatherText_))
             text->value = std::string("F2 ") + environmentName(environment_.current()) + " F3 " + (environment_.strong?"STRONG":"CALM") + " F6 " + weatherName(weather_.settings.preset) + " F11 " +
@@ -1739,6 +1797,7 @@ public:
         settleBattle(world, *session);
 
         animateUnits(world, dt);
+        updateCorpses(world, dt);
         updateCamera(world, *session, input, dt);
         refreshHud(world, *session);
         refreshMinimap(world);
@@ -1747,6 +1806,7 @@ public:
 private:
     WeatherSystem weather_;
     EnvironmentSystem environment_;
+    Entity ambientText_ = 0;
     Entity weatherText_ = 0;
     void buildField(World& world) {
         // Scenery first, so it holds the lowest entity ids as well as the
@@ -1999,10 +2059,14 @@ private:
             // Figures go explicitly rather than being left to the orphan
             // sweep: onExit is the one path where no further frame runs, so
             // there would be nothing left to sweep them.
+            // Corpses and combat effects go with the battle too. Left behind,
+            // they would lie across the stage list — the same bug, pointing
+            // the other way, as the stage list once drawn over the fight.
             if (world.hasComponent<Unit>(entity) ||
                 world.hasComponent<Shard>(entity) ||
                 world.hasComponent<Cannonball>(entity) ||
-                world.hasComponent<Figure>(entity)) {
+                world.hasComponent<Figure>(entity) ||
+                isBattleDressing(world, entity)) {
                 world.destroyLater(entity);
             }
         }
@@ -2234,6 +2298,15 @@ private:
         const Entity hero = spawnUnit(world, true, kind);
         world.addComponent(hero, Hero{});
 
+        // The hero looks like the path it walks, when there is art for it. A
+        // WARDEN in the FALCONER's feathers would be telling the player
+        // something false about what this hero can reach.
+        if (heroPath_ > 0 && heroPath_ < kHeroPathCount) {
+            if (const Unit* unit = world.getComponent<Unit>(hero)) {
+                reskinFigure(world, unit->figure, unitKind(kind).pathSheet[heroPath_]);
+            }
+        }
+
         // CHAMPION is permanent, so it is applied on the way out of the gate
         // rather than to the roster: the table stays the hero everyone has,
         // and the perk is what this particular player has made of it.
@@ -2463,6 +2536,49 @@ private:
                 // Whether that ENDED the battle is not decided here. See
                 // settleBattle, called once after the loop.
             }
+            showBlow(world, attacker, target, stats, team->leftSide);
+        }
+    }
+
+    // The picture of a blow: an arrow in flight, or a flash where it landed.
+    //
+    // After the damage, and never instead of it — this is decoration, and
+    // spawnEffect declines far more often than it agrees (a chance per blow,
+    // a limit per kind, a limit overall), so a big melee shows a few flashes
+    // rather than burying the fight under thirty. With no texture cache it
+    // does nothing at all, which is every test and both simulators.
+    void showBlow(World& world, Entity attacker, Entity target,
+                  const UnitKind& stats, bool leftSide) {
+        if (!currentTextureCache() || !stats.blow) return;
+        const Transform* from = world.getComponent<Transform>(attacker);
+        const Transform* to = world.getComponent<Transform>(target);
+        const Sprite* toSprite = world.getComponent<Sprite>(target);
+        if (!from || !to || !toSprite) return;
+
+        // Where it lands: the target's near edge, level with the attacker's
+        // chest — or the middle of a flyer.
+        const float direction = facing(leftSide);
+        const float targetCentre = to->x + toSprite->width / 2.0f;
+        const float nearEdge = targetCentre - direction * toSprite->width / 2.0f;
+        const bool targetIsUnit = world.hasComponent<Unit>(target);
+        const float hitY = targetIsUnit
+                               ? to->y + toSprite->height * 0.45f
+                               : from->y + stats.height * 0.45f;
+
+        // A WARDEN takes blows on a shield, and should be seen to.
+        std::string name = stats.blow;
+        if (world.hasComponent<Hero>(target) && heroPath_ == static_cast<int>(HeroPath::Warden)) {
+            name = "SHIELD";
+        }
+
+        const EffectKind* kind = effectKind(name);
+        if (!kind) return;
+        if (kind->flies) {
+            const float handX = from->x + stats.width / 2.0f + direction * stats.width * 0.4f;
+            const float handY = from->y + stats.height * 0.4f;
+            spawnProjectile(world, name, handX, handY, targetCentre, hitY);
+        } else {
+            spawnEffect(world, name, nearEdge, hitY, !leftSide);
         }
     }
 
@@ -2559,7 +2675,15 @@ private:
                 }
             }
 
-            if (Transform* at = world.getComponent<Transform>(entity)) {
+            // A unit with artwork leaves its death row playing where it fell;
+            // one without scatters shards, as it always did. Either way the
+            // unit itself is gone this frame — the corpse is a picture, not a
+            // combatant, so nothing about the fight waits for it.
+            const bool hasArt = unit->figure != kInvalidEntity &&
+                                world.hasComponent<ArtFigure>(unit->figure);
+            if (hasArt) {
+                leaveCorpse(world, unit->figure);
+            } else if (Transform* at = world.getComponent<Transform>(entity)) {
                 const UnitKind& stats = kindOf(unit->kind);
                 Sprite* sprite = world.getComponent<Sprite>(entity);
                 spawnShards(world, at->x + stats.width / 2.0f,
@@ -2633,7 +2757,10 @@ private:
         switch (static_cast<Spell>(spell)) {
             case Spell::Meteor: castMeteor(world, kind, worldX, worldY); break;
             case Spell::Heal:   castHeal(world, kind, worldX, worldY);   break;
-            case Spell::Rage:   session.rageSeconds = kind.duration;     break;
+            case Spell::Rage:
+                session.rageSeconds = kind.duration;
+                glowOver(world, true, 0.0f, 0.0f, 0.0f, "RAGE");  // radius 0: everyone
+                break;
             default: break;
         }
 
@@ -2669,6 +2796,7 @@ private:
             spawnShards(world, x + static_cast<float>(piece - 1) * 30.0f, y,
                         255, 180, 90);
         }
+        spawnEffect(world, "METEOR", x, y - 20.0f, false);
     }
 
     // Healing is capped at what the unit started with: a heal that overfilled
@@ -2687,6 +2815,29 @@ private:
         });
 
         spawnShards(world, x, y, 150, 255, 190);
+        // A glow on each unit it reached — up to HEAL's limit, so a packed line
+        // gets a handful rather than one per soldier.
+        glowOver(world, true, x, y, kind.radius, "HEAL");
+    }
+
+    // An effect over every unit of one side within `radius` of a point. The
+    // effect's own limit is what keeps a big blob of units from getting one
+    // each; this does not have to count.
+    void glowOver(World& world, bool leftSide, float x, float y, float radius,
+                  const char* effect) {
+        if (!currentTextureCache()) return;
+        for (auto& [entity, unit] : world.view<Unit>()) {
+            const Team* team = world.getComponent<Team>(entity);
+            const Transform* at = world.getComponent<Transform>(entity);
+            if (!team || !at || team->leftSide != leftSide) continue;
+            const UnitKind& stats = kindOf(unit.kind);
+            const float cx = at->x + stats.width / 2.0f;
+            const float cy = at->y + stats.height / 2.0f;
+            if (radius > 0.0f && (cx - x) * (cx - x) + (cy - y) * (cy - y) > radius * radius) {
+                continue;
+            }
+            spawnEffect(world, effect, cx, cy, !leftSide);
+        }
     }
 
     // --- The cannon --------------------------------------------------------
@@ -2747,6 +2898,9 @@ private:
         }
 
         spawnShards(world, blastX, blastY, 250, 210, 140);
+        // The painted burst on top of the shards, when there is art. The
+        // shards stay: they are what a headless run and the old look share.
+        spawnEffect(world, "CANNON", blastX, blastY - 10.0f, !firedByLeft);
         if (audioDevice) audioDevice->play(Waveform::Noise, 0.0f, 0.22f, 0.20f);
         world.destroyLater(shot);
     }

@@ -1,0 +1,418 @@
+# ---------------------------------------------------------------------------
+# art.txt - facts about each generated image, MEASURED by art_probe.
+#
+# Do not edit by hand. When an image changes, regenerate this file:
+#
+#     build/Release/art_probe --art > assets/lanebattle/art.txt
+#
+# The generator was asked for 288-pixel grids and delivered 1254-pixel ones,
+# so the only trustworthy numbers are the ones read off the pixels.
+#
+#   frame_width, frame_height  one cell
+#   columns, rows              frames per row; a unit has one row per pose:
+#                              idle, walk, attack, hurt, stunned, death
+#   anchor_x, anchor_y         the point placed on the target, in cell
+#                              pixels: a unit's FEET, an effect's centre
+#   figure                     a unit's standing height, or an effect's
+#                              larger side - what on-screen sizes scale
+# ---------------------------------------------------------------------------
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/effects/arrow.png
+frame_width  = 362
+frame_height = 724
+columns      = 6
+rows         = 1
+anchor_x     = 190
+anchor_y     = 354
+figure       = 288
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/effects/ballista-bolt.png
+frame_width  = 362
+frame_height = 724
+columns      = 6
+rows         = 1
+anchor_x     = 180
+anchor_y     = 358
+figure       = 315
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/effects/cannon-explosion.png
+frame_width  = 362
+frame_height = 724
+columns      = 6
+rows         = 1
+anchor_x     = 174
+anchor_y     = 369
+figure       = 337
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/effects/club-impact.png
+frame_width  = 362
+frame_height = 724
+columns      = 6
+rows         = 1
+anchor_x     = 187
+anchor_y     = 430
+figure       = 334
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/effects/dagger-slash.png
+frame_width  = 362
+frame_height = 724
+columns      = 6
+rows         = 1
+anchor_x     = 180
+anchor_y     = 378
+figure       = 297
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/effects/damage-impact.png
+frame_width  = 362
+frame_height = 724
+columns      = 6
+rows         = 1
+anchor_x     = 187
+anchor_y     = 361
+figure       = 231
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/effects/griffin-claw.png
+frame_width  = 362
+frame_height = 724
+columns      = 6
+rows         = 1
+anchor_x     = 194
+anchor_y     = 357
+figure       = 345
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/effects/healing.png
+frame_width  = 362
+frame_height = 724
+columns      = 6
+rows         = 1
+anchor_x     = 183
+anchor_y     = 478
+figure       = 379
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/effects/meteor-impact.png
+frame_width  = 362
+frame_height = 724
+columns      = 6
+rows         = 1
+anchor_x     = 180
+anchor_y     = 448
+figure       = 403
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/effects/rage-aura.png
+frame_width  = 362
+frame_height = 724
+columns      = 6
+rows         = 1
+anchor_x     = 178
+anchor_y     = 386
+figure       = 373
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/effects/shield-block.png
+frame_width  = 362
+frame_height = 724
+columns      = 6
+rows         = 1
+anchor_x     = 186
+anchor_y     = 360
+figure       = 288
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/effects/spear-spark.png
+frame_width  = 362
+frame_height = 724
+columns      = 6
+rows         = 1
+anchor_x     = 181
+anchor_y     = 353
+figure       = 245
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/effects/stun-stars.png
+frame_width  = 286
+frame_height = 916
+columns      = 6
+rows         = 1
+anchor_x     = 143
+anchor_y     = 456
+figure       = 228
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/effects/sword-arc.png
+frame_width  = 362
+frame_height = 724
+columns      = 6
+rows         = 1
+anchor_x     = 178
+anchor_y     = 387
+figure       = 279
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/scenery/animated/banner.png
+frame_width  = 362
+frame_height = 724
+columns      = 6
+rows         = 1
+anchor_x     = 170
+anchor_y     = 350
+figure       = 520
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/scenery/animated/grass.png
+frame_width  = 362
+frame_height = 724
+columns      = 6
+rows         = 1
+anchor_x     = 191
+anchor_y     = 402
+figure       = 305
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/scenery/animated/leaves.png
+frame_width  = 362
+frame_height = 724
+columns      = 6
+rows         = 1
+anchor_x     = 173
+anchor_y     = 354
+figure       = 348
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/scenery/animated/torch.png
+frame_width  = 286
+frame_height = 916
+columns      = 6
+rows         = 1
+anchor_x     = 143
+anchor_y     = 502
+figure       = 387
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/enemy/archer.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 108
+anchor_y     = 198
+figure       = 166
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/enemy/ballista.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 108
+anchor_y     = 191
+figure       = 137
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/enemy/griffin.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 105
+anchor_y     = 195
+figure       = 167
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/enemy/hero-chaplain.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 96
+anchor_y     = 185
+figure       = 167
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/enemy/hero-falconer.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 109
+anchor_y     = 199
+figure       = 172
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/enemy/hero-warden.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 102
+anchor_y     = 192
+figure       = 158
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/enemy/hero.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 121
+anchor_y     = 204
+figure       = 182
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/enemy/ogre.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 96
+anchor_y     = 192
+figure       = 174
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/enemy/pikeman.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 99
+anchor_y     = 206
+figure       = 203
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/enemy/runner.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 99
+anchor_y     = 195
+figure       = 158
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/enemy/soldier.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 105
+anchor_y     = 199
+figure       = 180
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/friendly/archer.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 110
+anchor_y     = 190
+figure       = 161
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/friendly/ballista.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 94
+anchor_y     = 183
+figure       = 148
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/friendly/griffin.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 100
+anchor_y     = 208
+figure       = 191
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/friendly/hero-chaplain.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 107
+anchor_y     = 198
+figure       = 173
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/friendly/hero-falconer.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 108
+anchor_y     = 196
+figure       = 164
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/friendly/hero-warden.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 112
+anchor_y     = 208
+figure       = 172
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/friendly/hero.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 109
+anchor_y     = 193
+figure       = 177
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/friendly/ogre.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 96
+anchor_y     = 190
+figure       = 152
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/friendly/pikeman.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 98
+anchor_y     = 198
+figure       = 188
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/friendly/runner.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 109
+anchor_y     = 206
+figure       = 148
+
+[sheet]
+file         = assets/lanebattle/lane-battle-gba-art/units/friendly/soldier.png
+frame_width  = 209
+frame_height = 209
+columns      = 6
+rows         = 6
+anchor_x     = 105
+anchor_y     = 200
+figure       = 175

@@ -4,7 +4,7 @@ A full slice list, written after reading the Cartoon Wars 2 APK's *structure*
 (asset categories, data tables, native library) — not its code and not its art,
 neither of which are ours to use.
 
-Slices 1-6 are done; see `v3-plan.md` for what each one found. This is the
+Every slice but 13 is done; see `v3-plan.md` for what each one found. This is the
 whole list, with the finished rows struck through.
 
 ## What the reference actually is
@@ -36,7 +36,7 @@ balance lives in files exported from a spreadsheet, one of which is called
 | ~~**3**~~ **DONE** | **Make the battle a battle.** Three unit types (runner, soldier, archer) in a table, keys `1`-`3`, a population cap of 10, units that queue rather than standing inside one another, an opponent that banks a wave and cycles a composition — **and gold paid for kills**, which was not in this plan and turned out to be the mechanic the whole design rested on. | **Nothing**, as predicted. | **Yes.** Mono-type loses every time, ranged without a front line loses fastest, and mixed compositions win. See `v3-plan.md` for the measurements and the two wrong turns on the way. |
 | ~~**4**~~ **DONE** | **A spawn bar.** Clickable unit buttons showing cost, affordability and the draining cooldown; drag the field to scroll. Number keys kept. | **Mouse input** (held / pressed-this-frame / released) and **`screenToWorld`**, both exactly as predicted — plus mouse events in the test harness, which was not predicted and is what makes any of it testable. | Open. The bar teaches the roster where the keys did not, but whether it is *better* needs a player. |
 | ~~**5**~~ **DONE, differently** | **Units that move.** Each unit is a coloured block with an articulated stick figure over it: legs that swing while walking, an arm that sweeps when a blow lands. Built from `Polygon`, whose points the game rebuilds each frame. | **Nothing.** Option 1 from *the thing that is not on this list* below was taken, so no art exists to animate and no sprite machinery was owed. | Open — this is the first slice that cannot be measured. It needs eyes. |
-| ~~**5b**~~ **DONE** | **Frame-based sprite animation.** The engine gained `Animation` and `Sprite.flipX`; the GAME gained a data path, so a roster row in `units.txt` can name a sheet and become animated art with no code change. Plus `ui_shots --sheet`, which renders any sheet as a filmstrip with its mirror underneath — the preview pane a hand-rolled engine otherwise lacks. | **`Animation`** — a component plus a system advancing `Sprite.srcX`, run from `RunBuiltinSystems` so every game gets it. And **`Sprite.flipX`**, which halves how much art a game needs: an artist draws one direction and the opponent's copy is mirrored. Both exactly as this row predicted, ten slices earlier. | Deferred for ten slices with the note "owed the moment there are sprites", and built when art was committed to rather than when it arrived. Verified in logic (`engine_tests`), in real pixels (`render_tests` writes a sheet, loads it through `TextureCache` and asserts the mirror moved), and in the data path (`lanebattle_tests`). **No art exists yet**, so nothing ships animated — a unit with no sheet is still a coloured block with a stick figure, which is every unit today. |
+| ~~**5b**~~ **DONE** | **Frame-based sprite animation.** The engine gained `Animation` and `Sprite.flipX`; the GAME gained a data path, so a roster row in `units.txt` can name a sheet and become animated art with no code change. Plus `ui_shots --sheet`, which renders any sheet as a filmstrip with its mirror underneath — the preview pane a hand-rolled engine otherwise lacks. | **`Animation`** — a component plus a system advancing `Sprite.srcX`, run from `RunBuiltinSystems` so every game gets it. And **`Sprite.flipX`**, which halves how much art a game needs: an artist draws one direction and the opponent's copy is mirrored. Both exactly as this row predicted, ten slices earlier. | Deferred for ten slices with the note "owed the moment there are sprites", and built when art was committed to rather than when it arrived. Verified in logic (`engine_tests`), in real pixels (`render_tests` writes a sheet, loads it through `TextureCache` and asserts the mirror moved), and in the data path (`lanebattle_tests`). It shipped animated once generated art arrived: every unit now wears a sheet, and the GAME chooses the row — walking, attacking, flinching, dying — by what the unit is doing (`Art.h`). |
 | ~~**6**~~ **DONE** | **A battlefield worth looking at.** Three bands of hills behind the fight (0.18 / 0.45 / 0.72) and grass tufts in front of it at **1.30**, all placed by a deterministic hash rather than randomly. | **`parallax`** on `Sprite` and `Polygon`, plus `scrollFactor` in `View.h`. Added as a fourth parameter rather than replacing `screenSpace`, because collapsing them would silently invert every existing caller. | Open — needs eyes, like slice 5. |
 | ~~**7**~~ **DONE** | **Balance you can edit without a compiler.** `assets/lanebattle/units.txt` holds the roster; it can override any field of any unit and **add new unit types**, and anything it omits keeps its compiled-in value. | **`DataFile.h`** — repeated `[section]` blocks of key/value pairs, paths resolved against the executable like textures, a missing file non-fatal. Also `resetBalance()`, because a roster a file can change is global mutable state and tests must be able to put it back. | Done early: the roadmap said "wait until six unit types", but slices 8 and 9 both want data tables, so the loader earns itself now rather than being rebuilt then. |
 | ~~**8**~~ **DONE** | **A castle that fights.** A cannon aimed by clicking the field — press-and-release fires, press-and-drag scrolls — costing 30 gold a shot and reaching 420 pixels. Plus INCOME / WALLS / SUPPLY upgrades at geometrically rising cost, bought by both sides. | **Nothing**, as predicted. It is the first caller of `screenToWorldX`, which slice 4 added and nothing had used. | Yes, but only after a rebalance. Free, long-ranged defensive fire made every game a 800-800 stalemate; charging for shots and halving the reach restored it. See `v3-plan.md`. |
@@ -49,14 +49,15 @@ balance lives in files exported from a spreadsheet, one of which is called
 ## Five engine additions, total
 
 Across eleven slices the engine gains: ~~**mouse input**~~ (slice 4),
-**`Animation` + sprite flip** (deferred — no art to animate), ~~**a parallax
+~~**`Animation` + sprite flip**~~ (slice 5b), ~~**a parallax
 scroll factor**~~ (slice 6), ~~**file reading**~~ (slice 7), and ~~**save/load**~~
 (slice 10) — plus a spatial grid if and only if a measurement asks for one, and
 it still has not.
 
-**The list is finished.** Ten slices in, the engine has gained four headers:
-`View.h`, the mouse in `Input.h`, `parallax`, and `DataFile.h` — which now
-writes as well as reads. Five of the ten slices needed no engine code at all.
+**The list is finished.** The engine gained `View.h`, the mouse in `Input.h`,
+`parallax`, `DataFile.h` — which now writes as well as reads — and, once art
+arrived, `Animation` and `Sprite.flipX`. Five of the first ten slices needed no
+engine code at all.
 
 That is the whole list. Nothing about the ECS, the scene stack, the renderer's
 structure, the audio device or the collision system needs rebuilding to get
@@ -76,8 +77,11 @@ The realistic options, in the order I would try them:
    which the reference's art is not.
 3. **Draw it.** The engine loads PNGs and slices sheets already.
 
-Option 1 was taken and slice 5 shipped on it. Options 2 and 3 remain open, and
-would make slice 5b (frame-based sprite animation) worth building.
+Option 1 was taken and slice 5 shipped on it. Then a fourth option nobody listed
+was taken: **generate it** — with ChatGPT, whose sheets are original and whose
+output needed measuring before it could be used, because it does not match its
+own requests (`art_probe` exists for exactly that). Every unit now wears
+generated art, and the stick figures remain as the no-assets fallback.
 
 ## One structural question, due around slice 9
 

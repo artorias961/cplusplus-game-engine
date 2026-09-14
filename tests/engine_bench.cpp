@@ -123,8 +123,10 @@ int main() {
         "what a lane battler runs instead of collision, and the gap between the\n"
         "two columns is the price of asking about overlap rather than distance.\n"
         "\n"
-        "Lane Battle peaks around 140 entities, of which about 16 are units.\n"
-        "Read the row nearest your own count before believing anything needs a\n"
-        "spatial grid.\n");
+        "A Lane Battle battle with art holds about 360 entities, but targeting\n"
+        "scans only the units - at most twenty - so the scan column's first row\n"
+        "is the one that applies. The rest are drawn, not scanned, and drawing\n"
+        "is the cost this benchmark does not measure. Read the row nearest your\n"
+        "own count before believing anything needs a spatial grid.\n");
     return 0;
 }

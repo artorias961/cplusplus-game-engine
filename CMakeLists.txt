@@ -55,7 +55,8 @@ target_link_libraries(breakout PRIVATE breakout_lib)
 add_library(lanebattle_lib STATIC
     "${CMAKE_SOURCE_DIR}/src/game/lanebattle/LaneBattle.cpp"
     "${CMAKE_SOURCE_DIR}/src/game/lanebattle/Weather.cpp"
-    "${CMAKE_SOURCE_DIR}/src/game/lanebattle/Environment.cpp")
+    "${CMAKE_SOURCE_DIR}/src/game/lanebattle/Environment.cpp"
+    "${CMAKE_SOURCE_DIR}/src/game/lanebattle/Art.cpp")
 target_include_directories(lanebattle_lib PUBLIC
     "${CMAKE_SOURCE_DIR}/src/game/lanebattle")
 target_link_libraries(lanebattle_lib PUBLIC engine)
@@ -115,6 +116,15 @@ add_executable(ui_shots "${CMAKE_SOURCE_DIR}/tests/ui_shots.cpp")
 target_include_directories(ui_shots PRIVATE "${CMAKE_SOURCE_DIR}/tests")
 target_link_libraries(ui_shots PRIVATE lanebattle_lib)
 
+# The fourth instrument, and like the other three it cannot fail: it reads sprite
+# sheets pixel by pixel and prints whether the background is really transparent,
+# where each frame sits in its cell, and where the feet are. The art is generated
+# by a tool that has painted checkerboards where alpha should be and delivered
+# 1254-pixel grids when asked for 288, so "is this image usable?" is a question
+# that needs a measurement rather than a glance.
+add_executable(art_probe "${CMAKE_SOURCE_DIR}/tests/art_probe.cpp")
+target_link_libraries(art_probe PRIVATE engine)
+
 # `ctest` in the build directory runs all three; so does running any of the
 # binaries directly, which prints what passed.
 enable_testing()
@@ -157,7 +167,7 @@ endforeach()
 
 foreach(target engine asteroids_lib asteroids breakout_lib breakout
                 lanebattle_lib lanebattle engine_tests breakout_tests
-                asteroids_tests lanebattle_tests render_tests engine_bench)
+                asteroids_tests lanebattle_tests render_tests engine_bench art_probe)
     if (MSVC)
         target_compile_options(${target} PRIVATE /W4)
     else()
@@ -178,7 +188,7 @@ endforeach()
 # the shipped assets/lanebattle/units.txt and checks it parses into a sane
 # roster, so the data file the player actually gets is covered rather than
 # only the parser that reads it.
-foreach(target asteroids lanebattle lanebattle_tests campaign_probe ui_shots weather_preview)
+foreach(target asteroids lanebattle lanebattle_tests campaign_probe ui_shots weather_preview art_probe)
     add_custom_command(TARGET ${target} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_SOURCE_DIR}/assets

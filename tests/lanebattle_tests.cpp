@@ -19,6 +19,7 @@
 
 #include "Harness.h"
 #include "LaneBattle.h"
+#include "Art.h"
 #include "engine/View.h"
 
 using namespace engine;
@@ -4935,6 +4936,197 @@ composition         = 2,2,1
 // two pixel positions for four solid minutes, castles untouched, gold cycling
 // on a perfect period. Spending the instant you can afford to is precisely
 // what the opponent does, so playing that way mirrors it exactly and neither
+// --- The art, and the knobs on the effects ---------------------------------------
+//
+// Everything here is PRESENTATION and these tests run without a texture cache,
+// so what can be asserted is the arithmetic and the data. The pictures are
+// checked where there is a renderer: weather_render_tests puts the art in a
+// real battle, holds the effect limits to account, and proves the weather is
+// random and comes in more than one size.
+
+std::string besideBinary(const std::string& path) {
+    std::string full = path;
+    if (char* base = SDL_GetBasePath()) {
+        full = std::string(base) + path;
+        SDL_free(base);
+    }
+    return full;
+}
+
+bool fileExists(const std::string& path) {
+    std::ifstream file(besideBinary(path), std::ios::binary);
+    return file.good();
+}
+
+// A roll lands in a size class by the mix's weights, in order, and a mix with
+// no weight at all falls back to the middle size rather than dividing by zero.
+void testSizeClassesFollowTheMix() {
+    const lanebattle::SizeMix mix{50, 35, 15};
+    check(lanebattle::pickSize(mix, 0.0f) == lanebattle::SizeClass::Small,
+          "the bottom of the roll is small");
+    check(lanebattle::pickSize(mix, 0.49f) == lanebattle::SizeClass::Small,
+          "and so is everything below the small share");
+    check(lanebattle::pickSize(mix, 0.51f) == lanebattle::SizeClass::Medium,
+          "the next share is medium");
+    check(lanebattle::pickSize(mix, 0.99f) == lanebattle::SizeClass::Large,
+          "and the top of the roll is large");
+    check(lanebattle::pickSize(lanebattle::SizeMix{0, 0, 100}, 0.2f) ==
+              lanebattle::SizeClass::Large,
+          "a mix of only large spawns only large");
+    check(lanebattle::pickSize(lanebattle::SizeMix{0, 0, 0}, 0.5f) ==
+              lanebattle::SizeClass::Medium,
+          "and a mix of nothing spawns the middle size instead of failing");
+    check(lanebattle::sizeScale(lanebattle::SizeClass::Small) <
+                  lanebattle::sizeScale(lanebattle::SizeClass::Medium) &&
+              lanebattle::sizeScale(lanebattle::SizeClass::Medium) <
+                  lanebattle::sizeScale(lanebattle::SizeClass::Large),
+          "small is smaller than medium, which is smaller than large");
+}
+
+// What a unit shows, in priority order. A blow beats a flinch — interrupting
+// an attack to flinch makes a fight look like twitching — a flinch beats
+// walking, and walking beats standing still.
+void testAUnitShowsTheRightPose() {
+    using lanebattle::Pose;
+    check(lanebattle::choosePose(false, false, false) == Pose::Idle, "still is idle");
+    check(lanebattle::choosePose(true, false, false) == Pose::Move, "moving walks");
+    check(lanebattle::choosePose(true, false, true) == Pose::Hurt,
+          "a hit shows even on the move");
+    check(lanebattle::choosePose(true, true, true) == Pose::Attack,
+          "and a blow in progress beats everything");
+
+    // The walk keeps pace with the ground: faster units cycle faster, so feet
+    // do not slide, and the interval never reaches absurd values either way.
+    const float runner = lanebattle::walkFrameSeconds(150.0f, 34.0f, 6);
+    const float ogre = lanebattle::walkFrameSeconds(62.0f, 63.0f, 6);
+    check(runner < ogre, "a runner's legs go faster than an ogre's");
+    check(lanebattle::walkFrameSeconds(0.001f, 50.0f, 6) <= 0.25f,
+          "a crawling unit still animates");
+    check(lanebattle::walkFrameSeconds(5000.0f, 10.0f, 6) >= 0.03f,
+          "and a sprinting one does not strobe");
+    check(lanebattle::walkFrameSeconds(0.0f, 50.0f, 6) > 0.0f,
+          "and a unit that cannot move gets a sane interval, not a division by zero");
+}
+
+// With no texture cache — every test, both simulators — effects are nothing.
+// Not a flat rectangle, not an entity waiting for a texture: nothing, so the
+// fight those tools measure is exactly the fight without art.
+void testEffectsAreNothingWithoutArt() {
+    World world;
+    const std::size_t before = world.entities().size();
+    check(lanebattle::spawnEffect(world, "SWORD", 100.0f, 100.0f, false) == kInvalidEntity,
+          "no effect is shown without a texture cache");
+    check(lanebattle::spawnProjectile(world, "ARROW", 0.0f, 0.0f, 300.0f, 0.0f) ==
+              kInvalidEntity,
+          "and no projectile flies");
+    check(world.entities().size() == before, "and nothing was created trying");
+}
+
+// effects.txt merges by name like the roster: a block changes only what it
+// says. And its numbers are clamped on the way in, because a chance of 250% or
+// a limit of -3 is a typo, not a design.
+void testEffectsTuningMergesAndIsClamped() {
+    lanebattle::resetEffects();
+    const lanebattle::EffectKind* sword = lanebattle::effectKind("SWORD");
+    check(sword != nullptr, "the built-in effects include a sword arc");
+    if (!sword) return;
+    const float seconds = sword->seconds;
+
+    const std::string path = writeRoster("lb_effects.txt", R"(
+[sizes]
+small = 2.0
+medium = 1.0
+large = 0.5
+
+[effect]
+name   = SWORD
+chance = 250
+limit  = -3
+
+[weather]
+name  = RAIN
+limit = 17
+
+[ambient]
+name  = CLOUDS
+limit = 2
+)");
+    check(lanebattle::loadEffects(path), "a partial effects file loads");
+    sword = lanebattle::effectKind("SWORD");
+    check(sword->chance == 100, "a chance over a hundred is a hundred");
+    check(sword->limit == 0, "a negative limit is none");
+    check(std::fabs(sword->seconds - seconds) < 0.001f,
+          "and what the block left out keeps its value");
+    check(lanebattle::weatherTuning("RAIN")->limit == 17, "weather limits come from the file");
+    check(lanebattle::ambientTuning("CLOUDS")->limit == 2, "and so do ambient ones");
+    check(lanebattle::sizeScale(lanebattle::SizeClass::Small) <=
+              lanebattle::sizeScale(lanebattle::SizeClass::Medium),
+          "sizes written backwards are put back in order, not trusted");
+    check(lanebattle::weatherTuning("NO SUCH WEATHER") == nullptr,
+          "a weather the code cannot draw is not invented by a file");
+    lanebattle::resetEffects();
+}
+
+// The three data files have to agree with each other, and nothing else checks
+// that they do. units.txt names sheets, art.txt describes them, effects.txt
+// names more, and a unit's `blow` names an effect. Any one name out of step is
+// a unit with no art or a blow with no picture, and it fails SILENTLY — the
+// game falls back to blocks, as it is designed to, and nobody notices the art
+// was meant to be there.
+void testTheShippedArtDataAgrees() {
+    lanebattle::resetBalance();
+    lanebattle::resetArt();
+    lanebattle::resetEffects();
+    check(lanebattle::loadBalance(lanebattle::kBalancePath), "the shipped roster loads");
+    check(lanebattle::loadArt(lanebattle::kArtPath), "the shipped art.txt loads");
+    check(lanebattle::loadEffects(lanebattle::kEffectsPath), "the shipped effects.txt loads");
+    check(lanebattle::sheetCount() > 0, "and describes some sheets");
+
+    auto describedAndPresent = [](const char* sheet, const char* what) {
+        if (!sheet || sheet[0] == '\0') return;
+        const lanebattle::SheetInfo* info = lanebattle::sheetInfo(sheet);
+        check(info != nullptr, what);
+        check(fileExists(sheet), "every sheet named is a file that exists");
+        if (info) {
+            check(info->frameWidth > 0 && info->frameHeight > 0 && info->figureHeight > 0,
+                  "and every description has a usable cell and figure");
+        }
+    };
+
+    int withArt = 0;
+    for (int kind = 0; kind < lanebattle::unitKindCount(); ++kind) {
+        const lanebattle::UnitKind& unit = lanebattle::unitKind(kind);
+        if (unit.sheet) ++withArt;
+        describedAndPresent(unit.sheet, "every unit sheet is described in art.txt");
+        describedAndPresent(unit.enemySheet, "every enemy sheet is described in art.txt");
+        for (const char* path : unit.pathSheet) {
+            describedAndPresent(path, "every hero path sheet is described in art.txt");
+        }
+        if (unit.sheet) {
+            check(unit.artHeight > 0.0f, "a unit with art says how tall it stands");
+            const lanebattle::SheetInfo* info = lanebattle::sheetInfo(unit.sheet);
+            check(info && info->rows >= static_cast<int>(lanebattle::Pose::Count),
+                  "and its sheet has a row for every pose");
+        }
+        if (unit.blow) {
+            check(lanebattle::effectKind(unit.blow) != nullptr,
+                  "every unit's blow names an effect that exists");
+        }
+    }
+    check(withArt == lanebattle::unitKindCount(), "every unit in the shipped roster has art");
+
+    for (int index = 0; index < lanebattle::effectKindCount(); ++index) {
+        const lanebattle::EffectKind& effect = lanebattle::effectKindAt(index);
+        describedAndPresent(effect.sheet.c_str(), "every effect sheet is described in art.txt");
+        check(effect.limit <= lanebattle::effectLimit(),
+              "no single effect may outnumber the limit on all of them");
+    }
+
+    lanebattle::resetBalance();
+    lanebattle::resetArt();
+    lanebattle::resetEffects();
+}
+
 // --- What a review found, and what now notices --------------------------------
 //
 // Every case below reproduces something that was wrong in shipped code and that
@@ -5420,6 +5612,12 @@ int main() {
     testTheSkyIsItsOwnQueue();
     testAStageCanFieldFlyers();
     testAWallOfSoldiersCannotAnswerTheSky();
+
+    testSizeClassesFollowTheMix();
+    testAUnitShowsTheRightPose();
+    testEffectsAreNothingWithoutArt();
+    testEffectsTuningMergesAndIsClamped();
+    testTheShippedArtDataAgrees();
 
     testABattleFinishesExactlyOnce();
     testBothCastlesFallingInOneUpdateIsALoss();

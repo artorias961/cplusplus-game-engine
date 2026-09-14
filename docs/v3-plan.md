@@ -1928,6 +1928,117 @@ session — and the new test is the one worth dwelling on, because it was writte
 happened. The tools need checking as badly as the code does, and the only thing
 that ever finds it is using them on something whose answer you already know.
 
+## The art goes in — measured first
+
+The generated art had been sitting in the repository unused: 22 unit sheets,
+14 effects and 11 scenery images from ChatGPT, plus seven painted battlefields
+and the weather ChatGPT had wired in itself. This is the work that put the
+units, the effects and random, size-classed weather into the game.
+
+### Nothing about a generated image can be taken from its request
+
+The sheets were ASKED for as 288-pixel grids of 48-pixel cells and delivered as
+1254-pixel grids of 209. The effects were asked for as strips of six square
+frames and came back three times as wide as they are tall. On the environment
+paintings, the generator had twice drawn a picture of transparency — a painted
+checkerboard — instead of the real thing.
+
+So the first thing built was not the integration but an instrument:
+`art_probe`, which reads the pixels. Every unit sheet turned out to be genuinely
+transparent and cleanly gridded in its idle and walk rows. Two things were not
+visible by eye and would have been by the player:
+
+- **Haze.** 9–22% of every unit sheet's pixels are faint (alpha 1–39): a soft
+  halo hugging each figure, plus speckle. Every viewer shows PNGs on a dark
+  background, where haze is invisible. `--show` paints it magenta, and in the
+  game at 1:4 scale it turned out not to show — so there is no alpha cleanup,
+  because a measurement said none was needed.
+- **Bleed.** The attack, hurt, stunned and death rows run sword tips and lying
+  bodies into the next cell by 100–200 border pixels. That is a 1–2 pixel
+  sliver at game scale, left as an art fix rather than papered over in code.
+
+`art_probe --art` writes the measurements as `art.txt`, and the game reads every
+sheet's geometry from there. A sheet it does not describe is not used.
+
+### A unit's picture is not its footprint
+
+The obvious integration — slice 5b's, texture the unit's own sprite — draws a
+square 209-pixel cell into a 24×36 box. It squashes the art, and a unit's
+`Sprite.width` is what the fight measures reach against, so drawing it any
+bigger would change the balance.
+
+The answer was already in the code: the stick figure has always been a
+separate entity following its unit. The art takes the same slot. The unit
+keeps its Sprite as its footprint, invisible; an animated figure follows it,
+anchored by the probe's measured **feet**, drawn at `art_height` from
+`units.txt`, and picking a row of its sheet by what the unit is doing — walking
+at a pace set by its real speed so feet do not slide, attacking in time with
+each blow, flinching when hit unless mid-swing, idle while it queues. A death
+leaves a corpse entity playing the death row (a griffin falls first), then
+fading. The campaign simulator's table is **identical** with and without the
+art, which is the only proof "presentation only" is worth anything.
+
+### Effects, weather and ambience: random, limited, sized
+
+Asked for directly: spawn at random, control the limit, do not spawn
+everything, and make the sizes relevant to the game.
+
+- **One set of dice, not gameplay's.** The presentation has its own generator,
+  seeded from the clock in the game and fixed in the verifier and `ui_shots`,
+  so pictures repeat when they need to and a raindrop can never decide a fight.
+- **Pools as ceilings, limits as policy.** Weather keeps its fixed pool (160
+  now) and clouds, fog and dust get pools of their own, so nothing allocates
+  while it runs; `effects.txt` sets how many of each may show and how fast they
+  arrive. Combat effects obey a per-effect limit, a global one and a chance per
+  blow — a big melee shows a few flashes, not thirty.
+- **Size is depth.** Everything spawns small, medium or large from a mix. A
+  small raindrop or cloud is far away — fainter, slower, behind the fight — and
+  a large one is near, faster, and some pass in front of the units faintly.
+  Three sizes that moved alike would read as three stamps.
+
+### What measuring caught on the way
+
+- **The spawn cap halved heavy rain at low frame rates.** A flat cap of four
+  spawns per update meant forty drops a second at ten frames a second against
+  the eighty asked for. It is a tenth of a second's worth now.
+- **Snow was correct and invisible.** 69 of 70 flakes were on screen and almost
+  none could be seen: five pale pixels at 40% on a frozen landscape. That is a
+  size and opacity question — exactly what the user asked to be able to tune —
+  so it was tuned in `effects.txt`, not code.
+- **`ui_shots` was photographing a game nobody plays.** It never handed the game
+  a texture cache, so every battle shot showed coloured blocks on procedural
+  hills. It sees the art now. Its `--sheet` preview also cropped the last frames
+  off every 1254-pixel sheet despite a comment promising it scaled down; it
+  scales fractionally now, and takes a row argument.
+- **Two missing glyphs again.** `[` and `]` drew as boxes in ChatGPT's HUD line
+  for the ambience controls. The test that reads every string the game draws
+  only reads the scenes it drives, and that line is drawn by a system a test
+  without textures never builds.
+- **The verifier's numbers were for the old design.** It expected exactly four
+  clouds and exactly 171 weather entities, and its freeze test sampled a rain
+  particle at density zero — which, under "density scales the limit", is
+  correctly none. It checks what is intended now: limits held, weather random
+  but repeatable by seed, more than one size, the art worn in a real battle and
+  the hero in its path's sheet.
+- **`mutate.bat` was killed mid-run and left a mutation in the tree.** Piping it
+  into PowerShell's `Select-Object -First 6` stops the process after six lines;
+  that mutation printed seventeen, so the restore never ran and the broken line
+  sat in `Weather.cpp` until the next run failed for no visible reason. Caught
+  by the next run, restored from the script's backup byte for byte, and written
+  into the script's header.
+- **Dead config, twice.** `units.txt` carried an `[upgrade] CHAMPION` block the
+  loader skipped without a word (CHAMPION is a perk), and the effect defaults
+  carried a `HIT` nothing asked for. Both removed.
+
+### And the README had drifted
+
+A verification pass found about twenty claims in the README the code
+contradicted — "loads zero images" beside forty-seven images, upgrade keys the
+loader does not read, a sheet path that would not load, an ogre with four
+soldiers' health that has two and a half, "the game is silent" in a project
+that synthesises sound, balance claims measured by the broken sweep. It was
+rewritten against the code and the measurements, not against memory.
+
 ## Remaining slices
 
 Moved to **`docs/roadmap-cartoonwars.md`**, which lists all eleven of them
