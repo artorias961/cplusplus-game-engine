@@ -1,0 +1,6 @@
+{
+  "prompt": "Edit target: attached Grave Warden sprite sheet. Change ONLY background transparency: remove every painted gray/white checkerboard square, leaving actual alpha=0 transparent empty space. Preserve the character pixels, all36 poses, navy outlines, shovel polearm, equipment, positions, sheet size and colors exactly. Return genuine RGBA transparent PNG, not an RGB image depicting checkerboard, not a magenta background, not a white background. No other changes.",
+  "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-09f82d22-46df-4df9-ad21-fa42b3cb72b6.png",
+  "file": "friendly/grave-warden-alpha-retry.png",
+  "status": "failed-alpha; RGB; alpha-extrema255,255"
+}

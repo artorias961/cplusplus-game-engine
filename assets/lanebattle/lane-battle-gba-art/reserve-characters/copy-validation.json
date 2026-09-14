@@ -1,0 +1,242 @@
+[
+  {
+    "id": "grave-warden",
+    "file": "friendly/grave-warden-source-v1.png",
+    "sha256": "4ff2070ca54cdf9274c3531f98ca81f5652de73ebf411e657394f04835dd4d84",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "lantern-keeper",
+    "file": "friendly/lantern-keeper-source.png",
+    "sha256": "19ed948a287c55a75147e737aa1866f7a9b6ed5218a97f8ca167787bf85fadb5",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "ruin-scavenger",
+    "file": "friendly/ruin-scavenger-source.png",
+    "sha256": "cf50856033f24e1f9c504926da1e114c4b53abb42bab59616cb9d32d4704f5f7",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "dawnshield-guardian",
+    "file": "friendly/dawnshield-guardian-source.png",
+    "sha256": "8551de377d37c9fd3a07507a75da87b77aa916e69b94ce62787a3518c0b15a74",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "silverwood-archer",
+    "file": "friendly/silverwood-archer-source.png",
+    "sha256": "312d5759b7883cfaf9270e76f18665aff46499afa41a289ed0b44a46dad80931",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "rune-cannoneer",
+    "file": "friendly/rune-cannoneer-source.png",
+    "sha256": "52b9e5b6baf222af40100b0ce305058c8d53e0f832ca667fb07f2b9498bf32c7",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "ash-knight",
+    "file": "enemy/ash-knight-source.png",
+    "sha256": "6133158463df9a9086241975bea59eb7f16aa2687ef25276a5b51c43b90206aa",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "plague-apothecary",
+    "file": "enemy/plague-apothecary-source.png",
+    "sha256": "cc541cb266d94b00c30161eb695b020967417bc3071fc8714ef3905e349f96a4",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "hollow-archer",
+    "file": "enemy/hollow-archer-source.png",
+    "sha256": "8e47275ed24b359937c607de467d911f060c1b67b6b36e7535333a5bf65d66b7",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "bone-hound",
+    "file": "enemy/bone-hound-source.png",
+    "sha256": "fc7983e45df7d7c9f8bcefea13c910539fe13719976e09d04a1b6035954beeb1",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "crypt-brute",
+    "file": "enemy/crypt-brute-source.png",
+    "sha256": "0f2f223adb1baecd16b3b2607c7afb2b986ed405edc67eab1c353af7736660b1",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "chainbound-reaver",
+    "file": "enemy/chainbound-reaver-source.png",
+    "sha256": "704cd3f064d9a102b17f1a890191cf01a79ab76b704c9f5640e6871e26156b5a",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "crow-familiar",
+    "file": "friendly/crow-familiar-source.png",
+    "sha256": "4e0dc9aecec9886fec1d8774c9da2314c42a911a3ed4f222dff03fde23ff9e79",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "gryphon-rider",
+    "file": "friendly/gryphon-rider-source.png",
+    "sha256": "fdd2d2cb98395eea4af88a03f280bb001b437b2c9f08720357e2e80bc11af6d7",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "skyguard-lancer",
+    "file": "friendly/skyguard-lancer-source.png",
+    "sha256": "789a377402d4f3e399e2467730e5d60dc08bc2ad3a35a6701efd692d68b89d18",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "runejet-skirmisher",
+    "file": "friendly/runejet-skirmisher-source.png",
+    "sha256": "dbeea3ce7d2d4232d8c08c0c22b4051003b9bdc35a14f73c22ad85ab7bdbba2b",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "lantern-wisp",
+    "file": "friendly/lantern-wisp-source.png",
+    "sha256": "2ad30ed978ea8429deae4b436152f1896e420ec247ed860125ce50c36197f898",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "clockwork-falcon",
+    "file": "friendly/clockwork-falcon-source.png",
+    "sha256": "ca20ad7aa439bd2d11e31f8669967109a8d7fd623a2601a0952f73a594c3f219",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "cloud-witch",
+    "file": "friendly/cloud-witch-source.png",
+    "sha256": "a14e77ccf2bc834c369e257b5e42dc8edc9b0ec162dbe39314cc3c2866096101",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "dawn-drake",
+    "file": "friendly/dawn-drake-source.png",
+    "sha256": "ecc175bc27da08257549ffe10de17195a85645f2d6b63ad66dc1490737f7d15a",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "carrion-bat",
+    "file": "enemy/carrion-bat-source.png",
+    "sha256": "61041377dfca0f69d1e9dff87b3d32ab0a29e13dc0c492956115e2435858d10b",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "broken-gargoyle",
+    "file": "enemy/broken-gargoyle-source.png",
+    "sha256": "7d998d6f0ebecb6fce6f48796e79e408aff523c662e0c120c0a413d52a6580f7",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "plague-harpy",
+    "file": "enemy/plague-harpy-source.png",
+    "sha256": "382b8767b43d50b6b3a97e2a9125f597e92d3d6a567d6b1b810bfb82fc7b8b11",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "blood-imp",
+    "file": "enemy/blood-imp-source.png",
+    "sha256": "11b70a1a3dc065896b161b6e2a0d835ba4f16d14010eb4973990a0f14e5b7553",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "bone-wyvern",
+    "file": "enemy/bone-wyvern-source.png",
+    "sha256": "da12baccb3b54b3e4b075fa6ba78fa2b3624aa65da73cef3df75a764b19c65e5",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "shrieking-wraith",
+    "file": "enemy/shrieking-wraith-source.png",
+    "sha256": "1113bba41a8ce7ff9caa51a89a4f52fb2ddacfef5d40b860a1e7024cbd040eb1",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "ash-moth",
+    "file": "enemy/ash-moth-source.png",
+    "sha256": "49636b1775db5bdc35ad040cb7d48e47c477743b14f312f4f767c3fa8de758f9",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "void-watcher",
+    "file": "enemy/void-watcher-source.png",
+    "sha256": "0683b18223c8527faaccbed4b6ffe4949f67bf74898568a1bca2482a9c3ed9bd",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "ember-wizard",
+    "file": "friendly/ember-wizard-source.png",
+    "sha256": "3e632a664434399e020a478079ee8e3ecac59e415d5aceaa1db4bbcf0dba7482",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "cinder-warlock",
+    "file": "enemy/cinder-warlock-source.png",
+    "sha256": "02fb3d8a5c919f56e489fa5691e2c21179ac7e6b391ff354ad9e12a7e12f9fde",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "frost-sage",
+    "file": "friendly/frost-sage-source.png",
+    "sha256": "7a3ac98b93cfd9c8e07ae794ee99f81a23f62dc4cb3ff3fdd9a392d037f4fe66",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "frostbound-lich",
+    "file": "enemy/frostbound-lich-source.png",
+    "sha256": "0a62a009e5be078512dc1ea875f79e358962ca2fcafa4a17f74f6dfbad484935",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "storm-mage",
+    "file": "friendly/storm-mage-source.png",
+    "sha256": "65770a54100d7d60a09ac54037e2ab0c097924755d8a81af4abe3d6f77b03883",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "tempest-cultist",
+    "file": "enemy/tempest-cultist-source.png",
+    "sha256": "b43162d4fb0ff62a8ca1f09ec95a14d767a0d4d963dcfd99a7246f26ef8d6a5c",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "dawn-cleric",
+    "file": "friendly/dawn-cleric-source.png",
+    "sha256": "bd66884c3e39e0ebea332e04e1f6ded715c8a8f29745aed2ff58a52605a00d82",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "blood-acolyte",
+    "file": "enemy/blood-acolyte-source.png",
+    "sha256": "03de48dfb3282e7977a94c5500153722cfd3eb27b741dde98283e96fe7d15423",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "grove-summoner",
+    "file": "friendly/grove-summoner-source.png",
+    "sha256": "640bda9e3fb9db0bbb053cec26d126d92374a90138990cd23123466b38b2bdb9",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "marsh-witch",
+    "file": "enemy/marsh-witch-source.png",
+    "sha256": "4997b973dff4e3fa99ccc212069b5bd96296ac19e29a603be10ddf9efffa3317",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "arcane-scholar",
+    "file": "friendly/arcane-scholar-source.png",
+    "sha256": "794f53c4437f9652b51892906d4786bc05b9722e68cdbde98d20816bd0d1db46",
+    "originalCopyMatches": true
+  },
+  {
+    "id": "grave-necromancer",
+    "file": "enemy/grave-necromancer-source.png",
+    "sha256": "0b181cbc52aa43a1e0c13e4386ba359732fb7704b544c3dbb1cf463a215d5670",
+    "originalCopyMatches": true
+  }
+]

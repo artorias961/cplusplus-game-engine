@@ -1,0 +1,290 @@
+{
+  "tool": "built-in image_gen",
+  "references": [
+    "C:/Users/artor/Downloads/tiny_engine/engine_project/assets/lanebattle/lane-battle-gba-art/units/friendly/soldier.png",
+    "C:/Users/artor/Downloads/tiny_engine/engine_project/assets/lanebattle/lane-battle-gba-art/units/enemy/griffin.png"
+  ],
+  "basePrompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background, NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.",
+  "roster": [
+    [
+      "grave-warden",
+      "friendly",
+      "ground",
+      64,
+      "Grave Warden: broad armored guardian with a shovel-shaped polearm, iron helmet, teal tabard, solemn grounded stride and shovel polearm sweep."
+    ],
+    [
+      "lantern-keeper",
+      "friendly",
+      "ground",
+      48,
+      "Lantern Keeper: small hooded support traveler, spirit lantern held out on hooked handle, packed satchel, teal hem, cautious steps and lantern-lifting support gesture."
+    ],
+    [
+      "ruin-scavenger",
+      "friendly",
+      "ground",
+      48,
+      "Ruin Scavenger: agile patched salvaged armor, asymmetrical shoulder plates, twin short blades, teal scarf, low quick stride and paired blade lunge."
+    ],
+    [
+      "dawnshield-guardian",
+      "friendly",
+      "ground",
+      64,
+      "Dawnshield Guardian: heavy silver armored defender with tall sun-marked tower shield, short mace, teal cloth, planted shield bash."
+    ],
+    [
+      "silverwood-archer",
+      "friendly",
+      "ground",
+      64,
+      "Silverwood Archer: slender cloaked ranger, long pale-wood bow, feathered arrows in quiver, muted green cloak teal clasp, bow draw release recovery."
+    ],
+    [
+      "rune-cannoneer",
+      "friendly",
+      "ground",
+      64,
+      "Rune Cannoneer: stocky artillery soldier carrying compact rune cannon, braced bronze and steel barrel, teal uniform and rune marks, heavy recoil and visible reload. No fired projectile."
+    ],
+    [
+      "ash-knight",
+      "enemy",
+      "ground",
+      64,
+      "Ash Knight: scorched jagged plate armor, faint ember light inside narrow armor cracks, blackened broad sword, rust-red torn tabard, deliberate heavy slash."
+    ],
+    [
+      "plague-apothecary",
+      "enemy",
+      "ground",
+      64,
+      "Plague Apothecary: stooped masked poison thrower, beaked mask, stained satchel and readable bottles, dull olive leather with rust-red armband, bottle-throw anticipation release recovery. No flying bottle beyond hand."
+    ],
+    [
+      "hollow-archer",
+      "enemy",
+      "ground",
+      64,
+      "Hollow Archer: skeletal ranger, battered ragged rust-red cloak, worn crooked bow, bone fingers and quiver, tense draw release recovery."
+    ],
+    [
+      "bone-hound",
+      "enemy",
+      "ground",
+      64,
+      "Bone Hound: low undead canine with exposed ivory ribs and bones, ragged hide, scrap armor and rust-red collar, quadruped gait and forward bite, no human stance."
+    ],
+    [
+      "crypt-brute",
+      "enemy",
+      "ground",
+      96,
+      "Crypt Brute: hulking undead fighter, enormous shoulders small sunken head, dragging huge stone hammer, cracked gray-green skin, rust-red wraps, slow weighty stride and crushing hammer swing."
+    ],
+    [
+      "chainbound-reaver",
+      "enemy",
+      "ground",
+      96,
+      "Chainbound Reaver: armored executioner in angular closed helm, hooked chains coiled around forearms, heavy dark iron with rust-red straps, chain lash confined to own cell."
+    ],
+    [
+      "crow-familiar",
+      "friendly",
+      "flying",
+      48,
+      "Crow Familiar: tiny allied crow scout, dark blue-black feathers, charm collar and faint blue markings, compact wings. Body only18 logicalpixels tall, clearly smaller than riders. Hover wingbeat, travel wingbeat, peck dive, recoil, struggling hover, folded falling defeat."
+    ],
+    [
+      "gryphon-rider",
+      "friendly",
+      "flying",
+      96,
+      "Gryphon Rider: armored teal rider on compact eagle-headed lion-bodied gryphon, spear in rider hand, broad consistent feathered wings and hanging talons. Combined larger silhouette, airborne spear attack."
+    ],
+    [
+      "skyguard-lancer",
+      "friendly",
+      "flying",
+      96,
+      "Skyguard Lancer: winged humanoid warrior with light silver armor and long lance, teal waistcloth, anatomical feather wings, legs hanging airborne, forward lance thrust with maintained lift."
+    ],
+    [
+      "runejet-skirmisher",
+      "friendly",
+      "flying",
+      64,
+      "Runejet Skirmisher: soldier suspended by compact rune-powered flight pack, teal jacket, hand crossbow, short controlled blue exhaust shapes, hanging knees. Flight and hover not walking, crossbow aimed release reload."
+    ],
+    [
+      "lantern-wisp",
+      "friendly",
+      "flying",
+      48,
+      "Lantern Wisp: tiny floating support spirit surrounding warm golden lantern core, translucent-looking stepped pale teal spirit ribbons but crisp pixels, gentle hovering pulsing shape, support cast with no large glow. No legs."
+    ],
+    [
+      "clockwork-falcon",
+      "friendly",
+      "flying",
+      64,
+      "Clockwork Falcon: compact mechanical bird with articulated silver-bronze metal wings, teal maker insignia, hooked beak and jointed talons, rhythmic hinged wingbeats, claw dive, broken folded falling pose."
+    ],
+    [
+      "cloud-witch",
+      "friendly",
+      "flying",
+      96,
+      "Cloud Witch: friendly spellcaster riding a long wooden staff sideways while facing right, wind-tossed muted blue robes, pointed hood and teal sash, hovering body and trailing cloth, one hand casting. No ground walking."
+    ],
+    [
+      "dawn-drake",
+      "friendly",
+      "flying",
+      96,
+      "Dawn Drake: small allied dragon pale ivory scales and restrained gold accents, teal neck marking, stout snout, short horns and broad membrane wings, airborne claw or breath preparation with no emitted fire projectile."
+    ],
+    [
+      "carrion-bat",
+      "enemy",
+      "flying",
+      64,
+      "Carrion Bat: oversized dark bat with ragged wings, hooked claws and rust-red inner membrane markings, hunched head pointed ears, airborne claw strike, anatomical wingbeat."
+    ],
+    [
+      "broken-gargoyle",
+      "enemy",
+      "flying",
+      96,
+      "Broken Gargoyle: chipped gray stone flying creature, uneven damaged wings with consistent missing chips, horned blunt head and stone claws, rust-red ritual marking, laborious flap and claw lunge."
+    ],
+    [
+      "plague-harpy",
+      "enemy",
+      "flying",
+      96,
+      "Plague Harpy: ragged birdlike monster, diseased dull olive feathers, gaunt humanoid head with beaklike mask, rust-red bindings, claw feet, ragged anatomical wingbeats and talon strike."
+    ],
+    [
+      "blood-imp",
+      "enemy",
+      "flying",
+      64,
+      "Blood Imp: small horned demon with crimson membrane wings and thin barbed tail, coal-black body rust-orange markings, mischievous pointed face, fast distinct flaps and claw swipe."
+    ],
+    [
+      "bone-wyvern",
+      "enemy",
+      "flying",
+      96,
+      "Bone Wyvern: large skeletal flying reptile, ivory ribcage spine and skull, torn brown-red wing membranes, long articulated bony tail, two wingarms two hind legs, broad wingbeats and bite dive. Largest flyer."
+    ],
+    [
+      "shrieking-wraith",
+      "enemy",
+      "flying",
+      64,
+      "Shrieking Wraith: floating pale ghost, dark empty face, trailing torn charcoal cloth, spectral claw hands and rust-red binding seal, no feet contact, rippling cloth hover, claw reach and dissipating folded defeat."
+    ],
+    [
+      "ash-moth",
+      "enemy",
+      "flying",
+      96,
+      "Ash Moth: giant soot-covered moth, broad layered gray wings with ember-orange eye markings, feathery antennae, tiny dangling legs, consistent symmetrical wing anatomy in strict side view, wing shudder attack, falling folded wings."
+    ],
+    [
+      "void-watcher",
+      "enemy",
+      "flying",
+      64,
+      "Void Watcher: floating armored eye in dark angular metal shell, small independently spaced orbiting shards contained in cell, violet iris and rust-red sigil, bobbing hover rotation of shards, focused casting recoil, shell collapse defeat."
+    ],
+    [
+      "ember-wizard",
+      "friendly",
+      "spellcaster",
+      64,
+      "Ember Wizard: friendly fire caster, amber-tipped staff, short muted brown cloak teal clasp and tidy robes, small controlled flame only at staff tip; clear grounded casting anticipation release recovery."
+    ],
+    [
+      "cinder-warlock",
+      "enemy",
+      "spellcaster",
+      64,
+      "Cinder Warlock: hunched enemy fire caster, charred torn robes, coal-black crooked staff, rust-red hems and small smoky ember at tip, asymmetrical cowl; harsh grounded casting gestures."
+    ],
+    [
+      "frost-sage",
+      "friendly",
+      "spellcaster",
+      64,
+      "Frost Sage: upright friendly ice caster, pale blue robes, small crystal ornaments, straight ice staff and teal belt, composed open-handed casting."
+    ],
+    [
+      "frostbound-lich",
+      "enemy",
+      "spellcaster",
+      64,
+      "Frostbound Lich: skeletal-faced enemy ice caster, frozen jagged crown, ragged frost-blue robes rust-red seal, crooked jagged frost staff, clawed casting gestures."
+    ],
+    [
+      "storm-mage",
+      "friendly",
+      "spellcaster",
+      64,
+      "Storm Mage: friendly lightning caster, copper fittings, forked staff, navy robe teal scarf and leather gloves, restrained tiny electric tip accents; planted forceful casting."
+    ],
+    [
+      "tempest-cultist",
+      "enemy",
+      "spellcaster",
+      64,
+      "Tempest Cultist: enemy lightning caster wearing long angular storm mask, twisted lightning rod, tattered charcoal robes rust-orange cords, crooked ritual casting stance."
+    ],
+    [
+      "dawn-cleric",
+      "friendly",
+      "spellcaster",
+      64,
+      "Dawn Cleric: friendly healer, ivory robes, gold sun emblem, teal stole, short sun-topped staff, warm small restorative hand light, calm uplifting casting stance."
+    ],
+    [
+      "blood-acolyte",
+      "enemy",
+      "spellcaster",
+      64,
+      "Blood Acolyte: enemy ritual caster in crimson robes, angular hood and dark face, sacrificial ceremonial staff with small red crystal, restrained blood-magic hand gesture, no gore."
+    ],
+    [
+      "grove-summoner",
+      "friendly",
+      "spellcaster",
+      64,
+      "Grove Summoner: friendly nature caster with living wooden staff, muted green cloak teal bindings, leaf crown and small carved spirit companion charms, sweeping planting-like casting gesture. Independent summoned creatures and large effects absent."
+    ],
+    [
+      "marsh-witch",
+      "enemy",
+      "spellcaster",
+      64,
+      "Marsh Witch: crooked enemy nature caster, swamp charms, thorny branch staff, mossy ragged robes rust-red cloth knots, poisonous muted green vial, clawed conjuring gesture."
+    ],
+    [
+      "arcane-scholar",
+      "friendly",
+      "spellcaster",
+      64,
+      "Arcane Scholar: friendly magical ranged scholar, neat navy robes teal sash, spectacles, floating small spellbook near hand with tiny geometric nonletter symbols, pointed cap and satchel, book-opening casting gesture. No readable text."
+    ],
+    [
+      "grave-necromancer",
+      "enemy",
+      "spellcaster",
+      64,
+      "Grave Necromancer: enemy summoner with bone staff, damaged grimoire, torn charcoal hood rust-red stole, skull ornaments and tiny restrained spirit face at staff tip, bent commanding summoning pose; no separate summoned creatures."
+    ]
+  ]
+}

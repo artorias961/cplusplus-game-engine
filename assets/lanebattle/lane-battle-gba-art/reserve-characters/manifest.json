@@ -1,0 +1,2882 @@
+[
+  {
+    "id": "grave-warden",
+    "name": "Grave Warden",
+    "allegiance": "friendly",
+    "category": "ground",
+    "cell": 64,
+    "file": "friendly/grave-warden.png",
+    "source": "C:/Users/artor/.codex/generated_images/01a0895f-29dc-7551-b80e-c8d421619134/exec-025aead8-22c3-41c1-8984-766c270e5c4b.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background, NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Grave Warden: broad armored guardian with a shovel-shaped polearm, iron helmet, teal tabard, solemn grounded stride and shovel polearm sweep.\nRequested logical cell 64x64, total 384x384; match reference visual pixel density. Focus on clean regular6x6 layout.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/grave-warden-source-v1.png"
+  },
+  {
+    "id": "lantern-keeper",
+    "name": "Lantern Keeper",
+    "allegiance": "friendly",
+    "category": "ground",
+    "cell": 48,
+    "file": "friendly/lantern-keeper.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-e004dbf8-2b0b-4cf6-9c7f-0c4664c6ec87.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Lantern Keeper: small hooded support traveler, spirit lantern held out on hooked handle, packed satchel, teal hem, cautious steps and lantern-lifting support gesture.\nLogical cell 48 square. Requested sheet288x288. Keep generous padding and all36 frames.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/lantern-keeper-source.png"
+  },
+  {
+    "id": "ruin-scavenger",
+    "name": "Ruin Scavenger",
+    "allegiance": "friendly",
+    "category": "ground",
+    "cell": 48,
+    "file": "friendly/ruin-scavenger.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-8c7bc6ad-4b07-49f0-8b37-bf8aadaeab44.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Ruin Scavenger: agile patched salvaged armor, asymmetrical shoulder plates, twin short blades, teal scarf, low quick stride and paired blade lunge.\nLogical cell 48 square. Requested sheet288x288. Keep generous padding and all36 frames.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/ruin-scavenger-source.png"
+  },
+  {
+    "id": "dawnshield-guardian",
+    "name": "Dawnshield Guardian",
+    "allegiance": "friendly",
+    "category": "ground",
+    "cell": 64,
+    "file": "friendly/dawnshield-guardian.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-4e400025-c953-4c28-bf07-da123172a9a0.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Dawnshield Guardian: heavy silver armored defender with tall sun-marked tower shield, short mace, teal cloth, planted shield bash.\nLogical cell 64 square. Requested sheet384x384. Keep generous padding and all36 frames.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/dawnshield-guardian-source.png"
+  },
+  {
+    "id": "silverwood-archer",
+    "name": "Silverwood Archer",
+    "allegiance": "friendly",
+    "category": "ground",
+    "cell": 64,
+    "file": "friendly/silverwood-archer.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-277d97a5-281c-4470-be3f-9bfc58087380.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Silverwood Archer: slender cloaked ranger, long pale-wood bow, feathered arrows in quiver, muted green cloak teal clasp, bow draw release recovery.\nLogical cell 64 square. Requested sheet384x384. Keep generous padding and all36 frames.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/silverwood-archer-source.png"
+  },
+  {
+    "id": "rune-cannoneer",
+    "name": "Rune Cannoneer",
+    "allegiance": "friendly",
+    "category": "ground",
+    "cell": 64,
+    "file": "friendly/rune-cannoneer.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-5f923791-9b9b-4485-a1a3-ed3c5e370c8c.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Rune Cannoneer: stocky artillery soldier carrying compact rune cannon, braced bronze and steel barrel, teal uniform and rune marks, heavy recoil and visible reload. No fired projectile.\nLogical cell 64 square. Requested sheet384x384. Keep generous padding and all36 frames.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/rune-cannoneer-source.png"
+  },
+  {
+    "id": "ash-knight",
+    "name": "Ash Knight",
+    "allegiance": "enemy",
+    "category": "ground",
+    "cell": 64,
+    "file": "enemy/ash-knight.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-e832f48e-3b8e-4ce9-b781-0a8375caef79.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Ash Knight: scorched jagged plate armor, faint ember light inside narrow armor cracks, blackened broad sword, rust-red torn tabard, deliberate heavy slash.\nLogical cell64 square, requested sheet384 square. Exactly6x6, generous padding. Do not copy reference soldier equipment; maintain ONLY this new character equipment throughout. No stun stars or hit sparks embedded.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/ash-knight-source.png"
+  },
+  {
+    "id": "plague-apothecary",
+    "name": "Plague Apothecary",
+    "allegiance": "enemy",
+    "category": "ground",
+    "cell": 64,
+    "file": "enemy/plague-apothecary.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-058bb7b1-f74a-42ca-a992-2f38547db7c2.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Plague Apothecary: stooped masked poison thrower, beaked mask, stained satchel and readable bottles, dull olive leather with rust-red armband, bottle-throw anticipation release recovery. No flying bottle beyond hand.\nLogical cell64 square, requested sheet384 square. Exactly6x6, generous padding. Do not copy reference soldier equipment; maintain ONLY this new character equipment throughout. No stun stars or hit sparks embedded.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/plague-apothecary-source.png"
+  },
+  {
+    "id": "hollow-archer",
+    "name": "Hollow Archer",
+    "allegiance": "enemy",
+    "category": "ground",
+    "cell": 64,
+    "file": "enemy/hollow-archer.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-bf40ef8c-640a-495d-9a45-7562f591b517.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Hollow Archer: skeletal ranger, battered ragged rust-red cloak, worn crooked bow, bone fingers and quiver, tense draw release recovery.\nLogical cell64 square, requested sheet384 square. Exactly6x6, generous padding. Do not copy reference soldier equipment; maintain ONLY this new character equipment throughout. No stun stars or hit sparks embedded.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/hollow-archer-source.png"
+  },
+  {
+    "id": "bone-hound",
+    "name": "Bone Hound",
+    "allegiance": "enemy",
+    "category": "ground",
+    "cell": 64,
+    "file": "enemy/bone-hound.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-48d3f352-d426-4bda-b0ab-6772c2e026fe.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Bone Hound: low undead canine with exposed ivory ribs and bones, ragged hide, scrap armor and rust-red collar, quadruped gait and forward bite, no human stance.\nLogical cell64 square, requested sheet384 square. Exactly6x6, generous padding. Do not copy reference soldier equipment; maintain ONLY this new character equipment throughout. No stun stars or hit sparks embedded.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/bone-hound-source.png"
+  },
+  {
+    "id": "crypt-brute",
+    "name": "Crypt Brute",
+    "allegiance": "enemy",
+    "category": "ground",
+    "cell": 96,
+    "file": "enemy/crypt-brute.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-ed91def1-783a-4237-a65e-38c076c17444.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Crypt Brute: hulking undead fighter, enormous shoulders small sunken head, dragging huge stone hammer, cracked gray-green skin, rust-red wraps, slow weighty stride and crushing hammer swing.\nLogical cell96 square, requested sheet576 square. Exactly6x6, generous padding. Do not copy reference soldier equipment; maintain ONLY this new character equipment throughout. No stun stars or hit sparks embedded.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        140,
+        140,
+        140,
+        140,
+        140,
+        140
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/crypt-brute-source.png"
+  },
+  {
+    "id": "chainbound-reaver",
+    "name": "Chainbound Reaver",
+    "allegiance": "enemy",
+    "category": "ground",
+    "cell": 96,
+    "file": "enemy/chainbound-reaver.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-556ac3fa-869e-44df-bbd4-942c7e320df1.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Chainbound Reaver: armored executioner in angular closed helm, hooked chains coiled around forearms, heavy dark iron with rust-red straps, chain lash confined to own cell.\nLogical cell96 square, requested sheet576 square. Exactly6x6, generous padding. Do not copy reference soldier equipment; maintain ONLY this new character equipment throughout. No stun stars or hit sparks embedded.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        140,
+        140,
+        140,
+        140,
+        140,
+        140
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/chainbound-reaver-source.png"
+  },
+  {
+    "id": "crow-familiar",
+    "name": "Crow Familiar",
+    "allegiance": "friendly",
+    "category": "flying",
+    "cell": 48,
+    "file": "friendly/crow-familiar.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-f390e70c-d5f6-4444-942c-1f57a2b3cc8b.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Crow Familiar: tiny allied crow scout, dark blue-black feathers, charm collar and faint blue markings, compact wings. Body only18 logicalpixels tall, clearly smaller than riders. Hover wingbeat, travel wingbeat, peck dive, recoil, struggling hover, folded falling defeat.\nLogical cell48 square, requested sheet288 square. Exactly6x6 airborne frames. Body center consistent; complete wings inside each cell even downstroke. No walking and no stun stars. Match relative sizes, tiny familiar much smaller than gryphon rider.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/crow-familiar-source.png"
+  },
+  {
+    "id": "gryphon-rider",
+    "name": "Gryphon Rider",
+    "allegiance": "friendly",
+    "category": "flying",
+    "cell": 96,
+    "file": "friendly/gryphon-rider.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-24835641-edfc-403e-8fdd-39320727a27f.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Gryphon Rider: armored teal rider on compact eagle-headed lion-bodied gryphon, spear in rider hand, broad consistent feathered wings and hanging talons. Combined larger silhouette, airborne spear attack.\nLogical cell96 square, requested sheet576 square. Exactly6x6 airborne frames. Body center consistent; complete wings inside each cell even downstroke. No walking and no stun stars. Match relative sizes, tiny familiar much smaller than gryphon rider.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        140,
+        140,
+        140,
+        140,
+        140,
+        140
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/gryphon-rider-source.png"
+  },
+  {
+    "id": "skyguard-lancer",
+    "name": "Skyguard Lancer",
+    "allegiance": "friendly",
+    "category": "flying",
+    "cell": 96,
+    "file": "friendly/skyguard-lancer.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-f53ef733-e41c-493e-965d-b85ba4ed5134.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Skyguard Lancer: winged humanoid warrior with light silver armor and long lance, teal waistcloth, anatomical feather wings, legs hanging airborne, forward lance thrust with maintained lift.\nLogical cell96 square, requested sheet576 square. Exactly6x6 airborne frames. Body center consistent; complete wings inside each cell even downstroke. No walking and no stun stars. Match relative sizes, tiny familiar much smaller than gryphon rider.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        140,
+        140,
+        140,
+        140,
+        140,
+        140
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/skyguard-lancer-source.png"
+  },
+  {
+    "id": "runejet-skirmisher",
+    "name": "Runejet Skirmisher",
+    "allegiance": "friendly",
+    "category": "flying",
+    "cell": 64,
+    "file": "friendly/runejet-skirmisher.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-4cfcc5c9-bd53-466e-a2d0-d1d311e01e8a.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Runejet Skirmisher: soldier suspended by compact rune-powered flight pack, teal jacket, hand crossbow, short controlled blue exhaust shapes, hanging knees. Flight and hover not walking, crossbow aimed release reload.\nLogical cell64 square, requested sheet384 square. Exactly6x6 airborne frames. Body center consistent; complete wings inside each cell even downstroke. No walking and no stun stars. Match relative sizes, tiny familiar much smaller than gryphon rider.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/runejet-skirmisher-source.png"
+  },
+  {
+    "id": "lantern-wisp",
+    "name": "Lantern Wisp",
+    "allegiance": "friendly",
+    "category": "flying",
+    "cell": 48,
+    "file": "friendly/lantern-wisp.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-1be37389-fea1-4c51-90ea-1ee25ac9d1e3.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Lantern Wisp: tiny floating support spirit surrounding warm golden lantern core, translucent-looking stepped pale teal spirit ribbons but crisp pixels, gentle hovering pulsing shape, support cast with no large glow. No legs.\nLogical cell48 square, requested sheet288 square. Exactly6x6 airborne frames, body center consistent, complete wings/equipment inside each cell. No walking, no stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/lantern-wisp-source.png"
+  },
+  {
+    "id": "clockwork-falcon",
+    "name": "Clockwork Falcon",
+    "allegiance": "friendly",
+    "category": "flying",
+    "cell": 64,
+    "file": "friendly/clockwork-falcon.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-694a63be-adf9-4e37-9532-45bbff404957.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Clockwork Falcon: compact mechanical bird with articulated silver-bronze metal wings, teal maker insignia, hooked beak and jointed talons, rhythmic hinged wingbeats, claw dive, broken folded falling pose.\nLogical cell64 square, requested sheet384 square. Exactly6x6 airborne frames, body center consistent, complete wings/equipment inside each cell. No walking, no stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/clockwork-falcon-source.png"
+  },
+  {
+    "id": "cloud-witch",
+    "name": "Cloud Witch",
+    "allegiance": "friendly",
+    "category": "flying",
+    "cell": 96,
+    "file": "friendly/cloud-witch.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-9660c7b1-a31a-49bd-a831-04634f04d9de.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Cloud Witch: friendly spellcaster riding a long wooden staff sideways while facing right, wind-tossed muted blue robes, pointed hood and teal sash, hovering body and trailing cloth, one hand casting. No ground walking.\nLogical cell96 square, requested sheet576 square. Exactly6x6 airborne frames, body center consistent, complete wings/equipment inside each cell. No walking, no stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        140,
+        140,
+        140,
+        140,
+        140,
+        140
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/cloud-witch-source.png"
+  },
+  {
+    "id": "dawn-drake",
+    "name": "Dawn Drake",
+    "allegiance": "friendly",
+    "category": "flying",
+    "cell": 96,
+    "file": "friendly/dawn-drake.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-95dfa20d-d705-4a74-afec-5c498d0d68e8.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Dawn Drake: small allied dragon pale ivory scales and restrained gold accents, teal neck marking, stout snout, short horns and broad membrane wings, airborne claw or breath preparation with no emitted fire projectile.\nLogical cell96 square, requested sheet576 square. Exactly6x6 airborne frames, body center consistent, complete wings/equipment inside each cell. No walking, no stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        140,
+        140,
+        140,
+        140,
+        140,
+        140
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/dawn-drake-source.png"
+  },
+  {
+    "id": "carrion-bat",
+    "name": "Carrion Bat",
+    "allegiance": "enemy",
+    "category": "flying",
+    "cell": 64,
+    "file": "enemy/carrion-bat.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-4665a558-8660-4156-909a-72a4db3360d2.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Carrion Bat: oversized dark bat with ragged wings, hooked claws and rust-red inner membrane markings, hunched head pointed ears, airborne claw strike, anatomical wingbeat.\nLogical cell64 square; requested sheet384 square. Exactly6x6 flying poses, not walking. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/carrion-bat-source.png"
+  },
+  {
+    "id": "broken-gargoyle",
+    "name": "Broken Gargoyle",
+    "allegiance": "enemy",
+    "category": "flying",
+    "cell": 96,
+    "file": "enemy/broken-gargoyle.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-74cf6d71-7926-41dc-9f4e-eb29c3eabe98.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Broken Gargoyle: chipped gray stone flying creature, uneven damaged wings with consistent missing chips, horned blunt head and stone claws, rust-red ritual marking, laborious flap and claw lunge.\nLogical cell96 square; requested sheet576 square. Exactly6x6 flying poses, not walking. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        140,
+        140,
+        140,
+        140,
+        140,
+        140
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/broken-gargoyle-source.png"
+  },
+  {
+    "id": "plague-harpy",
+    "name": "Plague Harpy",
+    "allegiance": "enemy",
+    "category": "flying",
+    "cell": 96,
+    "file": "enemy/plague-harpy.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-d4e9e567-a68a-49cb-93a5-8a995c216c4e.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Plague Harpy: ragged birdlike monster, diseased dull olive feathers, gaunt humanoid head with beaklike mask, rust-red bindings, claw feet, ragged anatomical wingbeats and talon strike.\nLogical cell96 square; requested sheet576 square. Exactly6x6 flying poses, not walking. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        140,
+        140,
+        140,
+        140,
+        140,
+        140
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/plague-harpy-source.png"
+  },
+  {
+    "id": "blood-imp",
+    "name": "Blood Imp",
+    "allegiance": "enemy",
+    "category": "flying",
+    "cell": 64,
+    "file": "enemy/blood-imp.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-206dbf42-69c8-422a-84b2-25a23483e7fb.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Blood Imp: small horned demon with crimson membrane wings and thin barbed tail, coal-black body rust-orange markings, mischievous pointed face, fast distinct flaps and claw swipe.\nLogical cell64 square; requested sheet384 square. Exactly6x6 flying poses, not walking. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/blood-imp-source.png"
+  },
+  {
+    "id": "bone-wyvern",
+    "name": "Bone Wyvern",
+    "allegiance": "enemy",
+    "category": "flying",
+    "cell": 96,
+    "file": "enemy/bone-wyvern.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-d0859f61-a30e-47e8-b90e-d3da57af372e.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Bone Wyvern: large skeletal flying reptile, ivory ribcage spine and skull, torn brown-red wing membranes, long articulated bony tail, two wingarms two hind legs, broad wingbeats and bite dive. Largest flyer.\nLogical cell96 square; requested sheet576 square. Exactly6x6 flying poses, not walking. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        140,
+        140,
+        140,
+        140,
+        140,
+        140
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/bone-wyvern-source.png"
+  },
+  {
+    "id": "shrieking-wraith",
+    "name": "Shrieking Wraith",
+    "allegiance": "enemy",
+    "category": "flying",
+    "cell": 64,
+    "file": "enemy/shrieking-wraith.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-6b2a996e-bb01-4fa7-8695-b884d8d6a912.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Shrieking Wraith: floating pale ghost, dark empty face, trailing torn charcoal cloth, spectral claw hands and rust-red binding seal, no feet contact, rippling cloth hover, claw reach and dissipating folded defeat.\nLogical cell64 square; requested sheet384 square. Exactly6x6 flying poses, not walking. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/shrieking-wraith-source.png"
+  },
+  {
+    "id": "ash-moth",
+    "name": "Ash Moth",
+    "allegiance": "enemy",
+    "category": "flying",
+    "cell": 96,
+    "file": "enemy/ash-moth.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-d0882ae8-f475-416f-b92d-33a58857f8d4.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Ash Moth: giant soot-covered moth, broad layered gray wings with ember-orange eye markings, feathery antennae, tiny dangling legs, consistent symmetrical wing anatomy in strict side view, wing shudder attack, falling folded wings.\nLogical cell96 square; requested sheet576 square. Exactly6x6 flying poses, not walking. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        140,
+        140,
+        140,
+        140,
+        140,
+        140
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/ash-moth-source.png"
+  },
+  {
+    "id": "void-watcher",
+    "name": "Void Watcher",
+    "allegiance": "enemy",
+    "category": "flying",
+    "cell": 64,
+    "file": "enemy/void-watcher.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-d6d2a72a-61f4-49bb-b917-2550ad723cba.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Void Watcher: floating armored eye in dark angular metal shell, small independently spaced orbiting shards contained in cell, violet iris and rust-red sigil, bobbing hover rotation of shards, focused casting recoil, shell collapse defeat.\nLogical cell64 square; requested sheet384 square. Exactly6x6 flying poses, not walking. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/void-watcher-source.png"
+  },
+  {
+    "id": "ember-wizard",
+    "name": "Ember Wizard",
+    "allegiance": "friendly",
+    "category": "spellcaster",
+    "cell": 64,
+    "file": "friendly/ember-wizard.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-a63d6eab-9b6b-4ba2-8563-0741bd137544.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Ember Wizard: friendly fire caster, amber-tipped staff, short muted brown cloak teal clasp and tidy robes, small controlled flame only at staff tip; clear grounded casting anticipation release recovery.\nLogical cell64 square; requested sheet384 square. Exactly6x6 poses. Ground walking and planted spellcasting with anticipation release and recovery; staff and book remain same in every frame. Preserve matching role but distinct silhouette from counterpart. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/ember-wizard-source.png"
+  },
+  {
+    "id": "cinder-warlock",
+    "name": "Cinder Warlock",
+    "allegiance": "enemy",
+    "category": "spellcaster",
+    "cell": 64,
+    "file": "enemy/cinder-warlock.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-5ed70b9c-eb36-48f3-b8bc-4cefa8b238c9.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Cinder Warlock: hunched enemy fire caster, charred torn robes, coal-black crooked staff, rust-red hems and small smoky ember at tip, asymmetrical cowl; harsh grounded casting gestures.\nLogical cell64 square; requested sheet384 square. Exactly6x6 poses. Ground walking and planted spellcasting with anticipation release and recovery; staff and book remain same in every frame. Preserve matching role but distinct silhouette from counterpart. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/cinder-warlock-source.png"
+  },
+  {
+    "id": "frost-sage",
+    "name": "Frost Sage",
+    "allegiance": "friendly",
+    "category": "spellcaster",
+    "cell": 64,
+    "file": "friendly/frost-sage.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-de11ab88-12b6-4030-9e9b-99c6e78dea1a.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Frost Sage: upright friendly ice caster, pale blue robes, small crystal ornaments, straight ice staff and teal belt, composed open-handed casting.\nLogical cell64 square; requested sheet384 square. Exactly6x6 poses. Ground walking and planted spellcasting with anticipation release and recovery; staff and book remain same in every frame. Preserve matching role but distinct silhouette from counterpart. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/frost-sage-source.png"
+  },
+  {
+    "id": "frostbound-lich",
+    "name": "Frostbound Lich",
+    "allegiance": "enemy",
+    "category": "spellcaster",
+    "cell": 64,
+    "file": "enemy/frostbound-lich.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-d9b4d33e-e156-493e-92eb-5ee79a44c09c.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Frostbound Lich: skeletal-faced enemy ice caster, frozen jagged crown, ragged frost-blue robes rust-red seal, crooked jagged frost staff, clawed casting gestures.\nLogical cell64 square; requested sheet384 square. Exactly6x6 poses. Ground walking and planted spellcasting with anticipation release and recovery; staff and book remain same in every frame. Preserve matching role but distinct silhouette from counterpart. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/frostbound-lich-source.png"
+  },
+  {
+    "id": "storm-mage",
+    "name": "Storm Mage",
+    "allegiance": "friendly",
+    "category": "spellcaster",
+    "cell": 64,
+    "file": "friendly/storm-mage.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-5b3c73a2-ed6e-4857-9e47-f2070ff11dfe.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Storm Mage: friendly lightning caster, copper fittings, forked staff, navy robe teal scarf and leather gloves, restrained tiny electric tip accents; planted forceful casting.\nLogical cell64 square; requested sheet384 square. Exactly6x6 poses. Ground walking and planted spellcasting with anticipation release and recovery; staff and book remain same in every frame. Preserve matching role but distinct silhouette from counterpart. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/storm-mage-source.png"
+  },
+  {
+    "id": "tempest-cultist",
+    "name": "Tempest Cultist",
+    "allegiance": "enemy",
+    "category": "spellcaster",
+    "cell": 64,
+    "file": "enemy/tempest-cultist.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-c492d19b-7afe-4cb6-855f-8946e591f712.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Tempest Cultist: enemy lightning caster wearing long angular storm mask, twisted lightning rod, tattered charcoal robes rust-orange cords, crooked ritual casting stance.\nLogical cell64 square; requested sheet384 square. Exactly6x6 poses. Ground walking and planted spellcasting with anticipation release and recovery; staff and book remain same in every frame. Preserve matching role but distinct silhouette from counterpart. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/tempest-cultist-source.png"
+  },
+  {
+    "id": "dawn-cleric",
+    "name": "Dawn Cleric",
+    "allegiance": "friendly",
+    "category": "spellcaster",
+    "cell": 64,
+    "file": "friendly/dawn-cleric.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-9ec458a9-a13d-4de1-b746-ebfa11b3ac47.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Dawn Cleric: friendly healer, ivory robes, gold sun emblem, teal stole, short sun-topped staff, warm small restorative hand light, calm uplifting casting stance.\nLogical cell64 square; requested sheet384 square. Exactly6x6 poses. Ground walking and planted spellcasting with anticipation release and recovery; staff and book remain same in every frame. Preserve matching role but distinct silhouette from counterpart. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/dawn-cleric-source.png"
+  },
+  {
+    "id": "blood-acolyte",
+    "name": "Blood Acolyte",
+    "allegiance": "enemy",
+    "category": "spellcaster",
+    "cell": 64,
+    "file": "enemy/blood-acolyte.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-272ca75d-8a91-4ffa-8f29-57d7a090646b.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Blood Acolyte: enemy ritual caster in crimson robes, angular hood and dark face, sacrificial ceremonial staff with small red crystal, restrained blood-magic hand gesture, no gore.\nLogical cell64 square; requested sheet384 square. Exactly6x6 poses. Ground walking and planted spellcasting with anticipation release and recovery; staff and book remain same in every frame. Preserve matching role but distinct silhouette from counterpart. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/blood-acolyte-source.png"
+  },
+  {
+    "id": "grove-summoner",
+    "name": "Grove Summoner",
+    "allegiance": "friendly",
+    "category": "spellcaster",
+    "cell": 64,
+    "file": "friendly/grove-summoner.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-de733837-bbd5-4f13-bb7f-0ab284185ab7.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Grove Summoner: friendly nature caster with living wooden staff, muted green cloak teal bindings, leaf crown and small carved spirit companion charms, sweeping planting-like casting gesture. Independent summoned creatures and large effects absent.\nLogical cell64 square; requested sheet384 square. Exactly6x6 poses. Ground walking and planted spellcasting with anticipation release and recovery; staff and book remain same in every frame. Preserve matching role but distinct silhouette from counterpart. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/grove-summoner-source.png"
+  },
+  {
+    "id": "marsh-witch",
+    "name": "Marsh Witch",
+    "allegiance": "enemy",
+    "category": "spellcaster",
+    "cell": 64,
+    "file": "enemy/marsh-witch.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-8ef0fb0d-5601-47de-a3b1-ea7e1fccde6c.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Marsh Witch: crooked enemy nature caster, swamp charms, thorny branch staff, mossy ragged robes rust-red cloth knots, poisonous muted green vial, clawed conjuring gesture.\nLogical cell64 square; requested sheet384 square. Exactly6x6 poses. Ground walking and planted spellcasting with anticipation release and recovery; staff and book remain same in every frame. Preserve matching role but distinct silhouette from counterpart. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/marsh-witch-source.png"
+  },
+  {
+    "id": "arcane-scholar",
+    "name": "Arcane Scholar",
+    "allegiance": "friendly",
+    "category": "spellcaster",
+    "cell": 64,
+    "file": "friendly/arcane-scholar.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-7069da01-4e25-466a-9794-1e7d1a132811.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Arcane Scholar: friendly magical ranged scholar, neat navy robes teal sash, spectacles, floating small spellbook near hand with tiny geometric nonletter symbols, pointed cap and satchel, book-opening casting gesture. No readable text.\nLogical cell64 square; requested sheet384 square. Exactly6x6 poses. Ground walking and planted spellcasting with anticipation release and recovery; staff and book remain same in every frame. Preserve matching role but distinct silhouette from counterpart. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "friendly/arcane-scholar-source.png"
+  },
+  {
+    "id": "grave-necromancer",
+    "name": "Grave Necromancer",
+    "allegiance": "enemy",
+    "category": "spellcaster",
+    "cell": 64,
+    "file": "enemy/grave-necromancer.png",
+    "source": "C:\\Users\\artor\\.codex\\generated_images\\01a0895f-29dc-7551-b80e-c8d421619134\\exec-7e48f9ce-48c1-4af2-8009-5abd022f05a7.png",
+    "prompt": "Use case: stylized-concept. Create ONE original reserve character animation PNG for Lane Battle. The attached original soldier and griffin sheets are DIRECT STYLE REFERENCES ONLY; replace their subjects with the specified new character. Match their chunky GBA pixel-art technique, navy outlines, compact proportions, square pixel clusters, restrained two-tone shading and small highlights. Strict RIGHT-facing side profile throughout, mirrored-game compatible. Muted dark fantasy palette; friendly teal/blue costume insignia, enemy rust-red/orange costume insignia; preserve material/element colors independently. Actual transparent alpha background. If your output cannot carry alpha, use ONLY flat solid magenta #ff00ff behind the character, never a checker pattern; this is an intermediate extraction matte, not artwork. NO painted checkerboard, no background, ground shadows, text, labels, captions, borders, gradients, blur or antialiasing. Exactly SIX columns and SIX rows, 36 poses, equal cells, ample transparent separation. Row1 idle/hover loop. Row2 SIX distinct walking poses (alternating planted feet and passing poses) for ground characters OR proper wingbeat/hover travel for flying characters. Row3 attack/cast: anticipation, windup, release/strike, followthrough, recovery, ready. Row4 hit recoil then recovery, no red flash. Row5 stunned sway loop, grounded if ground, struggling lift if flyer. Row6 defeat collapse to rest for ground OR wings fold and falling for flyer. Rows1,2,5 loop;3,4,6 one-shot. Keep identical anatomy/equipment, pixel density and stable anchors in all36 cells. Ground feet baseline at88% cell height, body centered x50%; flying body centered50%,50%. Weapons and wings never touch cell edges. No large spell effects or projectiles baked into frames, only restrained hand/staff casting gestures. Small creatures occupy less of their cell than humanoids; heavy creatures occupy more without larger pixels.\nSubject: Grave Necromancer: enemy summoner with bone staff, damaged grimoire, torn charcoal hood rust-red stole, skull ornaments and tiny restrained spirit face at staff tip, bent commanding summoning pose; no separate summoned creatures.\nLogical cell64 square; requested sheet384 square. Exactly6x6 poses. Ground walking and planted spellcasting with anticipation release and recovery; staff and book remain same in every frame. Preserve matching role but distinct silhouette from counterpart. Keep subject inside inner70% of each cell to leave clear gaps, especially long weapons. Never draw reference soldier swords or shields on this character unless specified. No extra hit marks or stun stars.",
+    "status": "transparent-export; animation-grid-cleanup-still-required",
+    "cols": 6,
+    "rows": [
+      "idle",
+      "movement",
+      "attack",
+      "damage",
+      "stunned",
+      "death"
+    ],
+    "timingsMs": {
+      "idle": [
+        160,
+        160,
+        160,
+        160,
+        160,
+        160
+      ],
+      "movement": [
+        110,
+        110,
+        110,
+        110,
+        110,
+        110
+      ],
+      "attack": [
+        120,
+        180,
+        80,
+        100,
+        140,
+        140
+      ],
+      "damage": [
+        70,
+        70,
+        80,
+        100,
+        120,
+        120
+      ],
+      "stunned": [
+        170,
+        170,
+        170,
+        170,
+        170,
+        170
+      ],
+      "death": [
+        100,
+        120,
+        140,
+        160,
+        180,
+        400
+      ]
+    },
+    "timingStatus": "proposed-review-timing; original collection supplied row order but no per-frame timing metadata",
+    "sourceFile": "enemy/grave-necromancer-source.png"
+  }
+]

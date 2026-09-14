@@ -1,0 +1,642 @@
+[
+  {
+    "id": "grave-warden",
+    "sourceFile": "friendly/grave-warden-source-v1.png",
+    "file": "friendly/grave-warden.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 954337,
+    "opaquePixels": 618179,
+    "edgePixelsDecontaminated": 0,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "lantern-keeper",
+    "sourceFile": "friendly/lantern-keeper-source.png",
+    "file": "friendly/lantern-keeper.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 1032224,
+    "opaquePixels": 540292,
+    "edgePixelsDecontaminated": 27276,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "ruin-scavenger",
+    "sourceFile": "friendly/ruin-scavenger-source.png",
+    "file": "friendly/ruin-scavenger.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 1036547,
+    "opaquePixels": 535969,
+    "edgePixelsDecontaminated": 26938,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "dawnshield-guardian",
+    "sourceFile": "friendly/dawnshield-guardian-source.png",
+    "file": "friendly/dawnshield-guardian.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 927538,
+    "opaquePixels": 644978,
+    "edgePixelsDecontaminated": 22742,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "silverwood-archer",
+    "sourceFile": "friendly/silverwood-archer-source.png",
+    "file": "friendly/silverwood-archer.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 986232,
+    "opaquePixels": 586284,
+    "edgePixelsDecontaminated": 24819,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "rune-cannoneer",
+    "sourceFile": "friendly/rune-cannoneer-source.png",
+    "file": "friendly/rune-cannoneer.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 951534,
+    "opaquePixels": 620982,
+    "edgePixelsDecontaminated": 21129,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "ash-knight",
+    "sourceFile": "enemy/ash-knight-source.png",
+    "file": "enemy/ash-knight.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 921678,
+    "opaquePixels": 650838,
+    "edgePixelsDecontaminated": 0,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "plague-apothecary",
+    "sourceFile": "enemy/plague-apothecary-source.png",
+    "file": "enemy/plague-apothecary.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 976156,
+    "opaquePixels": 596360,
+    "edgePixelsDecontaminated": 21637,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "hollow-archer",
+    "sourceFile": "enemy/hollow-archer-source.png",
+    "file": "enemy/hollow-archer.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 977382,
+    "opaquePixels": 595134,
+    "edgePixelsDecontaminated": 28871,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "bone-hound",
+    "sourceFile": "enemy/bone-hound-source.png",
+    "file": "enemy/bone-hound.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 1076546,
+    "opaquePixels": 495970,
+    "edgePixelsDecontaminated": 30626,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "crypt-brute",
+    "sourceFile": "enemy/crypt-brute-source.png",
+    "file": "enemy/crypt-brute.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 900170,
+    "opaquePixels": 672346,
+    "edgePixelsDecontaminated": 0,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "chainbound-reaver",
+    "sourceFile": "enemy/chainbound-reaver-source.png",
+    "file": "enemy/chainbound-reaver.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 968271,
+    "opaquePixels": 604245,
+    "edgePixelsDecontaminated": 29243,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "crow-familiar",
+    "sourceFile": "friendly/crow-familiar-source.png",
+    "file": "friendly/crow-familiar.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 1144998,
+    "opaquePixels": 427518,
+    "edgePixelsDecontaminated": 23432,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "gryphon-rider",
+    "sourceFile": "friendly/gryphon-rider-source.png",
+    "file": "friendly/gryphon-rider.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 855064,
+    "opaquePixels": 717452,
+    "edgePixelsDecontaminated": 32711,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "skyguard-lancer",
+    "sourceFile": "friendly/skyguard-lancer-source.png",
+    "file": "friendly/skyguard-lancer.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 990532,
+    "opaquePixels": 581984,
+    "edgePixelsDecontaminated": 27359,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "runejet-skirmisher",
+    "sourceFile": "friendly/runejet-skirmisher-source.png",
+    "file": "friendly/runejet-skirmisher.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 1075762,
+    "opaquePixels": 496754,
+    "edgePixelsDecontaminated": 24383,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "lantern-wisp",
+    "sourceFile": "friendly/lantern-wisp-source.png",
+    "file": "friendly/lantern-wisp.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 1066911,
+    "opaquePixels": 505605,
+    "edgePixelsDecontaminated": 35287,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "clockwork-falcon",
+    "sourceFile": "friendly/clockwork-falcon-source.png",
+    "file": "friendly/clockwork-falcon.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 985467,
+    "opaquePixels": 587049,
+    "edgePixelsDecontaminated": 26329,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "cloud-witch",
+    "sourceFile": "friendly/cloud-witch-source.png",
+    "file": "friendly/cloud-witch.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 1019777,
+    "opaquePixels": 552739,
+    "edgePixelsDecontaminated": 31311,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "dawn-drake",
+    "sourceFile": "friendly/dawn-drake-source.png",
+    "file": "friendly/dawn-drake.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 1001592,
+    "opaquePixels": 570924,
+    "edgePixelsDecontaminated": 0,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "carrion-bat",
+    "sourceFile": "enemy/carrion-bat-source.png",
+    "file": "enemy/carrion-bat.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 1016177,
+    "opaquePixels": 556339,
+    "edgePixelsDecontaminated": 28654,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "broken-gargoyle",
+    "sourceFile": "enemy/broken-gargoyle-source.png",
+    "file": "enemy/broken-gargoyle.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 895225,
+    "opaquePixels": 677291,
+    "edgePixelsDecontaminated": 30458,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "plague-harpy",
+    "sourceFile": "enemy/plague-harpy-source.png",
+    "file": "enemy/plague-harpy.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 976374,
+    "opaquePixels": 596142,
+    "edgePixelsDecontaminated": 35114,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "blood-imp",
+    "sourceFile": "enemy/blood-imp-source.png",
+    "file": "enemy/blood-imp.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 1050655,
+    "opaquePixels": 521861,
+    "edgePixelsDecontaminated": 0,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "bone-wyvern",
+    "sourceFile": "enemy/bone-wyvern-source.png",
+    "file": "enemy/bone-wyvern.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 1002822,
+    "opaquePixels": 569694,
+    "edgePixelsDecontaminated": 39275,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "shrieking-wraith",
+    "sourceFile": "enemy/shrieking-wraith-source.png",
+    "file": "enemy/shrieking-wraith.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 1042310,
+    "opaquePixels": 530206,
+    "edgePixelsDecontaminated": 0,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "ash-moth",
+    "sourceFile": "enemy/ash-moth-source.png",
+    "file": "enemy/ash-moth.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 915865,
+    "opaquePixels": 656651,
+    "edgePixelsDecontaminated": 33099,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "void-watcher",
+    "sourceFile": "enemy/void-watcher-source.png",
+    "file": "enemy/void-watcher.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 1058706,
+    "opaquePixels": 513810,
+    "edgePixelsDecontaminated": 40363,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "ember-wizard",
+    "sourceFile": "friendly/ember-wizard-source.png",
+    "file": "friendly/ember-wizard.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 1015976,
+    "opaquePixels": 556540,
+    "edgePixelsDecontaminated": 25317,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "cinder-warlock",
+    "sourceFile": "enemy/cinder-warlock-source.png",
+    "file": "enemy/cinder-warlock.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 1001171,
+    "opaquePixels": 571345,
+    "edgePixelsDecontaminated": 0,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "frost-sage",
+    "sourceFile": "friendly/frost-sage-source.png",
+    "file": "friendly/frost-sage.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 1029828,
+    "opaquePixels": 542688,
+    "edgePixelsDecontaminated": 24199,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "frostbound-lich",
+    "sourceFile": "enemy/frostbound-lich-source.png",
+    "file": "enemy/frostbound-lich.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 977147,
+    "opaquePixels": 595369,
+    "edgePixelsDecontaminated": 0,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "storm-mage",
+    "sourceFile": "friendly/storm-mage-source.png",
+    "file": "friendly/storm-mage.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 1010634,
+    "opaquePixels": 561882,
+    "edgePixelsDecontaminated": 0,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "tempest-cultist",
+    "sourceFile": "enemy/tempest-cultist-source.png",
+    "file": "enemy/tempest-cultist.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 980643,
+    "opaquePixels": 591873,
+    "edgePixelsDecontaminated": 33080,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "dawn-cleric",
+    "sourceFile": "friendly/dawn-cleric-source.png",
+    "file": "friendly/dawn-cleric.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 933741,
+    "opaquePixels": 638775,
+    "edgePixelsDecontaminated": 24234,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "blood-acolyte",
+    "sourceFile": "enemy/blood-acolyte-source.png",
+    "file": "enemy/blood-acolyte.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 932807,
+    "opaquePixels": 639709,
+    "edgePixelsDecontaminated": 0,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "grove-summoner",
+    "sourceFile": "friendly/grove-summoner-source.png",
+    "file": "friendly/grove-summoner.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 944898,
+    "opaquePixels": 627618,
+    "edgePixelsDecontaminated": 28216,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "marsh-witch",
+    "sourceFile": "enemy/marsh-witch-source.png",
+    "file": "enemy/marsh-witch.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 920205,
+    "opaquePixels": 652311,
+    "edgePixelsDecontaminated": 38341,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "arcane-scholar",
+    "sourceFile": "friendly/arcane-scholar-source.png",
+    "file": "friendly/arcane-scholar.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 960974,
+    "opaquePixels": 611542,
+    "edgePixelsDecontaminated": 29690,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  },
+  {
+    "id": "grave-necromancer",
+    "sourceFile": "enemy/grave-necromancer-source.png",
+    "file": "enemy/grave-necromancer.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "transparentPixels": 991443,
+    "opaquePixels": 581073,
+    "edgePixelsDecontaminated": 26452,
+    "sourceUnchanged": true,
+    "sameDimensions": true,
+    "alignment": "unchanged source coordinates; not repaired by background removal"
+  }
+]

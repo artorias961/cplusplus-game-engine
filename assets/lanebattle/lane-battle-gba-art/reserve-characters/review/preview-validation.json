@@ -1,0 +1,9 @@
+{
+  "cards": 40,
+  "imagesReady": 40,
+  "groups": 6,
+  "animationChanges": true,
+  "pauseHolds": true,
+  "oneShotHolds": true,
+  "errors": []
+}
