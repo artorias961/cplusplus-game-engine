@@ -228,10 +228,19 @@ struct Animation {
     bool loop = true;
     bool playing = true;
 
-    // Where it has got to. Written by AnimationSystem; set `frame` to 0 and
-    // `elapsed` to 0 to restart one.
+    // A loop that runs back and forth — 0 1 2 3 2 1 0 1 ... — instead of
+    // jumping from the last frame straight back to the first. For a sheet whose
+    // frames are a SEQUENCE rather than a cycle: a wing going up, a step being
+    // taken. Looped the ordinary way, the jump from the end back to the start is
+    // the biggest change in the whole animation and shows as a hitch every
+    // cycle. Only means anything with `loop` set.
+    bool pingPong = false;
+
+    // Where it has got to. Written by AnimationSystem; set `frame` to 0,
+    // `elapsed` to 0 and `direction` to 1 to restart one.
     float elapsed = 0.0f;
     int frame = 0;
+    int direction = 1;  // +1 forwards, -1 on the way back of a ping-pong
 };
 
 // A line of text drawn at the entity's Transform, in the built-in bitmap

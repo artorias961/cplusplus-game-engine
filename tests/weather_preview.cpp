@@ -8,6 +8,7 @@
 #include "Harness.h"
 #include <SDL_image.h>
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -286,6 +287,33 @@ int main(int argc, char** argv) {
                 }
                 check(walkerHeights.size()>=2,"A walking unit's art does not bob: it glides");
                 check(flyerHeights.size()>=3,"A flyer's art does not rise and fall with its wings");
+
+                // And its wings BEAT rather than snap. The griffin's flight row
+                // is a sequence, measured by art_probe; looped, the jump from its
+                // last drawing to its first was the biggest change in the row and
+                // the wing snapped back once a beat. Played back and forth, every
+                // change of drawing is to a neighbour, and it turns at the end.
+                int jumps=0,turns=0,previous=-1,previousPose=-1;
+                float slowestHold=1.0f;  // the shortest a flight drawing is held
+                for(int tick=0;tick<150;++tick) {
+                    driver.step();
+                    const Unit* unit=battle.getComponent<Unit>(flyer);
+                    if(!unit) break;
+                    const auto* art=battle.getComponent<ArtFigure>(unit->figure);
+                    const auto* animation=battle.getComponent<Animation>(unit->figure);
+                    if(!art||!animation) break;
+                    if(art->pose==int(Pose::Move)) slowestHold=std::min(slowestHold,animation->secondsPerFrame);
+                    if(art->pose==int(Pose::Move)&&previousPose==int(Pose::Move)&&animation->frame!=previous) {
+                        if(std::abs(animation->frame-previous)>1) ++jumps;
+                        if(previous==animation->frameCount-1) ++turns;
+                    }
+                    previous=animation->frame; previousPose=art->pose;
+                }
+                check(jumps==0,"A flyer's wings snap from the last drawing back to the first");
+                check(turns>=1,"A flyer's wings never reach the end of the row and turn");
+                // Slow enough to see: at 0.085 s a drawing nobody could watch the
+                // griffin flap, because its downstroke was gone in an instant.
+                check(slowestHold>=0.1f,"A flyer's wingbeat goes by too fast to see");
             }
 
             // Asking for far more effects than the limits allow gets the limits.

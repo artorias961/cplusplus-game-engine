@@ -2284,6 +2284,72 @@ griffin's roster row is also four, so the wrong label would have read correctly.
   playtest question. The rule ends stalemates; it does nothing to make them
   rarer.
 
+## "Too fast, limping, and the griffin does not flap" — the drawings, not the clock
+
+The second complaint about motion, after the first had been measured and fixed:
+the animation goes by so fast that the middle of it is barely seen, the griffin
+never visibly flaps, and the ground troops look like they are limping. The
+suspected cause was timing. Three hypotheses were measured before anything
+changed, and two were wrong.
+
+**Not the frame logic.** `ui_shots --motion` gained a trace: every figure in
+forty seconds of THE EYRIE, at sixty frames a second, per row of its sheet. Walks
+reached the middle of their row 86% of the time and every drawing had an equal
+share of the screen — nothing was cutting cycles short, skipping frames or
+resetting them. The engine loop was checked too: one update per frame, capped
+at a quarter of a second, no double-counted animation.
+
+**Not clipping.** The griffin's flight cells have opaque pixels on their top
+rows, which looked like wing tips cut off by the cell edge. They matched the
+idle row's feet above, pixel for pixel: spill, which the four-percent inset
+already removes. No wing was lost.
+
+**The drawings.** Two things, both measurable:
+
+- **Most rows are not loops.** `art_probe --motion` compares how much the
+  silhouette changes between neighbouring drawings with how much it changes at
+  the seam, where a looping row jumps from its last drawing back to its first.
+  In 33 of the 44 idle and walk rows the seam is the biggest change in the row —
+  1.3 to 4.6 times an ordinary step: every hero, the friendly griffin's flight
+  (1.7x), ballista (3.2x), ogre, runner, pikeman and soldier. Looped, that is a
+  hitch once a cycle, which on a walker is a limp and on a flyer is a wing that
+  snaps back instead of beating.
+- **Many walks do not step.** Zoomed, the soldier's feet show the same leg
+  leading in all six drawings — the back foot lifts and drops without ever
+  swinging through — and the archer's legs barely change at all. The griffin's
+  flight row moves its wings a little; its real flap, a full downstroke, is in
+  its IDLE row.
+
+**What changed.**
+
+- The engine's `Animation` gained `pingPong`: a loop that runs 0 1 2 3 4 5 4 3 2 1
+  and never jumps. An engine feature pulled by a game, like every other, with a
+  test that it turns at both ends, pays a long frame out across a turn, and
+  handles two frames.
+- `art_probe --art` writes each unit sheet's back-and-forth rows into `art.txt`
+  as `ping_pong`, from the measurement, at a seam 1.3 times a step — set where
+  the friendly soldier's walk (1.4x), the unit first called limping, falls; the
+  friendly archer's walk (1.1x) is a real cycle and keeps looping. The game plays
+  those rows back and forth, and the bob follows the longer cycle.
+- Slower. Walks are held between 5.5 and 10 drawings a second (was 6 to 14),
+  the griffin's wingbeat at 0.12 s a drawing (was 0.085), a blow's row over 0.8
+  of the gap between blows (was 0.7, capped at 0.6 s), a flinch over 0.3 s (was
+  six drawings in 0.22 s — a flicker), idle rows at 0.14 and 0.18 s.
+
+Measured the same way afterwards: a flight drawing stays up 7.2 screen frames
+rather than 5.1, and the middle four drawings of a walk or a wingbeat have 76% of
+the screen time rather than 67%, because the end drawings are passed once per
+turn instead of twice. The verifier now watches a griffin fly for two and a half
+seconds and fails if its wings ever jump more than one drawing or never turn at
+the end, or if a flight drawing is held less than a tenth of a second.
+
+**What is still the art.** Playback can take the hitch out of a row; it cannot
+put a step into a walk whose legs never pass each other, or a downstroke into a
+flight row that barely has one. The regeneration list in the README says so.
+The old tempo test — "every unit walks between six and fourteen frames a second"
+— also passed unchanged when the ceiling came down to ten: a range wide enough to
+hold both the old tempo and the new one guards neither, and it was tightened.
+
 ## Remaining slices
 
 Moved to **`docs/roadmap-cartoonwars.md`**, which lists all eleven of them

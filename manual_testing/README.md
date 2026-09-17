@@ -265,6 +265,15 @@ to be a measurement: it showed every frame WAS being used, and that the runner's
 cycle strobed at 26 frames a second, the bodies never bobbed, and the griffin
 carried specks of its own sheet's row above. All three were fixed against it.
 
+It also follows every figure through forty seconds of THE EYRIE at sixty frames
+a second and prints, per row, what a player actually sees: how long each drawing
+stays up, how often the row gets as far as its middle before something replaces
+it, and how the time is shared between its drawings. That table is what said
+the second complaint about motion — too fast, limping, no flap — was NOT the
+frame logic cutting cycles short (walks reached their middle 86% of the time,
+every drawing on screen equally), and sent the question to the drawings
+themselves.
+
 The defeat screens are **played, not staged**. Since the defeat screen explains
 what the battle did, a staged battle — one enemy soldier set down at your gate
 — gives it nothing to say. `12-defeat` is soldiers alone against THE EYRIE's
@@ -314,6 +323,20 @@ which is how the halo round every generated unit was found.
 It cannot fail, like the others. Its first run found that every unit sheet is
 genuinely transparent and cleanly gridded in its idle and walk rows — and that
 the attack rows run sword tips into the next frame's cell.
+
+```bash
+./build/Release/art_probe --motion    # does each row loop, or jump back at the seam?
+```
+
+`--motion` answers a question about how a row PLAYS, not how it is cut: how
+much the silhouette changes from each drawing to the next, and how much at the
+seam, where a looping row jumps from its last drawing back to its first. In a
+generated sheet nothing promises the last drawing leads into the first, and in
+33 of the 44 idle and walk rows it does not — the seam is 1.3 to 4.6 times an
+ordinary step. Looped, that is a hitch once a cycle: units were described as
+limping and the griffin as not flapping, while every drawing was provably on
+screen for the same time. `--art` writes the rows past 1.3x into `art.txt` as
+`ping_pong`, and the game plays those back and forth.
 
 ## campaign_probe — is the campaign asking anything?
 

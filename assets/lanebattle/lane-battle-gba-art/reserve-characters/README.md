@@ -1,13 +1,13 @@
-# Reserve characters — generated sources, cleanup pending
+# Reserve characters — transparent PNG exports
 
-This folder is isolated artwork for future use. Nothing here is registered with gameplay, spawn lists, or runtime asset loading.
+All 40 characters now have real alpha transparency. Clean files use the character name, for example `friendly/grave-warden.png` or `enemy/bone-wyvern.png`. The original generated files keep their `-source` names and are preserved unchanged.
 
-All 40 requested designs have generated PNG source sheets: 20 friendly and 20 enemy, organized by allegiance. They follow the original six-row animation intent: idle, movement, attack/casting, hit, stunned, death. Original source grids were not uniformly production-ready, and these new sources also require cleanup.
+[Open the animated review](review/index.html) for the cleaned characters, six labeled contact sheets, animation states, pause/replay, speed, scale and dark/light/green backdrops. [INVENTORY.md](INVENTORY.md) links every transparent PNG.
 
-**These are not finished transparent sprite exports.** All 40 sources are 1254 × 1254 RGB; 30 have magenta backgrounds and 10 have painted checkerboards. A targeted image-generator transparency retry also failed. Frame boundaries, anchors, pixel density and some equipment/status details need correction. Permission for local script-based background removal and frame alignment is pending; no such image edits have been performed.
+The authorized local cleanup removes pink mattes and painted checkerboards, clears detected internal checker gaps and corrects contaminated outside edges. All 40 exports are RGBA; transparent pixels contain no painted backdrop. Dimensions and source frame positions are unchanged. [Transparency checks](transparency-validation.json) and [source hash checks](copy-validation.json) record the results.
 
-Open [the animated review page](review/index.html) for all six groups, six labeled contact sheets, animation state selection, pause, speed, replay and scale controls. [INVENTORY.md](INVENTORY.md) lists every PNG and outstanding QA concerns. The preview exposes the source-grid problems; it does not certify usable animation alignment. Its 40 images and playback/pause/one-shot controls passed browser checks.
+Background cleanup does not fix the earlier generated animation-grid and pose problems. Frame extraction/alignment, equipment consistency and loop polishing remain necessary before gameplay integration. The preview uses provisional six-by-six divisions and explicitly proposed timing metadata.
 
-Exact per-character prompts and original generation paths are in [manifest.json](manifest.json). Images were created with the built-in image_gen tool using the original friendly soldier and enemy griffin sheets as direct visual references. Proposed timing metadata is marked as review-only because the original collection did not supply per-frame timings.
+Historical source contact sheets (`review/*-sources.png`) and source-validation.json intentionally retain the original failed-background findings. Use the unsuffixed contact sheets and transparency-validation.json for current output.
 
-Existing PNGs and game code are untouched. No assets here are registered with gameplay or automatic loading.
+The original artwork was created with the built-in image_gen tool using the project's soldier and griffin sheets as direct references. Exact prompts and source paths remain in [manifest.json](manifest.json). Existing character artwork, game code, spawn lists and automatic loading remain untouched.

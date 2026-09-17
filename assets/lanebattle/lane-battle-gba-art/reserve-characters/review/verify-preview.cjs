@@ -27,9 +27,18 @@ report.pauseHolds=await page.locator('article canvas').first().evaluate((c,b)=>c
 await page.selectOption('#state',{index:2});await page.click('#pause');await page.click('#replay');await page.waitForTimeout(1200);
 const attack=await page.locator('article canvas').first().evaluate(c=>c.toDataURL());await page.waitForTimeout(250);
 report.oneShotHolds=await page.locator('article canvas').first().evaluate((c,b)=>c.toDataURL()===b,attack);
+report.backdrops=[];
+for(const [value,rgb] of [['#263447',[38,52,71]],['#eee7d8',[238,231,216]],['#405348',[64,83,72]]]){
+await page.selectOption('#backdrop',value);await page.waitForTimeout(60);
+const correct=await page.evaluate(expected=>cards.every(x=>{const p=x.canvas.getContext('2d').getImageData(0,0,1,1).data;return expected.every((v,i)=>p[i]===v)}),rgb);
+report.backdrops.push({value,all40CanvasCornersMatch:correct});
+}
+await page.selectOption('#backdrop','#eee7d8');await page.selectOption('#group','enemy / spellcaster');await page.waitForTimeout(60);
+await page.screenshot({path:path.join(__dirname,'preview-light.png'),fullPage:true});
+await page.selectOption('#backdrop','#263447');await page.waitForTimeout(60);
 await page.selectOption('#group','friendly / ground');await page.screenshot({path:path.join(__dirname,'preview-screenshot.png'),fullPage:true});
 report.errors=errors;fs.writeFileSync(path.join(__dirname,'preview-validation.json'),JSON.stringify(report,null,2));
 console.log(JSON.stringify(report));await browser.close();
-if(errors.length||!report.animationChanges||!report.pauseHolds||!report.oneShotHolds||report.imagesReady!==40)process.exitCode=1;
+if(errors.length||!report.animationChanges||!report.pauseHolds||!report.oneShotHolds||report.imagesReady!==40||report.backdrops.some(x=>!x.all40CanvasCornersMatch))process.exitCode=1;
 } finally {server.close();}
 })();

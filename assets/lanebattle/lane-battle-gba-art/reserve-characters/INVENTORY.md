@@ -1,75 +1,66 @@
 # Reserve character inventory
 
-40 character source PNGs generated with the built-in image_gen tool, plus one unsuccessful transparency retry. **Zero sheets currently pass the requested transparent, aligned export requirements.**
-
-All source images are 1254 × 1254 RGB; 30 have magenta backgrounds and 10 have painted checkerboards. The targeted alpha retry also returned RGB with no transparency. Existing character files are untouched.
+All **40 character PNG sheets now have real alpha transparency**. Clean copies use plain character names, such as `friendly/grave-warden.png`. Untouched generated originals retain `-source` in their names. The failed alpha retry is also preserved as a source artifact.
 
 ## Review
 
-Open [animated review](review/index.html). It includes all six allegiance/category groups, state selection, speed, pause, one-shot replay and target-size comparison. Six labeled PNG contact sheets are linked there. The source animation previews use provisional equal subdivisions; visibly cropped weapons, borrowed neighboring pixels and jumps expose the need for frame extraction and alignment. Playback controls passed automated browser checks; animation anatomy and seamlessness are not certified.
+Open [animated review](review/index.html) for all six groups, six labeled transparent contact sheets, animation selection, pause, replay, scale, and dark/light/green backdrop controls. The default preview and full-sheet links use cleaned copies. Historical `*-sources.png` contact sheets intentionally show the original opaque artwork.
 
-## Asset conventions
+## What was fixed
 
-Requested layout matches the original collection: six columns and six rows, idle → movement → attack/casting → hit → stunned → death. Idle, movement and stun loop; other states stop on their last frame in the preview. Ground, airborne and caster prompts differ appropriately. Large independent spell effects/projectiles were excluded; small staff-tip glows may remain in the drawings.
+Magenta mattes and painted checkerboards were removed by the authorized local cleanup script. Small enclosed checker areas were identified separately; contaminated outside outline pixels were corrected using neighboring outline colors. All exports are RGBA with real transparent pixels. Source dimensions and frame positions are unchanged. Source PNG hashes match the original generated files.
 
-The original collection did not contain per-frame timing metadata. `manifest.json` supplies explicitly proposed review timings, not established game timings. The 48/64/96-pixel target cells are logical intent; the actual generated source cells are approximately 209 pixels and must not be treated as final game resolution.
+## Remaining animation work
 
-## Outstanding corrections
+This fix addresses the backgrounds. It does not certify production-ready animation sheets. Generated frame spacing still needs extraction/alignment; some equipment, pose continuity and baked status marks need artistic corrections. Review all states before engine integration. Large spell/projectile effects were excluded from generation prompts, although small staff-tip glows remain.
 
-- Remove opaque backgrounds while preserving navy outlines, pale armor, wing membranes and internal transparent gaps.
-- Extract all poses into uniform cells; stabilize foot/body anchors without normalizing away intentional attack or falling motion.
-- Repair frame-to-frame equipment inconsistencies: for example Grave Warden has borrowed sword/shield details in later rows, and Lantern Keeper includes unwanted status marks.
-- Review wing anatomy, turn/facing consistency, walk contact, hit reactions and loop seams in each sequence.
-- Remove stray pixels and separate any baked status effects. Exact palette/pixel-density and relative-scale cleanup remains necessary.
-- No automatic image-cleanup script has been run. Permission for script-based background removal and alignment is pending.
+The intended layout is six columns and six rows: idle, movement, attack/casting, damage, stunned, death. Idle, movement and stun loop; other rows stop in the preview. Manifest timings are proposed review timings because the original collection did not provide per-frame timings. Logical 48/64/96-pixel cells describe intended scale; the actual source sheets remain 1254 × 1254. No whole-sheet resizing or frame relocation was performed during transparency cleanup.
 
 ## Files
 
-Grid-contact counts below are conservative color-based diagnostics, **not proven clipping counts**. They identify frames needing visual review.
+| Character | Allegiance | Category | Transparent PNG | Target cell |
+| --- | --- | --- | --- | ---: |
+| Grave Warden | friendly | ground | [grave-warden.png](friendly/grave-warden.png) | 64 |
+| Lantern Keeper | friendly | ground | [lantern-keeper.png](friendly/lantern-keeper.png) | 48 |
+| Ruin Scavenger | friendly | ground | [ruin-scavenger.png](friendly/ruin-scavenger.png) | 48 |
+| Dawnshield Guardian | friendly | ground | [dawnshield-guardian.png](friendly/dawnshield-guardian.png) | 64 |
+| Silverwood Archer | friendly | ground | [silverwood-archer.png](friendly/silverwood-archer.png) | 64 |
+| Rune Cannoneer | friendly | ground | [rune-cannoneer.png](friendly/rune-cannoneer.png) | 64 |
+| Ash Knight | enemy | ground | [ash-knight.png](enemy/ash-knight.png) | 64 |
+| Plague Apothecary | enemy | ground | [plague-apothecary.png](enemy/plague-apothecary.png) | 64 |
+| Hollow Archer | enemy | ground | [hollow-archer.png](enemy/hollow-archer.png) | 64 |
+| Bone Hound | enemy | ground | [bone-hound.png](enemy/bone-hound.png) | 64 |
+| Crypt Brute | enemy | ground | [crypt-brute.png](enemy/crypt-brute.png) | 96 |
+| Chainbound Reaver | enemy | ground | [chainbound-reaver.png](enemy/chainbound-reaver.png) | 96 |
+| Crow Familiar | friendly | flying | [crow-familiar.png](friendly/crow-familiar.png) | 48 |
+| Gryphon Rider | friendly | flying | [gryphon-rider.png](friendly/gryphon-rider.png) | 96 |
+| Skyguard Lancer | friendly | flying | [skyguard-lancer.png](friendly/skyguard-lancer.png) | 96 |
+| Runejet Skirmisher | friendly | flying | [runejet-skirmisher.png](friendly/runejet-skirmisher.png) | 64 |
+| Lantern Wisp | friendly | flying | [lantern-wisp.png](friendly/lantern-wisp.png) | 48 |
+| Clockwork Falcon | friendly | flying | [clockwork-falcon.png](friendly/clockwork-falcon.png) | 64 |
+| Cloud Witch | friendly | flying | [cloud-witch.png](friendly/cloud-witch.png) | 96 |
+| Dawn Drake | friendly | flying | [dawn-drake.png](friendly/dawn-drake.png) | 96 |
+| Carrion Bat | enemy | flying | [carrion-bat.png](enemy/carrion-bat.png) | 64 |
+| Broken Gargoyle | enemy | flying | [broken-gargoyle.png](enemy/broken-gargoyle.png) | 96 |
+| Plague Harpy | enemy | flying | [plague-harpy.png](enemy/plague-harpy.png) | 96 |
+| Blood Imp | enemy | flying | [blood-imp.png](enemy/blood-imp.png) | 64 |
+| Bone Wyvern | enemy | flying | [bone-wyvern.png](enemy/bone-wyvern.png) | 96 |
+| Shrieking Wraith | enemy | flying | [shrieking-wraith.png](enemy/shrieking-wraith.png) | 64 |
+| Ash Moth | enemy | flying | [ash-moth.png](enemy/ash-moth.png) | 96 |
+| Void Watcher | enemy | flying | [void-watcher.png](enemy/void-watcher.png) | 64 |
+| Ember Wizard | friendly | spellcaster | [ember-wizard.png](friendly/ember-wizard.png) | 64 |
+| Cinder Warlock | enemy | spellcaster | [cinder-warlock.png](enemy/cinder-warlock.png) | 64 |
+| Frost Sage | friendly | spellcaster | [frost-sage.png](friendly/frost-sage.png) | 64 |
+| Frostbound Lich | enemy | spellcaster | [frostbound-lich.png](enemy/frostbound-lich.png) | 64 |
+| Storm Mage | friendly | spellcaster | [storm-mage.png](friendly/storm-mage.png) | 64 |
+| Tempest Cultist | enemy | spellcaster | [tempest-cultist.png](enemy/tempest-cultist.png) | 64 |
+| Dawn Cleric | friendly | spellcaster | [dawn-cleric.png](friendly/dawn-cleric.png) | 64 |
+| Blood Acolyte | enemy | spellcaster | [blood-acolyte.png](enemy/blood-acolyte.png) | 64 |
+| Grove Summoner | friendly | spellcaster | [grove-summoner.png](friendly/grove-summoner.png) | 64 |
+| Marsh Witch | enemy | spellcaster | [marsh-witch.png](enemy/marsh-witch.png) | 64 |
+| Arcane Scholar | friendly | spellcaster | [arcane-scholar.png](friendly/arcane-scholar.png) | 64 |
+| Grave Necromancer | enemy | spellcaster | [grave-necromancer.png](enemy/grave-necromancer.png) | 64 |
 
-| Character | Allegiance | Category | Source PNG | Target cell | Potential grid contacts |
-| --- | --- | --- | --- | ---: | ---: |
-| Grave Warden | friendly | ground | [grave-warden-source-v1.png](friendly/grave-warden-source-v1.png) | 64 | 14 / 36 |
-| Lantern Keeper | friendly | ground | [lantern-keeper-source.png](friendly/lantern-keeper-source.png) | 48 | 4 / 36 |
-| Ruin Scavenger | friendly | ground | [ruin-scavenger-source.png](friendly/ruin-scavenger-source.png) | 48 | 5 / 36 |
-| Dawnshield Guardian | friendly | ground | [dawnshield-guardian-source.png](friendly/dawnshield-guardian-source.png) | 64 | 25 / 36 |
-| Silverwood Archer | friendly | ground | [silverwood-archer-source.png](friendly/silverwood-archer-source.png) | 64 | 4 / 36 |
-| Rune Cannoneer | friendly | ground | [rune-cannoneer-source.png](friendly/rune-cannoneer-source.png) | 64 | 5 / 36 |
-| Ash Knight | enemy | ground | [ash-knight-source.png](enemy/ash-knight-source.png) | 64 | 26 / 36 |
-| Plague Apothecary | enemy | ground | [plague-apothecary-source.png](enemy/plague-apothecary-source.png) | 64 | 21 / 36 |
-| Hollow Archer | enemy | ground | [hollow-archer-source.png](enemy/hollow-archer-source.png) | 64 | 6 / 36 |
-| Bone Hound | enemy | ground | [bone-hound-source.png](enemy/bone-hound-source.png) | 64 | 8 / 36 |
-| Crypt Brute | enemy | ground | [crypt-brute-source.png](enemy/crypt-brute-source.png) | 96 | 12 / 36 |
-| Chainbound Reaver | enemy | ground | [chainbound-reaver-source.png](enemy/chainbound-reaver-source.png) | 96 | 23 / 36 |
-| Crow Familiar | friendly | flying | [crow-familiar-source.png](friendly/crow-familiar-source.png) | 48 | 5 / 36 |
-| Gryphon Rider | friendly | flying | [gryphon-rider-source.png](friendly/gryphon-rider-source.png) | 96 | 26 / 36 |
-| Skyguard Lancer | friendly | flying | [skyguard-lancer-source.png](friendly/skyguard-lancer-source.png) | 96 | 26 / 36 |
-| Runejet Skirmisher | friendly | flying | [runejet-skirmisher-source.png](friendly/runejet-skirmisher-source.png) | 64 | 4 / 36 |
-| Lantern Wisp | friendly | flying | [lantern-wisp-source.png](friendly/lantern-wisp-source.png) | 48 | 3 / 36 |
-| Clockwork Falcon | friendly | flying | [clockwork-falcon-source.png](friendly/clockwork-falcon-source.png) | 64 | 2 / 36 |
-| Cloud Witch | friendly | flying | [cloud-witch-source.png](friendly/cloud-witch-source.png) | 96 | 0 / 36 |
-| Dawn Drake | friendly | flying | [dawn-drake-source.png](friendly/dawn-drake-source.png) | 96 | 9 / 36 |
-| Carrion Bat | enemy | flying | [carrion-bat-source.png](enemy/carrion-bat-source.png) | 64 | 8 / 36 |
-| Broken Gargoyle | enemy | flying | [broken-gargoyle-source.png](enemy/broken-gargoyle-source.png) | 96 | 9 / 36 |
-| Plague Harpy | enemy | flying | [plague-harpy-source.png](enemy/plague-harpy-source.png) | 96 | 6 / 36 |
-| Blood Imp | enemy | flying | [blood-imp-source.png](enemy/blood-imp-source.png) | 64 | 36 / 36 |
-| Bone Wyvern | enemy | flying | [bone-wyvern-source.png](enemy/bone-wyvern-source.png) | 96 | 15 / 36 |
-| Shrieking Wraith | enemy | flying | [shrieking-wraith-source.png](enemy/shrieking-wraith-source.png) | 64 | 9 / 36 |
-| Ash Moth | enemy | flying | [ash-moth-source.png](enemy/ash-moth-source.png) | 96 | 4 / 36 |
-| Void Watcher | enemy | flying | [void-watcher-source.png](enemy/void-watcher-source.png) | 64 | 4 / 36 |
-| Ember Wizard | friendly | spellcaster | [ember-wizard-source.png](friendly/ember-wizard-source.png) | 64 | 10 / 36 |
-| Cinder Warlock | enemy | spellcaster | [cinder-warlock-source.png](enemy/cinder-warlock-source.png) | 64 | 18 / 36 |
-| Frost Sage | friendly | spellcaster | [frost-sage-source.png](friendly/frost-sage-source.png) | 64 | 1 / 36 |
-| Frostbound Lich | enemy | spellcaster | [frostbound-lich-source.png](enemy/frostbound-lich-source.png) | 64 | 24 / 36 |
-| Storm Mage | friendly | spellcaster | [storm-mage-source.png](friendly/storm-mage-source.png) | 64 | 33 / 36 |
-| Tempest Cultist | enemy | spellcaster | [tempest-cultist-source.png](enemy/tempest-cultist-source.png) | 64 | 26 / 36 |
-| Dawn Cleric | friendly | spellcaster | [dawn-cleric-source.png](friendly/dawn-cleric-source.png) | 64 | 21 / 36 |
-| Blood Acolyte | enemy | spellcaster | [blood-acolyte-source.png](enemy/blood-acolyte-source.png) | 64 | 24 / 36 |
-| Grove Summoner | friendly | spellcaster | [grove-summoner-source.png](friendly/grove-summoner-source.png) | 64 | 7 / 36 |
-| Marsh Witch | enemy | spellcaster | [marsh-witch-source.png](enemy/marsh-witch-source.png) | 64 | 7 / 36 |
-| Arcane Scholar | friendly | spellcaster | [arcane-scholar-source.png](friendly/arcane-scholar-source.png) | 64 | 8 / 36 |
-| Grave Necromancer | enemy | spellcaster | [grave-necromancer-source.png](enemy/grave-necromancer-source.png) | 64 | 9 / 36 |
+[Exact generation prompts and paths](manifest.json) · [Transparency validation](transparency-validation.json) · [Source hash checks](copy-validation.json) · [Original grid diagnostics](source-validation.json).
 
-Full exact prompts and original output paths: [manifest.json](manifest.json). Initial generation specification: [generation-plan.json](generation-plan.json). Read-only pixel diagnostics: [source-validation.json](source-validation.json). Copy hashes: [copy-validation.json](copy-validation.json).
-
-No runtime source, spawn configuration, automatic asset manifest or loading code was changed.
+The read-only source audit retains historical background findings. Current delivery status is in the transparency validation and manifest. No runtime source, spawn lists or automatic loading configuration was changed.

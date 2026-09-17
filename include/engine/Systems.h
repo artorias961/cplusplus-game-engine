@@ -92,6 +92,23 @@ inline void AnimationSystem(World& world, float dt) {
                 break;
             }
             animation.elapsed -= animation.secondsPerFrame;
+
+            // Back and forth: turn at each end rather than jumping to the
+            // other one. The end frames are shown once per pass, not twice, so
+            // the turn does not stall.
+            if (animation.loop && animation.pingPong) {
+                if (animation.direction < 0) {
+                    if (--animation.frame < 0) {
+                        animation.frame = 1;
+                        animation.direction = 1;
+                    }
+                } else if (++animation.frame >= animation.frameCount) {
+                    animation.frame = animation.frameCount - 2;
+                    animation.direction = -1;
+                }
+                continue;
+            }
+
             ++animation.frame;
 
             if (animation.frame < animation.frameCount) continue;

@@ -532,6 +532,45 @@ void testALoopingAnimationWrapsAndAOneShotHolds() {
           "and does not creep once stopped");
 }
 
+// Back and forth, never jumping: every change of frame is to a neighbour. Built
+// for generated sheets whose rows are a sequence rather than a cycle, where the
+// ordinary loop's jump from the last frame to the first was the biggest change
+// in the row and showed as a hitch every cycle.
+void testAPingPongAnimationTurnsInsteadOfJumping() {
+    World world;
+    const Entity entity = animatedSprite(world, 4, 0.1f, true);
+    world.getComponent<Animation>(entity)->pingPong = true;
+
+    std::string seen = std::to_string(world.getComponent<Animation>(entity)->frame);
+    for (int step = 0; step < 9; ++step) {
+        AnimationSystem(world, 0.1f);
+        seen += std::to_string(world.getComponent<Animation>(entity)->frame);
+    }
+    check(seen == "0123210123", "it runs to the end, turns, and comes back, forever");
+    check(world.getComponent<Sprite>(entity)->srcX == 48,
+          "with the sprite on whichever frame it is on");
+
+    // The turns are frames too, so a long frame pays out across them.
+    World later;
+    const Entity longFrame = animatedSprite(later, 4, 0.1f, true);
+    later.getComponent<Animation>(longFrame)->pingPong = true;
+    AnimationSystem(later, 0.5f);  // five intervals: 1 2 3 2 1
+    check(later.getComponent<Animation>(longFrame)->frame == 1 &&
+              later.getComponent<Animation>(longFrame)->direction == -1,
+          "a long frame turns at the end and keeps its direction");
+
+    // Two frames is the smallest back-and-forth there is.
+    World pair;
+    const Entity two = animatedSprite(pair, 2, 0.1f, true);
+    pair.getComponent<Animation>(two)->pingPong = true;
+    std::string flip;
+    for (int step = 0; step < 4; ++step) {
+        AnimationSystem(pair, 0.1f);
+        flip += std::to_string(pair.getComponent<Animation>(two)->frame);
+    }
+    check(flip == "1010", "and two frames simply alternate");
+}
+
 void testALongFrameOwesEveryFrameItSkipped() {
     World world;
     const Entity entity = animatedSprite(world, 8, 0.1f, true);
@@ -1284,6 +1323,7 @@ int main() {
 
     testAnimationWalksTheSheet();
     testALoopingAnimationWrapsAndAOneShotHolds();
+    testAPingPongAnimationTurnsInsteadOfJumping();
     testALongFrameOwesEveryFrameItSkipped();
     testAnimationRefusesNumbersThatWouldHangIt();
     testTheEngineRunsAnimationForYou();

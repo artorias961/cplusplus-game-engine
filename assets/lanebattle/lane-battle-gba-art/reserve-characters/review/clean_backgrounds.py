@@ -1,10 +1,20 @@
 """Remove generated mattes non-destructively; keep source frame coordinates intact."""
 from pathlib import Path
-import json, hashlib
+import json, hashlib, io, time
 import numpy as np
 from PIL import Image, ImageFilter, ImageDraw, ImageFont
 
 ROOT=Path(__file__).resolve().parents[1]
+
+def save_png(image,target):
+    encoded=io.BytesIO();image.save(encoded,format='PNG');payload=encoded.getvalue()
+    if target.exists() and target.read_bytes()==payload:return
+    pending=target.with_suffix('.pending.png');pending.write_bytes(payload)
+    for attempt in range(4):
+        try:pending.replace(target);return
+        except OSError:
+            if attempt==3:raise
+            time.sleep(.3*(attempt+1))
 
 def components(mask):
     # Run-length connected components: avoids dependencies and millions of Python pixel visits.
@@ -32,7 +42,17 @@ def components(mask):
 def clean(im,kind):
     rgba=np.array(im.convert('RGBA'));rgb=rgba[:,:,:3].astype(np.int16)
     if kind=='magenta':
-        remove=(rgb[:,:,0]>175)&(rgb[:,:,2]>175)&(rgb[:,:,1]<110)&(np.abs(rgb[:,:,0]-rgb[:,:,2])<70)
+        candidate=(rgb[:,:,0]>175)&(rgb[:,:,2]>175)&(rgb[:,:,1]<110)&(np.abs(rgb[:,:,0]-rgb[:,:,2])<70)
+        remove=np.zeros(candidate.shape,bool)
+        for runs in components(candidate):
+            area=sum(b-a for y,a,b in runs)
+            touches=any(y in (0,im.height-1) or a==0 or b==im.width for y,a,b in runs)
+            vals=np.concatenate([rgb[y,a:b] for y,a,b in runs])
+            pure=(vals[:,0]>235)&(vals[:,2]>235)&(vals[:,1]<25)&(np.abs(vals[:,0]-vals[:,2])<20)
+            # Protect enclosed purple artwork (notably the Void Watcher's eye).
+            # Openings in the sprite qualify only when they match the actual pink matte.
+            if touches or area>2500 or pure.mean()>.7:
+                for y,a,b in runs:remove[y,a:b]=True
     else:
         neutral=(rgb.max(2)-rgb.min(2)<19)&(rgb.min(2)>160)
         remove=np.zeros(neutral.shape,bool)
@@ -42,9 +62,10 @@ def clean(im,kind):
             vals=np.concatenate([rgb[y,a:b] for y,a,b in runs])
             bright=int((vals.min(1)>238).sum());gray=int(((vals.min(1)>175)&(vals.max(1)<232)).sum())
             exact=float((vals.max(1)-vals.min(1)<5).mean())
-            # Internal openings qualify only if they contain both checker tones and neutral pixels.
+            # Identify internal checker squares, including small openings containing only one tone.
             checker=area>=12 and bright>=max(2,area*.04) and gray>=max(2,area*.04) and exact>.7
-            if touches or area>2500 or checker:
+            single_tone=area>=6 and exact>.97 and np.ptp(vals[:,0])>5
+            if touches or area>2500 or checker or single_tone:
                 for y,a,b in runs:remove[y,a:b]=True
     # Remove matte fringe only immediately adjacent to identified background.
     adjacent=np.array(Image.fromarray(remove).filter(ImageFilter.MaxFilter(3)))&~remove
@@ -55,6 +76,23 @@ def clean(im,kind):
     else:
         fringe=adjacent&(rgb.max(2)-rgb.min(2)<20)&(rgb.min(2)>110)
         remove|=fringe
+        # The painted matte also contaminated the outside outline with light tinted pixels.
+        # Restore only this one-pixel boundary from an existing dark outline within two pixels.
+        # Interior highlights and equipment colors are never included in this boundary operation.
+        edge=np.array(Image.fromarray(remove).filter(ImageFilter.MaxFilter(3)))&~remove
+        luminance=rgb.mean(2)
+        best_luma=np.full(remove.shape,1000.0)
+        best_rgb=rgb.copy()
+        padded=np.pad(rgb,((2,2),(2,2),(0,0)),mode='edge')
+        valid=np.pad(~remove,2,constant_values=False)
+        for dy in range(5):
+            for dx in range(5):
+                neighbor=padded[dy:dy+im.height,dx:dx+im.width]
+                candidate=neighbor.mean(2)
+                better=valid[dy:dy+im.height,dx:dx+im.width]&(candidate<best_luma)
+                best_luma[better]=candidate[better];best_rgb[better]=neighbor[better]
+        contaminated=edge&(luminance>best_luma+60)&(best_luma<80)&(rgb.max(2)-rgb.min(2)<80)
+        rgba[:,:,:3][contaminated]=best_rgb[contaminated]
     rgba[:,:,3]=np.where(remove,0,255)
     rgba[remove,:3]=0
     return Image.fromarray(rgba),remove
@@ -67,11 +105,13 @@ def main():
         source_file=item.get('sourceFile',item['file'])
         source=ROOT/source_file
         before=hashlib.sha256(source.read_bytes()).hexdigest()
-        im=Image.open(source)
+        with Image.open(source) as original_image:im=original_image.copy()
         out,removed=clean(im,audits[item['id']]['backgroundDiagnostic'])
         destination=f"{item['allegiance']}/{item['id']}.png"
-        out.save(ROOT/destination)
-        check=Image.open(ROOT/destination);alpha=np.array(check.getchannel('A'))
+        target=ROOT/destination
+        save_png(out,target)
+        with Image.open(target) as saved:check=saved.copy()
+        alpha=np.array(check.getchannel('A'))
         opaque=alpha==255
         original=np.array(im.convert('RGB'));result=np.array(check)[:,:,:3]
         report={'id':item['id'],'sourceFile':source_file,'file':destination,'size':list(check.size),'mode':check.mode,'transparentPixels':int((alpha==0).sum()),'opaquePixels':int(opaque.sum()),'edgePixelsDecontaminated':int((np.any(original!=result,axis=2)&opaque).sum()),'sourceUnchanged':before==hashlib.sha256(source.read_bytes()).hexdigest(),'sameDimensions':check.size==im.size,'alignment':'unchanged source coordinates; not repaired by background removal'}
@@ -94,7 +134,7 @@ def main():
                 x,y=(j%4)*250,80+(j//4)*270
                 sheet.paste(cell,(x+(250-cell.width)//2,y+(224-cell.height)//2),cell)
                 draw.text((x+8,y+234),item['name'],font=small,fill='#dce6ed')
-            sheet.save(ROOT/'review'/f'{side}-{category}.png')
+            save_png(sheet,ROOT/'review'/f'{side}-{category}.png')
     print(f'{len(reports)} RGBA exports saved; source originals unchanged.')
 
 if __name__=='__main__':main()

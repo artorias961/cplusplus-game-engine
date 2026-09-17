@@ -70,6 +70,17 @@ struct SheetInfo {
     float anchorX = 0.0f;    // the point placed ON the target: a unit's feet,
     float anchorY = 0.0f;    //   an effect's centre — in cell pixels
     float figureHeight = 0.0f;  // how tall the standing figure is, in cell pixels
+
+    // Which looping rows play back and forth instead of round and round — one
+    // bit per row, bit 0 the first. Measured by art_probe, never chosen: a row
+    // whose last drawing does not lead back into its first hitches once a cycle
+    // when it loops (a limp on a walker, a wing that snaps back on a flyer), and
+    // the measurement is how much bigger that jump is than the row's ordinary
+    // steps. See `art_probe --motion`.
+    unsigned pingPongRows = 0;
+    bool pingPong(int row) const {
+        return row >= 0 && row < 32 && (pingPongRows >> row) & 1u;
+    }
 };
 
 constexpr const char* kArtPath = "assets/lanebattle/art.txt";
@@ -175,6 +186,7 @@ struct ArtFigure {
     // it from the first frame every time.
     int walkFrame = 0;
     float walkElapsed = 0.0f;
+    int walkDirection = 1;  // and which way a back-and-forth walk was going
     float sinceWalk = 1000.0f;
     float stillFor = 0.0f;  // how long it has stood still; brief stops do not count
     bool flying = false;

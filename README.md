@@ -71,7 +71,7 @@ measuring whole battles rather than individual rules found the game unwinnable
 twice before it was playable — and `docs/roadmap-cartoonwars.md` has what is
 left of the original plan.
 
-**1,610 assertions** across five test binaries, a sixth test that renders every
+**1,620 assertions** across five test binaries, a sixth test that renders every
 environment and weather combination (72 of them) and holds the effect limits to
 account, plus four measuring tools that pass and fail nothing: a benchmark, a
 campaign simulator, a screenshotter and an art probe.
@@ -302,7 +302,9 @@ file where a working one was.
 ### `assets/lanebattle/art.txt` — measured, not typed
 
 One `[sheet]` per image: its cell size, frames per row, rows, where the **feet**
-are in a cell (or an effect's centre), and how tall the standing figure is.
+are in a cell (or an effect's centre), how tall the standing figure is, and
+`ping_pong` — which looping rows play back and forth because their last drawing
+does not lead back into their first.
 The game reads every sheet's geometry from here, and **a sheet this file does
 not describe is not used** — the unit keeps its coloured block, exactly as with
 no art at all.
@@ -945,6 +947,7 @@ back, and `ui_shots` writes a PNG of every screen for a person to look at.
 ./build/Release/art_probe                 # every sheet: alpha, grid, feet, bleeding
 ./build/Release/art_probe --art           # the same, written as art.txt
 ./build/Release/art_probe --show <path> 6 6   # haze in magenta, the grid in green
+./build/Release/art_probe --motion        # does each row loop, or jump back at the seam?
 ```
 
 None is registered with `ctest`, for the same reason `engine_bench` is not:
@@ -1162,13 +1165,23 @@ Every unit wears generated pixel art: both teams in their own colours, drawn
 facing right and mirrored for the side walking left, and the hero in the armour
 of the path its owner chose. The art is a separate animated figure that follows
 the unit and picks a row of its sheet by what the unit is doing — **walking**
-(at a pace set by how fast it really moves, held between six and fourteen
-frames a second), **attacking** (timed to each blow), **flinching** when hit,
-**idle** while it waits its turn. The generated sheets keep the body at one
+(at a pace set by how fast it really moves, held between five and a half and
+ten drawings a second), **attacking** (timed to each blow), **flinching** when
+hit, **idle** while it waits its turn. The generated sheets keep the body at one
 height in every frame, so the body **bobs** a pixel or two with each step, and a
 flyer rises and sinks once per wingbeat — without that, walkers slid along the
 ground and griffins looked pulled on a wire. A unit that stops for a moment in
 a queue picks its stride up where it left it instead of starting again.
+
+Most of the generated rows are not loops. Their last drawing does not lead back
+into their first, so playing them round and round jumped from the end of the
+motion straight back to its start once a cycle — the biggest change in the whole
+row, which is a limp on a walker and a wing that snaps back instead of beating
+on a griffin. `art_probe --motion` measures that jump for every row, and the
+rows where it is big play **back and forth** instead (0 1 2 3 4 5 4 3 2 1), so
+every change on screen is to a neighbouring drawing. 33 of the 44 idle and walk
+rows do; the rest are real cycles and loop. Which is which is written into
+`art.txt` by the probe, not chosen by hand.
 When a unit dies the fight is over with it that same frame, exactly as before;
 what stays is its **death** row playing where it fell, a falling griffin
 dropping to the ground first, then a fade.
@@ -1319,8 +1332,9 @@ What the art still needs, found by measuring it:
 | --- | --- | --- |
 | **Frames run into their neighbours** | rows 2–5 (attack, hurt, stunned, death) of most unit sheets: a sword tip crosses into the next cell by 100–200 border pixels | a 1–2 pixel sliver of the next pose can flicker at a frame's edge. Idle and walk rows are clean. Fix: regenerate with more padding, or re-cut the frames |
 | **Soft haze** | 9–22% of each unit sheet's pixels are faintly visible (alpha 1–39): a glow hugging each figure, plus speckle | invisible at game scale on these backgrounds; would show as a smudge on a very bright one. `art_probe --show` paints it magenta |
-| **The griffin barely flaps** | the griffin's walk (flight) row, both teams | its wings hold nearly the same raised position in all six frames — a glide, not a wingbeat. The code adds a rise and fall per beat, which helps; a regenerated row with a real downstroke would fix it |
-| **Walk cycles are subtle** | the runner especially | six frames with small leg changes; at game size the bob carries most of the sense of stepping. A stronger stride in the art would read better |
+| **Rows that are not loops** | 33 of 44 idle and walk rows: every hero, the friendly griffin, ballista, ogre, runner, pikeman and soldier, most enemies | the last drawing does not lead back to the first. Played back and forth now, which removes the hitch — but a walk drawn as a real two-step cycle would read better than any playback of one that is not |
+| **The griffin's wingbeat is small** | the friendly griffin's flight row | its wings move a little between drawings, and its real flap is in its IDLE row, where the wings sweep right down. Slowed and played back and forth, the flight row now beats rather than snaps; a regenerated flight row with a full downstroke would make it read as flying |
+| **Walks that do not step** | soldier, archer and others | the same leg leads in every drawing — the back foot lifts and drops without swinging through, and the archer's legs barely change at all. At game size that reads as a shuffle. A regenerated walk whose legs pass each other is the real fix |
 | **The stunned row is unused** | every unit sheet | nothing in the game stuns yet |
 | **Known sheet faults** | listed in `lane-battle-gba-art/README.md`: a missing ballista attack frame, an extra bird on the Falconer, combined scenery layers | the scenery layers are not used; the rest is minor |
 | **Not hand-cleaned** | everywhere | generated pixel clusters are not on one common grid; a cleanup pass would sharpen them |

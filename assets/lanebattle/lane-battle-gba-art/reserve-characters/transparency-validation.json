@@ -10,7 +10,7 @@
     "mode": "RGBA",
     "transparentPixels": 954337,
     "opaquePixels": 618179,
-    "edgePixelsDecontaminated": 0,
+    "edgePixelsDecontaminated": 24020,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -24,9 +24,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 1032224,
-    "opaquePixels": 540292,
-    "edgePixelsDecontaminated": 27276,
+    "transparentPixels": 1031458,
+    "opaquePixels": 541058,
+    "edgePixelsDecontaminated": 26656,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -40,9 +40,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 1036547,
-    "opaquePixels": 535969,
-    "edgePixelsDecontaminated": 26938,
+    "transparentPixels": 1035147,
+    "opaquePixels": 537369,
+    "edgePixelsDecontaminated": 25589,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -56,9 +56,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 927538,
-    "opaquePixels": 644978,
-    "edgePixelsDecontaminated": 22742,
+    "transparentPixels": 927418,
+    "opaquePixels": 645098,
+    "edgePixelsDecontaminated": 22563,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -72,9 +72,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 986232,
-    "opaquePixels": 586284,
-    "edgePixelsDecontaminated": 24819,
+    "transparentPixels": 985877,
+    "opaquePixels": 586639,
+    "edgePixelsDecontaminated": 24584,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -88,9 +88,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 951534,
-    "opaquePixels": 620982,
-    "edgePixelsDecontaminated": 21129,
+    "transparentPixels": 951499,
+    "opaquePixels": 621017,
+    "edgePixelsDecontaminated": 21085,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -106,7 +106,7 @@
     "mode": "RGBA",
     "transparentPixels": 921678,
     "opaquePixels": 650838,
-    "edgePixelsDecontaminated": 0,
+    "edgePixelsDecontaminated": 16661,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -120,9 +120,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 976156,
-    "opaquePixels": 596360,
-    "edgePixelsDecontaminated": 21637,
+    "transparentPixels": 976055,
+    "opaquePixels": 596461,
+    "edgePixelsDecontaminated": 21474,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -136,9 +136,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 977382,
-    "opaquePixels": 595134,
-    "edgePixelsDecontaminated": 28871,
+    "transparentPixels": 976823,
+    "opaquePixels": 595693,
+    "edgePixelsDecontaminated": 28294,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -152,9 +152,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 1076546,
-    "opaquePixels": 495970,
-    "edgePixelsDecontaminated": 30626,
+    "transparentPixels": 1075135,
+    "opaquePixels": 497381,
+    "edgePixelsDecontaminated": 28661,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -170,7 +170,7 @@
     "mode": "RGBA",
     "transparentPixels": 900170,
     "opaquePixels": 672346,
-    "edgePixelsDecontaminated": 0,
+    "edgePixelsDecontaminated": 19344,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -184,9 +184,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 968271,
-    "opaquePixels": 604245,
-    "edgePixelsDecontaminated": 29243,
+    "transparentPixels": 965916,
+    "opaquePixels": 606600,
+    "edgePixelsDecontaminated": 26540,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -200,9 +200,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 1144998,
-    "opaquePixels": 427518,
-    "edgePixelsDecontaminated": 23432,
+    "transparentPixels": 1144916,
+    "opaquePixels": 427600,
+    "edgePixelsDecontaminated": 23273,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -216,9 +216,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 855064,
-    "opaquePixels": 717452,
-    "edgePixelsDecontaminated": 32711,
+    "transparentPixels": 854215,
+    "opaquePixels": 718301,
+    "edgePixelsDecontaminated": 31308,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -232,9 +232,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 990532,
-    "opaquePixels": 581984,
-    "edgePixelsDecontaminated": 27359,
+    "transparentPixels": 990009,
+    "opaquePixels": 582507,
+    "edgePixelsDecontaminated": 26829,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -248,9 +248,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 1075762,
-    "opaquePixels": 496754,
-    "edgePixelsDecontaminated": 24383,
+    "transparentPixels": 1074449,
+    "opaquePixels": 498067,
+    "edgePixelsDecontaminated": 23149,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -264,9 +264,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 1066911,
-    "opaquePixels": 505605,
-    "edgePixelsDecontaminated": 35287,
+    "transparentPixels": 1059918,
+    "opaquePixels": 512598,
+    "edgePixelsDecontaminated": 31088,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -280,9 +280,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 985467,
-    "opaquePixels": 587049,
-    "edgePixelsDecontaminated": 26329,
+    "transparentPixels": 985343,
+    "opaquePixels": 587173,
+    "edgePixelsDecontaminated": 26105,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -296,9 +296,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 1019777,
-    "opaquePixels": 552739,
-    "edgePixelsDecontaminated": 31311,
+    "transparentPixels": 1018557,
+    "opaquePixels": 553959,
+    "edgePixelsDecontaminated": 29369,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -314,7 +314,7 @@
     "mode": "RGBA",
     "transparentPixels": 1001592,
     "opaquePixels": 570924,
-    "edgePixelsDecontaminated": 0,
+    "edgePixelsDecontaminated": 21449,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -328,9 +328,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 1016177,
-    "opaquePixels": 556339,
-    "edgePixelsDecontaminated": 28654,
+    "transparentPixels": 1014723,
+    "opaquePixels": 557793,
+    "edgePixelsDecontaminated": 26896,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -344,9 +344,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 895225,
-    "opaquePixels": 677291,
-    "edgePixelsDecontaminated": 30458,
+    "transparentPixels": 893943,
+    "opaquePixels": 678573,
+    "edgePixelsDecontaminated": 28992,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -360,9 +360,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 976374,
-    "opaquePixels": 596142,
-    "edgePixelsDecontaminated": 35114,
+    "transparentPixels": 974804,
+    "opaquePixels": 597712,
+    "edgePixelsDecontaminated": 32834,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -378,7 +378,7 @@
     "mode": "RGBA",
     "transparentPixels": 1050655,
     "opaquePixels": 521861,
-    "edgePixelsDecontaminated": 0,
+    "edgePixelsDecontaminated": 28222,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -392,9 +392,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 1002822,
-    "opaquePixels": 569694,
-    "edgePixelsDecontaminated": 39275,
+    "transparentPixels": 1000328,
+    "opaquePixels": 572188,
+    "edgePixelsDecontaminated": 36165,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -410,7 +410,7 @@
     "mode": "RGBA",
     "transparentPixels": 1042310,
     "opaquePixels": 530206,
-    "edgePixelsDecontaminated": 0,
+    "edgePixelsDecontaminated": 26870,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -424,9 +424,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 915865,
-    "opaquePixels": 656651,
-    "edgePixelsDecontaminated": 33099,
+    "transparentPixels": 915298,
+    "opaquePixels": 657218,
+    "edgePixelsDecontaminated": 32166,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -440,9 +440,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 1058706,
-    "opaquePixels": 513810,
-    "edgePixelsDecontaminated": 40363,
+    "transparentPixels": 1054690,
+    "opaquePixels": 517826,
+    "edgePixelsDecontaminated": 33804,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -456,9 +456,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 1015976,
-    "opaquePixels": 556540,
-    "edgePixelsDecontaminated": 25317,
+    "transparentPixels": 1013893,
+    "opaquePixels": 558623,
+    "edgePixelsDecontaminated": 23775,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -474,7 +474,7 @@
     "mode": "RGBA",
     "transparentPixels": 1001171,
     "opaquePixels": 571345,
-    "edgePixelsDecontaminated": 0,
+    "edgePixelsDecontaminated": 18852,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -488,9 +488,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 1029828,
-    "opaquePixels": 542688,
-    "edgePixelsDecontaminated": 24199,
+    "transparentPixels": 1028660,
+    "opaquePixels": 543856,
+    "edgePixelsDecontaminated": 23612,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -506,7 +506,7 @@
     "mode": "RGBA",
     "transparentPixels": 977147,
     "opaquePixels": 595369,
-    "edgePixelsDecontaminated": 0,
+    "edgePixelsDecontaminated": 21643,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -522,7 +522,7 @@
     "mode": "RGBA",
     "transparentPixels": 1010634,
     "opaquePixels": 561882,
-    "edgePixelsDecontaminated": 0,
+    "edgePixelsDecontaminated": 16098,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -536,9 +536,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 980643,
-    "opaquePixels": 591873,
-    "edgePixelsDecontaminated": 33080,
+    "transparentPixels": 979859,
+    "opaquePixels": 592657,
+    "edgePixelsDecontaminated": 32317,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -552,9 +552,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 933741,
-    "opaquePixels": 638775,
-    "edgePixelsDecontaminated": 24234,
+    "transparentPixels": 931148,
+    "opaquePixels": 641368,
+    "edgePixelsDecontaminated": 23218,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -570,7 +570,7 @@
     "mode": "RGBA",
     "transparentPixels": 932807,
     "opaquePixels": 639709,
-    "edgePixelsDecontaminated": 0,
+    "edgePixelsDecontaminated": 22494,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -584,9 +584,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 944898,
-    "opaquePixels": 627618,
-    "edgePixelsDecontaminated": 28216,
+    "transparentPixels": 944207,
+    "opaquePixels": 628309,
+    "edgePixelsDecontaminated": 27653,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -600,9 +600,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 920205,
-    "opaquePixels": 652311,
-    "edgePixelsDecontaminated": 38341,
+    "transparentPixels": 917393,
+    "opaquePixels": 655123,
+    "edgePixelsDecontaminated": 36111,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -616,9 +616,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 960974,
-    "opaquePixels": 611542,
-    "edgePixelsDecontaminated": 29690,
+    "transparentPixels": 959937,
+    "opaquePixels": 612579,
+    "edgePixelsDecontaminated": 28632,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"
@@ -632,9 +632,9 @@
       1254
     ],
     "mode": "RGBA",
-    "transparentPixels": 991443,
-    "opaquePixels": 581073,
-    "edgePixelsDecontaminated": 26452,
+    "transparentPixels": 988912,
+    "opaquePixels": 583604,
+    "edgePixelsDecontaminated": 25027,
     "sourceUnchanged": true,
     "sameDimensions": true,
     "alignment": "unchanged source coordinates; not repaired by background removal"

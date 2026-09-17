@@ -41,6 +41,7 @@
 #include <SDL_image.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -335,6 +336,9 @@ Measured measureSheet(const std::string& path, int columns, int rows) {
     return m;
 }
 
+// Defined below, with the rest of the motion measurement.
+unsigned pingPongRows(const std::string& path, int columns, int rows);
+
 // Prints art.txt: every unit sheet, effect strip and animated scenery strip in
 // the art folder, measured. Redirect it into assets/lanebattle/art.txt.
 void writeArtFile() {
@@ -365,6 +369,9 @@ void writeArtFile() {
         "#                              pixels: a unit's FEET, an effect's centre\n"
         "#   figure                     a unit's standing height, or an effect's\n"
         "#                              larger side - what on-screen sizes scale\n"
+        "#   ping_pong                  looping rows to play back and forth, because\n"
+        "#                              their last drawing does not lead back into\n"
+        "#                              their first (see art_probe --motion)\n"
         "# ---------------------------------------------------------------------------\n");
     for (const std::string& file : files) {
         int columns = 1, rows = 1;
@@ -384,7 +391,139 @@ void writeArtFile() {
                     "anchor_y     = %d\nfigure       = %d\n",
                     root.c_str(), file.c_str(), m.cellW, m.cellH, columns, rows,
                     m.anchorX, m.anchorY, m.figure);
+        if (rows > 1) {
+            const unsigned mask = pingPongRows(root + file, columns, rows);
+            if (mask != 0) {
+                std::string list;
+                for (int row = 0; row < rows; ++row) {
+                    if (!((mask >> row) & 1u)) continue;
+                    if (!list.empty()) list += ",";
+                    list += std::to_string(row);
+                }
+                std::printf("ping_pong    = %s\n", list.c_str());
+            }
+        }
     }
+}
+
+// How different two drawings are: the share of their combined silhouette that
+// only one of them covers. 0% is the same drawing; 100% shares nothing.
+//
+// Silhouettes rather than colours, because the question is whether the SHAPE
+// moves — a wing, a leg — and a shimmer of shading is not a movement.
+double silhouetteChange(const Pixels& image, int ax, int bx, int top, int width, int height) {
+    long either = 0;
+    long onlyOne = 0;
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const bool a = image.alpha(ax + x, top + y) >= 128;
+            const bool b = image.alpha(bx + x, top + y) >= 128;
+            if (a || b) ++either;
+            if (a != b) ++onlyOne;
+        }
+    }
+    return either > 0 ? static_cast<double>(onlyOne) / static_cast<double>(either) : 0.0;
+}
+
+// Whether each looping row of a unit sheet plays as a cycle.
+//
+// Built when units were said to limp and flyers not to flap, and the frame
+// logic was measured innocent: every drawing was on screen for the same time.
+// The drawings were not innocent. A row plays 0-1-2-3-4-5 and then jumps back
+// to 0, and in a generated sheet nothing promises that 5 leads into 0 — so the
+// jump can be the biggest change in the whole row, once a cycle, every cycle,
+// which on a walker is a hitch in the stride and on a flyer is a wing that
+// snaps back instead of beating. The seam is compared with the ordinary steps.
+// The seam, as a multiple of the row's typical step, past which a looping row
+// plays back and forth instead. Set where the friendly soldier's walk falls
+// (1.4): the jump back is the biggest change in its row, and it was the unit
+// first described as limping. The friendly archer's walk (1.1) is a real
+// cycle and keeps looping.
+constexpr double kSeamRatio = 1.3;
+
+// The seam and the typical step for one row: `seam / step` is the ratio above.
+struct Seam {
+    double seam = 0.0;
+    double step = 0.0;
+    double widest = 0.0;
+    std::vector<double> steps;
+    double ratio() const { return step > 0.0 ? seam / step : 0.0; }
+};
+
+Seam measureSeam(const Pixels& image, int row, int columns, int rows) {
+    Seam s;
+    const int cellW = image.width() / columns;
+    const int cellH = image.height() / rows;
+    // The top of each cell is skipped, as the game skips it: it holds the row
+    // above's feet, which would count as movement that is not in this row.
+    const int inset = rows > 1 ? static_cast<int>(std::lround(cellH * 0.04)) : 0;
+    const int top = row * cellH + inset;
+    for (int c = 0; c + 1 < columns; ++c) {
+        s.steps.push_back(silhouetteChange(image, c * cellW, (c + 1) * cellW, top, cellW,
+                                           cellH - inset));
+    }
+    s.seam = silhouetteChange(image, (columns - 1) * cellW, 0, top, cellW, cellH - inset);
+    std::vector<double> sorted = s.steps;
+    std::sort(sorted.begin(), sorted.end());
+    s.step = sorted.empty() ? 0.0 : sorted[sorted.size() / 2];
+    for (int c = 1; c < columns; ++c) {
+        s.widest = std::max(s.widest, silhouetteChange(image, 0, c * cellW, top, cellW,
+                                                       cellH - inset));
+    }
+    return s;
+}
+
+// The rows a unit sheet should play back and forth: its LOOPING rows — idle
+// and move, the ones the game repeats — whose seam is past kSeamRatio. Attack,
+// hurt and death play once and are never looped, so their seams do not matter.
+constexpr int kLoopingRows = 2;
+
+unsigned pingPongRows(const std::string& path, int columns, int rows) {
+    const Pixels image(path);
+    if (!image.surface || rows < kLoopingRows) return 0;
+    unsigned mask = 0;
+    for (int row = 0; row < kLoopingRows; ++row) {
+        if (measureSeam(image, row, columns, rows).ratio() >= kSeamRatio) mask |= 1u << row;
+    }
+    return mask;
+}
+
+void probeMotion(const std::string& path, int columns, int rows) {
+    const Pixels image(path);
+    if (!image.surface) {
+        std::printf("  %s: could not load\n", path.c_str());
+        return;
+    }
+    static const char* kRows[] = {"idle", "move", "attack"};
+    std::printf("  %s\n", path.c_str());
+    for (int row = 0; row < std::min(rows, 3); ++row) {
+        const Seam s = measureSeam(image, row, columns, rows);
+        std::printf("    %-6s steps", kRows[row]);
+        for (double step : s.steps) std::printf(" %3.0f", step * 100.0);
+        const char* verdict = row >= kLoopingRows          ? "plays once"
+                              : s.ratio() >= kSeamRatio ? "BACK AND FORTH: jumps at the seam"
+                                                        : "loops";
+        std::printf("   seam %3.0f (%.1fx a step)   moves %3.0f%%  %s\n", s.seam * 100.0,
+                    s.ratio(), s.widest * 100.0, verdict);
+    }
+}
+
+void probeMotionEverything() {
+    const std::string root = "assets/lanebattle/lane-battle-gba-art/units/";
+    const std::filesystem::path base = besideExecutable(root);
+    std::vector<std::string> files;
+    if (std::filesystem::exists(base)) {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(base)) {
+            if (entry.path().extension() == ".png") {
+                files.push_back(std::filesystem::relative(entry.path(), base).generic_string());
+            }
+        }
+    }
+    std::sort(files.begin(), files.end());
+    std::printf("Silhouette change between neighbouring drawings, in percent. A row whose\n"
+                "seam (last drawing back to the first) is far bigger than its steps\n"
+                "hitches once a cycle when it loops.\n\n");
+    for (const std::string& file : files) probeMotion(root + file, 6, 6);
 }
 
 // Everything in the art folder, with the grid each kind of sheet was drawn to.
@@ -425,6 +564,8 @@ int main(int argc, char** argv) {
     }
     if (argc >= 2 && std::string(argv[1]) == "--art") {
         writeArtFile();
+    } else if (argc >= 2 && std::string(argv[1]) == "--motion") {
+        probeMotionEverything();
     } else if (argc >= 5 && std::string(argv[1]) == "--show") {
         show(argv[2], std::max(1, std::atoi(argv[3])), std::max(1, std::atoi(argv[4])));
     } else if (argc >= 4) {

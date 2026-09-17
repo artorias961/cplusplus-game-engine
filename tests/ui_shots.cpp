@@ -383,6 +383,84 @@ int motionStudy(Engine& engine) {
                     changes, figureSeconds,
                     figureSeconds > 0 ? changes / figureSeconds : 0.0f, cutWalks);
     }
+
+    // What a player actually SEES, frame by frame, in a battle with flyers in
+    // it: for each row of the sheet, how much of the time it is on screen, how
+    // long each drawing stays up, and — the question — how often a stretch of
+    // that row gets as far as its middle before something replaces it.
+    {
+        Battle battle;
+        battle.start(4);  // THE EYRIE: griffins on their side
+        constexpr int kPoses = 6;
+        struct Tally {
+            long frames = 0;                  // render frames this row was up
+            long column[6] = {};              // ...showing each drawing
+            int stretches = 0;                // times the row was put up
+            int reachedMiddle = 0;            // ...and got to drawing 3 or later
+            long changes = 0;                 // drawing changes seen
+        };
+        Tally tally[2][kPoses];               // [ground, air][pose]
+        struct Seen { int pose = -1; int frame = -1; int furthest = -1; bool air = false; };
+        std::map<Entity, Seen> seen;
+        auto close = [&](const Seen& s) {
+            if (s.pose < 0 || s.pose >= kPoses) return;
+            Tally& t = tally[s.air ? 1 : 0][s.pose];
+            ++t.stretches;
+            if (s.furthest >= 3) ++t.reachedMiddle;
+        };
+        constexpr int kSeconds = 40;
+        for (int step = 0; step < 60 * kSeconds; ++step) {
+            if (step % 50 == 0) {
+                static const int kSend[] = {1, 2, 3, 1};
+                lanebattle::spawnUnit(battle.world, true, kSend[(step / 50) % 4]);
+            }
+            battle.driver.step();
+            for (auto& [entity, art] : battle.world.view<ArtFigure>()) {
+                const Animation* animation = battle.world.getComponent<Animation>(entity);
+                if (!animation || art.pose < 0 || art.pose >= kPoses) continue;
+                Seen& s = seen[entity];
+                s.air = art.flying;
+                if (s.pose != art.pose) {
+                    close(s);
+                    s.pose = art.pose;
+                    s.furthest = -1;
+                    s.frame = -1;
+                }
+                Tally& t = tally[s.air ? 1 : 0][s.pose];
+                ++t.frames;
+                const int column = std::clamp(animation->frame, 0, 5);
+                ++t.column[column];
+                if (s.frame != animation->frame) ++t.changes;
+                s.frame = animation->frame;
+                s.furthest = std::max(s.furthest, animation->frame);
+            }
+        }
+        for (auto& [entity, s] : seen) close(s);
+
+        std::printf("\n  What is on screen in THE EYRIE, %d s at 60 fps, per row of the sheet:\n"
+                    "  %-12s %6s %9s %11s %12s   share of time on each drawing 0..5\n",
+                    kSeconds, "", "time", "held", "stretches", "saw middle");
+        static const char* kNames[] = {"idle", "move", "attack", "hurt", "stunned", "death"};
+        for (int air = 0; air < 2; ++air) {
+            long total = 0;
+            for (int pose = 0; pose < kPoses; ++pose) total += tally[air][pose].frames;
+            for (int pose = 0; pose < kPoses; ++pose) {
+                const Tally& t = tally[air][pose];
+                if (t.frames == 0) continue;
+                std::printf("  %-6s %-5s %5.0f%% %6.1f fr %9d %10.0f%%   ",
+                            air ? "air" : "ground", kNames[pose],
+                            100.0 * static_cast<double>(t.frames) / static_cast<double>(std::max(1L, total)),
+                            static_cast<double>(t.frames) / static_cast<double>(std::max(1L, t.changes)),
+                            t.stretches,
+                            100.0 * t.reachedMiddle / std::max(1, t.stretches));
+                for (int c = 0; c < 6; ++c) {
+                    std::printf("%3.0f ", 100.0 * static_cast<double>(t.column[c]) /
+                                              static_cast<double>(t.frames));
+                }
+                std::printf("\n");
+            }
+        }
+    }
     return 0;
 }
 

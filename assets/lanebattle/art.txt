@@ -15,6 +15,9 @@
 #                              pixels: a unit's FEET, an effect's centre
 #   figure                     a unit's standing height, or an effect's
 #                              larger side - what on-screen sizes scale
+#   ping_pong                  looping rows to play back and forth, because
+#                              their last drawing does not lead back into
+#                              their first (see art_probe --motion)
 # ---------------------------------------------------------------------------
 
 [sheet]
@@ -206,6 +209,7 @@ rows         = 6
 anchor_x     = 108
 anchor_y     = 198
 figure       = 166
+ping_pong    = 1
 
 [sheet]
 file         = assets/lanebattle/lane-battle-gba-art/units/enemy/ballista.png
@@ -236,6 +240,7 @@ rows         = 6
 anchor_x     = 96
 anchor_y     = 185
 figure       = 167
+ping_pong    = 0,1
 
 [sheet]
 file         = assets/lanebattle/lane-battle-gba-art/units/enemy/hero-falconer.png
@@ -246,6 +251,7 @@ rows         = 6
 anchor_x     = 109
 anchor_y     = 199
 figure       = 172
+ping_pong    = 0,1
 
 [sheet]
 file         = assets/lanebattle/lane-battle-gba-art/units/enemy/hero-warden.png
@@ -256,6 +262,7 @@ rows         = 6
 anchor_x     = 102
 anchor_y     = 192
 figure       = 158
+ping_pong    = 0,1
 
 [sheet]
 file         = assets/lanebattle/lane-battle-gba-art/units/enemy/hero.png
@@ -266,6 +273,7 @@ rows         = 6
 anchor_x     = 121
 anchor_y     = 204
 figure       = 182
+ping_pong    = 0,1
 
 [sheet]
 file         = assets/lanebattle/lane-battle-gba-art/units/enemy/ogre.png
@@ -276,6 +284,7 @@ rows         = 6
 anchor_x     = 96
 anchor_y     = 192
 figure       = 174
+ping_pong    = 0,1
 
 [sheet]
 file         = assets/lanebattle/lane-battle-gba-art/units/enemy/pikeman.png
@@ -286,6 +295,7 @@ rows         = 6
 anchor_x     = 99
 anchor_y     = 206
 figure       = 203
+ping_pong    = 0,1
 
 [sheet]
 file         = assets/lanebattle/lane-battle-gba-art/units/enemy/runner.png
@@ -296,6 +306,7 @@ rows         = 6
 anchor_x     = 99
 anchor_y     = 195
 figure       = 158
+ping_pong    = 0
 
 [sheet]
 file         = assets/lanebattle/lane-battle-gba-art/units/enemy/soldier.png
@@ -306,6 +317,7 @@ rows         = 6
 anchor_x     = 105
 anchor_y     = 199
 figure       = 180
+ping_pong    = 1
 
 [sheet]
 file         = assets/lanebattle/lane-battle-gba-art/units/friendly/archer.png
@@ -326,6 +338,7 @@ rows         = 6
 anchor_x     = 94
 anchor_y     = 183
 figure       = 148
+ping_pong    = 0,1
 
 [sheet]
 file         = assets/lanebattle/lane-battle-gba-art/units/friendly/griffin.png
@@ -336,6 +349,7 @@ rows         = 6
 anchor_x     = 100
 anchor_y     = 208
 figure       = 191
+ping_pong    = 0,1
 
 [sheet]
 file         = assets/lanebattle/lane-battle-gba-art/units/friendly/hero-chaplain.png
@@ -346,6 +360,7 @@ rows         = 6
 anchor_x     = 107
 anchor_y     = 198
 figure       = 173
+ping_pong    = 0,1
 
 [sheet]
 file         = assets/lanebattle/lane-battle-gba-art/units/friendly/hero-falconer.png
@@ -356,6 +371,7 @@ rows         = 6
 anchor_x     = 108
 anchor_y     = 196
 figure       = 164
+ping_pong    = 0,1
 
 [sheet]
 file         = assets/lanebattle/lane-battle-gba-art/units/friendly/hero-warden.png
@@ -366,6 +382,7 @@ rows         = 6
 anchor_x     = 112
 anchor_y     = 208
 figure       = 172
+ping_pong    = 0,1
 
 [sheet]
 file         = assets/lanebattle/lane-battle-gba-art/units/friendly/hero.png
@@ -376,6 +393,7 @@ rows         = 6
 anchor_x     = 109
 anchor_y     = 193
 figure       = 177
+ping_pong    = 0,1
 
 [sheet]
 file         = assets/lanebattle/lane-battle-gba-art/units/friendly/ogre.png
@@ -386,6 +404,7 @@ rows         = 6
 anchor_x     = 96
 anchor_y     = 190
 figure       = 152
+ping_pong    = 0,1
 
 [sheet]
 file         = assets/lanebattle/lane-battle-gba-art/units/friendly/pikeman.png
@@ -396,6 +415,7 @@ rows         = 6
 anchor_x     = 98
 anchor_y     = 198
 figure       = 188
+ping_pong    = 0
 
 [sheet]
 file         = assets/lanebattle/lane-battle-gba-art/units/friendly/runner.png
@@ -406,6 +426,7 @@ rows         = 6
 anchor_x     = 109
 anchor_y     = 206
 figure       = 148
+ping_pong    = 0,1
 
 [sheet]
 file         = assets/lanebattle/lane-battle-gba-art/units/friendly/soldier.png
@@ -416,3 +437,4 @@ rows         = 6
 anchor_x     = 105
 anchor_y     = 200
 figure       = 175
+ping_pong    = 1

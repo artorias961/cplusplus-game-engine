@@ -210,6 +210,23 @@ bool loadArt(const std::string& path) {
         info.figureHeight = section->number("figure", static_cast<float>(info.frameHeight));
         if (info.figureHeight <= 0.0f) info.figureHeight = static_cast<float>(info.frameHeight);
 
+        // "ping_pong = 0,1": the looping rows that run back and forth. Row
+        // numbers outside the sheet are ignored, not trusted.
+        const std::string rowsText = section->text("ping_pong", "");
+        int value = -1;
+        for (std::size_t i = 0; i <= rowsText.size(); ++i) {
+            const char c = i < rowsText.size() ? rowsText[i] : ',';
+            if (c >= '0' && c <= '9') {
+                value = (value < 0 ? 0 : value) * 10 + (c - '0');
+                if (value > 99) value = 99;
+            } else if (c == ',' || c == ' ') {
+                if (value >= 0 && value < info.rows && value < 32) {
+                    info.pingPongRows |= 1u << value;
+                }
+                value = -1;
+            }
+        }
+
         // Replaces an entry for the same file, so loading twice is harmless.
         auto existing = std::find_if(gSheets.begin(), gSheets.end(),
                                      [&](const SheetInfo& s) { return s.file == info.file; });
@@ -363,10 +380,15 @@ float walkFrameSeconds(float speed, float stride, int frames) {
     // runner's cycle played at twenty-six frames a second, a full stride every
     // quarter of a second, which reads as vibrating rather than running. A
     // stride is longer than that (a pace is most of a body's height, and a
-    // cycle is two paces), and no speed should push a cycle past fourteen
-    // frames a second or below six. A little foot-slide at the extremes is
-    // the ordinary price every sprite game pays for that.
-    return std::clamp(stride / speed / static_cast<float>(frames), 0.07f, 0.17f);
+    // cycle is two paces).
+    //
+    // The ceiling came down again, from fourteen frames a second to ten, when
+    // a person watching said the walk went by too fast to see its middle. It
+    // did: these generated rows change a leg or a wing by a few pixels a
+    // drawing, and at fourteen a second on a fifty-pixel figure those changes
+    // blur into a shiver. A little more foot-slide on the fastest units is the
+    // ordinary price every sprite game pays for a walk you can read.
+    return std::clamp(stride / speed / static_cast<float>(frames), 0.10f, 0.18f);
 }
 
 float strideLift(float progress, float height, bool flying) {
@@ -406,7 +428,12 @@ void setPose(Sprite& sprite, Animation& animation, const ArtFigure& art, Pose po
     sprite.srcX = 0;
     animation.frame = 0;
     animation.elapsed = 0.0f;
+    animation.direction = 1;
     animation.loop = loop;
+    // Back and forth, for a looping row whose drawings are a sequence rather
+    // than a cycle — measured per row by art_probe. One-shots (a blow, a
+    // flinch, a death) always play straight through.
+    animation.pingPong = loop && art.sheet->pingPong(row);
     animation.playing = true;
     animation.frameCount = art.sheet->columns;
     animation.frameWidth = art.sheet->frameWidth;
@@ -436,10 +463,34 @@ void fitToHeight(Sprite& sprite, ArtFigure& art, float height) {
 float moveFrameSeconds(const ArtFigure& art, const UnitKind& stats, float height) {
     // A flyer's wings beat at their own pace, whatever the ground speed: a
     // griffin gliding slowly does not flap in slow motion.
+    //
+    // It was 0.085 — a drawing every five screen frames, a whole row in half a
+    // second — and nobody could see the griffin flap. Its wing moves a few
+    // pixels a drawing; at that rate the downstroke was on screen for an
+    // instant. Slower, and (where art_probe measured the row as a sequence)
+    // played back and forth, so the wing goes down and comes back up.
     if (art.flying) return 0.085f;
     // A stride is most of a body's height per pace, two paces a cycle.
     return walkFrameSeconds(stats.speed, height * 1.5f, art.sheet->columns);
 }
+
+// How long a blow's row plays, and a flinch's.
+//
+// Both were shorter — a blow at 0.7 of the gap between blows, capped at 0.6 s;
+// a flinch 0.22 s for six drawings, one every four screen frames, which is a
+// flicker rather than a flinch. Slowed with the walk, for the same reason: at
+// that pace the drawings in the middle of a row, where the sword actually
+// lands, were gone before they could be seen. One place for each number, since
+// the blow's is read both when it starts and when its row is chosen.
+float attackSeconds(const UnitKind& stats) {
+    return std::clamp(stats.attackDelay * 0.8f, 0.3f, 0.8f);
+}
+constexpr float kHurtSeconds = 0.3f;
+
+// Seconds for one drawing of an idle row: a flyer hovers with its wings still
+// beating, anything on the ground shifts its weight, slowly.
+constexpr float kIdleFlyingSeconds = 0.14f;
+constexpr float kIdleGroundSeconds = 0.18f;
 
 SDL_Texture* loadSheet(const char* file) {
     TextureCache* cache = currentTextureCache();
@@ -526,7 +577,7 @@ void poseArtFigure(World& world, Entity figure, float dt) {
     // A blow landed: fight() sets `swing` back to 1 on every one, so a jump
     // upwards is a new swing even when the last one had not finished decaying.
     if (unit->swing > art->lastSwing + 0.25f) {
-        art->attackLeft = std::clamp(stats.attackDelay * 0.7f, 0.25f, 0.6f);
+        art->attackLeft = attackSeconds(stats);
     }
     art->lastSwing = unit->swing;
 
@@ -534,7 +585,7 @@ void poseArtFigure(World& world, Entity figure, float dt) {
     // makes a fight read as twitching rather than as trading blows.
     if (art->lastHealth >= 0.0f && unit->health < art->lastHealth - 0.01f &&
         art->attackLeft <= 0.0f) {
-        art->hurtLeft = 0.22f;
+        art->hurtLeft = kHurtSeconds;
     }
     art->lastHealth = unit->health;
 
@@ -557,17 +608,18 @@ void poseArtFigure(World& world, Entity figure, float dt) {
         if (art->pose == static_cast<int>(Pose::Move)) {
             art->walkFrame = animation->frame;
             art->walkElapsed = animation->elapsed;
+            art->walkDirection = animation->direction;
             art->sinceWalk = 0.0f;
         }
         const int frames = art->sheet->columns;
         switch (pose) {
             case Pose::Attack: {
-                const float duration = std::clamp(stats.attackDelay * 0.7f, 0.25f, 0.6f);
+                const float duration = attackSeconds(stats);
                 setPose(*sprite, *animation, *art, pose, duration / frames, false);
                 break;
             }
             case Pose::Hurt:
-                setPose(*sprite, *animation, *art, pose, 0.22f / frames, false);
+                setPose(*sprite, *animation, *art, pose, kHurtSeconds / frames, false);
                 break;
             case Pose::Move:
                 setPose(*sprite, *animation, *art, pose, moveFrameSeconds(*art, stats, height),
@@ -575,13 +627,15 @@ void poseArtFigure(World& world, Entity figure, float dt) {
                 if (art->sinceWalk < 0.6f) {
                     animation->frame = std::clamp(art->walkFrame, 0, frames - 1);
                     animation->elapsed = art->walkElapsed;
+                    animation->direction = animation->pingPong ? art->walkDirection : 1;
                     sprite->srcX = animation->frame * art->sheet->frameWidth;
                 }
                 break;
             default:
                 // Idle: a flyer hovers with its wings still beating; anything
                 // on the ground shifts its weight, slowly.
-                setPose(*sprite, *animation, *art, pose, art->flying ? 0.1f : 0.16f, true);
+                setPose(*sprite, *animation, *art, pose,
+                        art->flying ? kIdleFlyingSeconds : kIdleGroundSeconds, true);
                 break;
         }
         art->pose = static_cast<int>(pose);
@@ -591,10 +645,23 @@ void poseArtFigure(World& world, Entity figure, float dt) {
     // How far through its cycle the figure is — frame and the part of a frame
     // already spent — which is what the bob follows, so the body rises with
     // the step the legs are taking rather than on a clock of its own.
+    //
+    // A back-and-forth row is a longer cycle: out to the last drawing and home
+    // again, 2(n-1) steps, and the way home counts on from where the way out
+    // ended. Measured against the plain frame number instead, the bob would
+    // run its cycle twice while the drawings ran theirs once.
     const float spf = animation->secondsPerFrame > 0.0f ? animation->secondsPerFrame : 1.0f;
-    const float progress =
-        (static_cast<float>(animation->frame) + std::min(1.0f, animation->elapsed / spf)) /
-        static_cast<float>(std::max(1, animation->frameCount));
+    const int count = std::max(1, animation->frameCount);
+    const float partial = std::min(1.0f, animation->elapsed / spf);
+    float progress = 0.0f;
+    if (animation->pingPong && count > 1) {
+        const int steps = 2 * (count - 1);
+        const int position =
+            animation->direction < 0 ? steps - animation->frame : animation->frame;
+        progress = (static_cast<float>(position) + partial) / static_cast<float>(steps);
+    } else {
+        progress = (static_cast<float>(animation->frame) + partial) / static_cast<float>(count);
+    }
     float lift = 0.0f;
     if (art->flying) {
         lift = strideLift(progress, height, true);  // a flyer is never still

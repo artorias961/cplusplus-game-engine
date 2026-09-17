@@ -5116,14 +5116,19 @@ void testAUnitShowsTheRightPose() {
 
     // No unit in the shipped roster may strobe. The first tempo rule played
     // the runner's six-frame cycle at twenty-six frames a second — a full
-    // stride every quarter of a second, which reads as vibrating. Fourteen a
-    // second is the ceiling now; six the floor.
+    // stride every quarter of a second, which reads as vibrating. The second
+    // allowed fourteen, and a person watching still said the walk went by too
+    // fast to see its middle. Ten a second is the ceiling now.
+    //
+    // This check used to say "between six and fourteen" and passed unchanged
+    // when the ceiling came down to ten — a range wide enough to hold both the
+    // old tempo and the new one guards neither.
     for (int kind = 0; kind < lanebattle::unitKindCount(); ++kind) {
         const lanebattle::UnitKind& unit = lanebattle::unitKind(kind);
         const float height = unit.artHeight > 0.0f ? unit.artHeight : unit.height * 1.4f;
         const float seconds = lanebattle::walkFrameSeconds(unit.speed, height * 1.5f, 6);
-        check(seconds >= 1.0f / 14.5f && seconds <= 1.0f / 5.5f,
-              "every unit walks between six and fourteen frames a second");
+        check(seconds >= 1.0f / 10.01f && seconds <= 1.0f / 5.5f,
+              "every unit walks between five and a half and ten frames a second");
     }
 
     // The bob. The generated sheets keep the body level in every frame, so
@@ -5213,6 +5218,39 @@ limit = 2
 // a unit with no art or a blow with no picture, and it fails SILENTLY — the
 // game falls back to blocks, as it is designed to, and nobody notices the art
 // was meant to be there.
+// art.txt says which looping rows play back and forth, as a list of row
+// numbers. Written by art_probe, but read as a file anyone could have edited:
+// spaces are fine, rows past the sheet are ignored, and junk is not a row.
+void testArtRowsCanPlayBackAndForth() {
+    lanebattle::resetArt();
+    const std::string path = writeRoster("lb_pingpong_art.txt", R"(
+[sheet]
+file         = one.png
+frame_width  = 10
+frame_height = 10
+columns      = 6
+rows         = 6
+ping_pong    = 1, 0, 9, x
+
+[sheet]
+file         = two.png
+frame_width  = 10
+frame_height = 10
+columns      = 6
+rows         = 6
+)");
+    check(lanebattle::loadArt(path), "a sheet file with ping_pong rows loads");
+    const lanebattle::SheetInfo* one = lanebattle::sheetInfo("one.png");
+    const lanebattle::SheetInfo* two = lanebattle::sheetInfo("two.png");
+    check(one && one->pingPong(0) && one->pingPong(1),
+          "the rows it names play back and forth, in any order, spaces and all");
+    check(one && !one->pingPong(2) && !one->pingPong(9),
+          "and nothing else does — not a row it did not name, not one past the sheet");
+    check(two && !two->pingPong(0) && !two->pingPong(1),
+          "and a sheet that names none loops every row the ordinary way");
+    lanebattle::resetArt();
+}
+
 void testTheShippedArtDataAgrees() {
     lanebattle::resetBalance();
     lanebattle::resetArt();
@@ -5254,6 +5292,23 @@ void testTheShippedArtDataAgrees() {
         }
     }
     check(withArt == lanebattle::unitKindCount(), "every unit in the shipped roster has art");
+
+    // The griffin is the unit that was said not to flap, and its flight row is
+    // a sequence rather than a cycle: art_probe measured its last drawing as
+    // 1.7 times further from its first than its ordinary steps are. It must
+    // play back and forth, or the wing snaps back once a beat. And a row that
+    // IS a cycle — the friendly archer's walk — must go on looping, or it
+    // would walk half its cycle backwards.
+    const int griffin = kindNamed("GRIFFIN");
+    const int archer = kArcher;
+    if (griffin >= 0) {
+        const lanebattle::SheetInfo* flight = lanebattle::sheetInfo(stats(griffin).sheet);
+        check(flight && flight->pingPong(static_cast<int>(lanebattle::Pose::Move)),
+              "the griffin's flight row is measured as a sequence and plays back and forth");
+    }
+    const lanebattle::SheetInfo* walk = lanebattle::sheetInfo(stats(archer).sheet);
+    check(walk && !walk->pingPong(static_cast<int>(lanebattle::Pose::Move)),
+          "while the archer's walk, a real cycle, keeps looping");
 
     for (int index = 0; index < lanebattle::effectKindCount(); ++index) {
         const lanebattle::EffectKind& effect = lanebattle::effectKindAt(index);
@@ -6580,6 +6635,7 @@ int main() {
     testAUnitShowsTheRightPose();
     testEffectsAreNothingWithoutArt();
     testEffectsTuningMergesAndIsClamped();
+    testArtRowsCanPlayBackAndForth();
     testTheShippedArtDataAgrees();
 
     testABattleFinishesExactlyOnce();

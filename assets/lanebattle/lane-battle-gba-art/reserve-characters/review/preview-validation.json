@@ -5,5 +5,19 @@
   "animationChanges": true,
   "pauseHolds": true,
   "oneShotHolds": true,
+  "backdrops": [
+    {
+      "value": "#263447",
+      "all40CanvasCornersMatch": true
+    },
+    {
+      "value": "#eee7d8",
+      "all40CanvasCornersMatch": true
+    },
+    {
+      "value": "#405348",
+      "all40CanvasCornersMatch": true
+    }
+  ],
   "errors": []
 }
